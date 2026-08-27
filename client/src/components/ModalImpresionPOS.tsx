@@ -136,51 +136,51 @@ export const ModalImpresionPOS: React.FC<ModalImpresionPOSProps> = ({
             }
             .pos-ticket-paper {
               width: 100% !important;
-              max-width: 100% !important;
-              margin: 0 !important;
-              padding: 2mm 3mm !important;
-              font-size: 13.5px !important;
-              line-height: 1.35 !important;
+              max-width: 275px !important;
+              margin: 0 auto !important;
+              padding: 2px 4px !important;
+              font-size: 12px !important;
+              line-height: 1.3 !important;
               box-shadow: none !important;
               border: none !important;
             }
             .pos-ticket-header { text-align: center; }
-            .pos-logo-wrapper { display: flex; justify-content: center; align-items: center; margin: 0 auto 6px auto; }
-            .pos-logo-img { max-height: 68px; max-width: 220px; object-fit: contain; }
-            .pos-doc-main-title { font-size: 16px; font-weight: 900; text-transform: uppercase; margin: 6px 0; }
-            .pos-divider-dashed { border-bottom: 1.5px dashed #000; margin: 8px 0; }
-            .pos-divider-solid { border-bottom: 1.5px solid #000; margin: 8px 0; }
-            .pos-divider-double { border-bottom: 3.5px double #000; margin: 8px 0; }
-            .pos-info-block { text-align: left; margin: 6px 0; }
-            .pos-info-row { display: flex; justify-content: space-between; margin-bottom: 3px; font-size: 13px; }
-            .pos-hab-row { background: #f1f5f9; padding: 3px 6px; border-radius: 4px; border: 1px solid #cbd5e1; }
+            .pos-logo-wrapper { display: flex; justify-content: center; align-items: center; margin: 0 auto 4px auto; }
+            .pos-logo-img { max-height: 60px; max-width: 200px; object-fit: contain; }
+            .pos-doc-main-title { font-size: 14px; font-weight: 900; text-transform: uppercase; margin: 4px 0; }
+            .pos-divider-dashed { border-bottom: 1px dashed #000; margin: 6px 0; }
+            .pos-divider-solid { border-bottom: 1px solid #000; margin: 6px 0; }
+            .pos-divider-double { border-bottom: 3px double #000; margin: 6px 0; }
+            .pos-info-block { text-align: left; margin: 5px 0; }
+            .pos-info-row { display: flex; justify-content: space-between; margin-bottom: 2.5px; font-size: 11.5px; }
+            .pos-hab-row { background: #f1f5f9; padding: 2px 4px; border-radius: 4px; border: 1px solid #cbd5e1; }
             .pos-label { font-weight: bold; flex-shrink: 0; }
             .pos-value { text-align: right; word-break: break-word; }
             .pos-value.bold, .bold { font-weight: bold; }
-            .text-large { font-size: 14.5px; }
-            .pos-table-container { margin: 8px 0; }
-            .pos-items-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-            .pos-items-table th { border-bottom: 1.5px solid #000; padding-bottom: 4px; text-align: left; font-size: 13px; font-weight: bold; }
-            .pos-items-table td { padding: 4px 0; vertical-align: top; }
-            .pos-col-desc { width: 56%; text-align: left; }
-            .pos-col-cant { width: 14%; text-align: center; }
-            .pos-col-total { width: 30%; text-align: right; }
-            .pos-item-desc { font-weight: 700; font-size: 13px; }
-            .pos-item-unit-calc { display: block; font-size: 11px; color: #333; }
-            .pos-totals-block { margin: 8px 0; font-size: 13.5px; }
-            .pos-total-row { display: flex; justify-content: space-between; margin-bottom: 3px; }
-            .pos-grand-total { font-size: 16.5px; font-weight: 900; }
-            .pos-payment-method { font-size: 13.5px; margin-top: 5px; }
-            .pos-payment-badge { background: #f1f5f9; padding: 2px 8px; border-radius: 4px; border: 1px solid #94a3b8; font-weight: bold; }
-            .pos-signature-block { text-align: center; margin: 24px 0 12px 0; }
-            .pos-sign-notice { font-size: 12px; margin-bottom: 60px; color: #222; }
-            .pos-signature-line { border-bottom: 1.5px solid #000; width: 90%; margin: 0 auto 6px auto; }
-            .pos-sign-label { font-size: 13px; font-weight: bold; margin: 0; }
-            .pos-sign-sublabel { font-size: 12px; margin: 2px 0 0 0; }
-            .pos-ticket-footer { text-align: center; font-size: 12px; margin-top: 8px; }
-            .pos-footer-msg { margin: 3px 0; }
-            .pos-footer-thanks { font-size: 13px; font-weight: bold; margin: 5px 0; }
-            .pos-footer-system { font-size: 10px; color: #444; margin: 4px 0 0 0; }
+            .text-large { font-size: 13px; }
+            .pos-table-container { margin: 6px 0; }
+            .pos-items-table { width: 100%; border-collapse: collapse; font-size: 11.5px; }
+            .pos-items-table th { border-bottom: 1px solid #000; padding-bottom: 3px; text-align: left; font-size: 11.5px; font-weight: bold; }
+            .pos-items-table td { padding: 3px 0; vertical-align: top; }
+            .pos-col-desc { width: 55%; text-align: left; }
+            .pos-col-cant { width: 13%; text-align: center; }
+            .pos-col-total { width: 32%; text-align: right; }
+            .pos-item-desc { font-weight: 700; font-size: 11.5px; }
+            .pos-item-unit-calc { display: block; font-size: 10px; color: #333; }
+            .pos-totals-block { margin: 6px 0; font-size: 12px; }
+            .pos-total-row { display: flex; justify-content: space-between; margin-bottom: 2.5px; }
+            .pos-grand-total { font-size: 14.5px; font-weight: 900; }
+            .pos-payment-method { font-size: 12px; margin-top: 4px; }
+            .pos-payment-badge { background: #f1f5f9; padding: 1px 6px; border-radius: 4px; border: 1px solid #94a3b8; font-weight: bold; }
+            .pos-signature-block { text-align: center; margin: 20px 0 10px 0; }
+            .pos-sign-notice { font-size: 11px; margin-bottom: 50px; color: #222; }
+            .pos-signature-line { border-bottom: 1px solid #000; width: 90%; margin: 0 auto 5px auto; }
+            .pos-sign-label { font-size: 12px; font-weight: bold; margin: 0; }
+            .pos-sign-sublabel { font-size: 11px; margin: 2px 0 0 0; }
+            .pos-ticket-footer { text-align: center; font-size: 11px; margin-top: 6px; }
+            .pos-footer-msg { margin: 2px 0; }
+            .pos-footer-thanks { font-size: 12px; font-weight: bold; margin: 4px 0; }
+            .pos-footer-system { font-size: 9.5px; color: #444; margin: 3px 0 0 0; }
           </style>
         </head>
         <body>
