@@ -136,12 +136,11 @@ export const ModalImpresionPOS: React.FC<ModalImpresionPOSProps> = ({
             }
             .pos-ticket-paper {
               width: 100% !important;
-              max-width: 250px !important;
-              margin-left: 4px !important;
-              margin-right: auto !important;
-              padding: 2px 8px 2px 2px !important;
-              font-size: 11px !important;
-              line-height: 1.25 !important;
+              max-width: 260px !important;
+              margin: 0 auto !important;
+              padding: 4px 10px !important;
+              font-size: 11.5px !important;
+              line-height: 1.3 !important;
               box-shadow: none !important;
               border: none !important;
             }
@@ -153,7 +152,7 @@ export const ModalImpresionPOS: React.FC<ModalImpresionPOSProps> = ({
             .pos-divider-solid { border-bottom: 1px solid #000; margin: 5px 0; }
             .pos-divider-double { border-bottom: 3px double #000; margin: 5px 0; }
             .pos-info-block { text-align: left; margin: 4px 0; }
-            .pos-info-row { display: flex; justify-content: space-between; margin-bottom: 2px; font-size: 11px; }
+            .pos-info-row { display: flex; justify-content: space-between; margin-bottom: 2.5px; font-size: 11px; }
             .pos-hab-row { background: #f1f5f9; padding: 2px 4px; border-radius: 4px; border: 1px solid #cbd5e1; }
             .pos-label { font-weight: bold; flex-shrink: 0; }
             .pos-value { text-align: right; word-break: break-word; }
@@ -161,18 +160,18 @@ export const ModalImpresionPOS: React.FC<ModalImpresionPOSProps> = ({
             .text-large { font-size: 12.5px; }
             .pos-table-container { margin: 5px 0; }
             .pos-items-table { width: 100%; border-collapse: collapse; font-size: 11px; }
-            .pos-items-table th { border-bottom: 1px solid #000; padding-bottom: 2px; text-align: left; font-size: 11px; font-weight: bold; }
-            .pos-items-table td { padding: 2.5px 0; vertical-align: top; }
+            .pos-items-table th { border-bottom: 1px solid #000; padding-bottom: 3px; text-align: left; font-size: 11px; font-weight: bold; }
+            .pos-items-table td { padding: 3px 0; vertical-align: top; }
             .pos-col-desc { width: 52%; text-align: left; }
-            .pos-col-cant { width: 14%; text-align: center; white-space: nowrap; }
-            .pos-col-total { width: 34%; text-align: right; white-space: nowrap; padding-right: 4px; }
+            .pos-col-cant { width: 16%; text-align: center; white-space: nowrap; }
+            .pos-col-total { width: 32%; text-align: right; white-space: nowrap; }
             .pos-item-desc { font-weight: 700; font-size: 11px; }
             .pos-item-unit-calc { display: block; font-size: 9.5px; color: #333; }
             .pos-totals-block { margin: 5px 0; font-size: 11.5px; }
-            .pos-total-row { display: flex; justify-content: space-between; margin-bottom: 2px; }
-            .pos-grand-total { font-size: 13.5px; font-weight: 900; }
+            .pos-total-row { display: flex; justify-content: space-between; margin-bottom: 2.5px; }
+            .pos-grand-total { font-size: 14px; font-weight: 900; }
             .pos-payment-method { font-size: 11.5px; margin-top: 3px; }
-            .pos-payment-badge { background: #f1f5f9; padding: 1px 5px; border-radius: 4px; border: 1px solid #94a3b8; font-weight: bold; }
+            .pos-payment-badge { background: #f1f5f9; padding: 1px 6px; border-radius: 4px; border: 1px solid #94a3b8; font-weight: bold; }
             .pos-signature-block { text-align: center; margin: 18px 0 8px 0; }
             .pos-sign-notice { font-size: 10.5px; margin-bottom: 45px; color: #222; }
             .pos-signature-line { border-bottom: 1px solid #000; width: 88%; margin: 0 auto 4px auto; }
