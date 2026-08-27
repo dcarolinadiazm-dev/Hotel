@@ -3881,9 +3881,16 @@
 }
 
 @media print {
-  /* Ocultar todo el sitio web excepto el ticket */
-  body * {
-    visibility: hidden;
+  /* Ocultar elementos de interfaz no imprimibles */
+  .no-print,
+  .app-header,
+  .hotel-container,
+  .habitaciones-container,
+  .cartera-container,
+  .reporte-pedidos-container,
+  .modal-backdrop:not(.impresion-pos-backdrop),
+  .modal-dialog:not(.impresion-pos-dialog) {
+    display: none !important;
   }
 
   html, body {
@@ -3891,62 +3898,74 @@
     padding: 0 !important;
     background: #ffffff !important;
     width: 100% !important;
+    height: auto !important;
+    overflow: visible !important;
   }
 
-  .impresion-pos-backdrop,
-  .impresion-pos-dialog,
-  .impresion-pos-body {
+  .impresion-pos-backdrop {
     position: static !important;
+    background: #ffffff !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    display: block !important;
+    width: 100% !important;
+    height: auto !important;
+    overflow: visible !important;
+    z-index: auto !important;
+  }
+
+  .impresion-pos-dialog {
+    position: static !important;
+    background: #ffffff !important;
+    box-shadow: none !important;
+    border: none !important;
     width: 100% !important;
     max-width: 100% !important;
     margin: 0 !important;
     padding: 0 !important;
-    background: transparent !important;
+    display: block !important;
+    height: auto !important;
+    overflow: visible !important;
+  }
+
+  .impresion-pos-body {
+    padding: 0 !important;
+    margin: 0 !important;
+    width: 100% !important;
+    display: block !important;
+    overflow: visible !important;
+  }
+
+  .pos-ticket-paper {
+    background: #ffffff !important;
     box-shadow: none !important;
     border: none !important;
-    display: block !important;
-  }
-
-  .no-print {
-    display: none !important;
-  }
-
-  #pos-ticket-printable,
-  #pos-ticket-printable * {
-    visibility: visible;
-  }
-
-  #pos-ticket-printable {
-    position: absolute !important;
-    left: 0 !important;
-    top: 0 !important;
-    width: 100% !important;
-    max-width: 100% !important;
     margin: 0 !important;
     padding: 2mm 3mm !important;
-    box-shadow: none !important;
-    border: none !important;
-    font-size: 14px !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    display: block !important;
+    font-size: 13.5px !important;
     line-height: 1.35 !important;
     color: #000000 !important;
   }
 
   .pos-doc-main-title {
-    font-size: 16.5px !important;
+    font-size: 16px !important;
     font-weight: 900 !important;
   }
 
   .pos-info-row {
-    font-size: 13.5px !important;
+    font-size: 13px !important;
     margin-bottom: 3px !important;
   }
 
   .pos-items-table {
-    font-size: 13.5px !important;
+    font-size: 13px !important;
   }
 
   .pos-items-table th {
-    font-size: 13.5px !important;
+    font-size: 13px !important;
     border-bottom: 1.5px solid #000000 !important;
   }
 
@@ -3967,25 +3986,25 @@
   }
 
   .pos-item-desc {
-    font-size: 13.5px !important;
+    font-size: 13px !important;
     font-weight: bold !important;
   }
 
   .pos-item-unit-calc {
-    font-size: 11.5px !important;
+    font-size: 11px !important;
   }
 
   .pos-totals-block {
-    font-size: 14px !important;
+    font-size: 13.5px !important;
   }
 
   .pos-grand-total {
-    font-size: 17px !important;
+    font-size: 16.5px !important;
     font-weight: 900 !important;
   }
 
   .pos-payment-method {
-    font-size: 14px !important;
+    font-size: 13.5px !important;
   }
 
   .pos-signature-block {
@@ -4017,12 +4036,12 @@
   }
 
   .pos-footer-thanks {
-    font-size: 13.5px !important;
+    font-size: 13px !important;
     font-weight: bold !important;
   }
 
   .pos-footer-system {
-    font-size: 10.5px !important;
+    font-size: 10px !important;
   }
 }
 
