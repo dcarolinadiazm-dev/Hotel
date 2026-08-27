@@ -4,6 +4,9 @@ import { verifyToken } from '../middlewares/auth.middleware';
 
 const router = Router();
 
+// Listar tipos de documento
+router.get('/tipos-documento', verifyToken, TerceroController.getTiposDocumento);
+
 // Listar terceros
 router.get('/', verifyToken, TerceroController.getAll);
 

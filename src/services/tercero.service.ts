@@ -82,13 +82,48 @@ export class TerceroService {
         }
     }
 
-    // Grabar o actualizar tercero (cliente / huésped) similar a SYSplusCloudBE
-    static async grabeTercero(data: IGrabeTercero): Promise<any> {
-        if (!data.nit || data.nit.trim() === '') {
-            throw new Error('El NIT / Documento es obligatorio');
+    // Obtener los tipos de documento desde TIPO_DOCUMENTO
+    static async getTiposDocumento(): Promise<any[]> {
+        try {
+            const rows = await db(tables.TIPO_DOCUMENTO)
+                .select(
+                    db.raw('TIDO_COD as "cod"'),
+                    db.raw('TRIM(TIDO_NOMCORTO) as "nomCorto"'),
+                    db.raw('TRIM(TIDO_NOMLARGO) as "nomLargo"')
+                )
+                .orderBy('TIDO_COD', 'asc');
+
+            if (rows && rows.length > 0) {
+                return rows.map((r: any) => ({
+                    cod: Number(r.cod || r.COD),
+                    nomCorto: String(r.nomCorto || r.NOMCORTO || '').trim(),
+                    nomLargo: String(r.nomLargo || r.NOMLARGO || '').trim()
+                }));
+            }
+        } catch (e: any) {
+            console.warn('Aviso consultando TIPO_DOCUMENTO:', e.message);
         }
 
-        const nit = data.nit.trim();
+        // Tipos de documento estándar por defecto
+        return [
+            { cod: 1, nomCorto: 'CC', nomLargo: 'CÉDULA DE CIUDADANÍA' },
+            { cod: 2, nomCorto: 'NIT', nomLargo: 'NIT / RUT' },
+            { cod: 3, nomCorto: 'CE', nomLargo: 'CÉDULA DE EXTRANJERÍA' },
+            { cod: 4, nomCorto: 'PAS', nomLargo: 'PASAPORTE' },
+            { cod: 5, nomCorto: 'TI', nomLargo: 'TARJETA DE IDENTIDAD' },
+            { cod: 6, nomCorto: 'PEP', nomLargo: 'PERMISO ESPECIAL' }
+        ];
+    }
+
+    // Grabar o actualizar tercero (cliente / huésped) similar a SYSplusCloudBE
+    static async grabeTercero(data: IGrabeTercero): Promise<any> {
+        if (!data.tipoId || data.tipoId.trim() === '') {
+            throw new Error('El tipo de documento es obligatorio');
+        }
+
+        if (!data.nit || data.nit.trim() === '') {
+            throw new Error('El NIT / Cédula / Documento es obligatorio');
+        }
 
         // Construir nombre completo si vienen nombres y apellidos separados
         let nombreCompleto = data.nombre ? data.nombre.trim() : '';
@@ -103,6 +138,21 @@ export class TerceroService {
             throw new Error('El nombre o razón social del tercero es obligatorio');
         }
 
+        if ((!data.cel || data.cel.trim() === '') && (!data.tel || data.tel.trim() === '')) {
+            throw new Error('El celular / teléfono es obligatorio');
+        }
+
+        if (!data.email || data.email.trim() === '') {
+            throw new Error('El correo electrónico es obligatorio');
+        }
+
+        if (!data.dir || data.dir.trim() === '') {
+            throw new Error('La dirección es obligatoria');
+        }
+
+        const nit = data.nit.trim();
+        const telefono = (data.cel || data.tel || '').trim();
+
         // 1. Verificar si el tercero ya existe en la tabla TERCEROS
         const existing = await db(tables.TERCEROS)
             .where('TERC_NIT', nit)
@@ -111,15 +161,15 @@ export class TerceroService {
         const terceroPayload = {
             TERC_NOM: nombreCompleto,
             TERC_DV: data.dv || null,
-            TERC_TIPOID: data.tipoId || 'C',
+            TERC_TIPOID: (data.tipoId || 'CC').substring(0, 10),
             TERC_NOMBRE1: data.nombre1 || null,
             TERC_NOMBRE2: data.nombre2 || null,
             TERC_APELLIDO1: data.apellido1 || null,
             TERC_APELLIDO2: data.apellido2 || null,
-            TERC_DIR: data.dir || null,
-            TERC_TEL: data.tel || null,
-            TERC_CEL: data.cel || null,
-            TERC_EMAIL: data.email || null,
+            TERC_DIR: data.dir ? data.dir.trim() : null,
+            TERC_TEL: telefono,
+            TERC_CEL: telefono,
+            TERC_EMAIL: data.email ? data.email.trim() : null,
             CIUD_COD: data.codCiu || '05001',
             PAIS_ID: data.codPais || '169',
             TERC_CLIE: 'S',

@@ -3,6 +3,17 @@ import { TerceroService } from '../services/tercero.service';
 import { IGrabeTercero } from '../models/tercero.model';
 
 export class TerceroController {
+    // GET /api/terceros/tipos-documento
+    static async getTiposDocumento(req: Request, res: Response) {
+        try {
+            const tipos = await TerceroService.getTiposDocumento();
+            res.json(tipos);
+        } catch (error: any) {
+            console.error('Error en TerceroController.getTiposDocumento:', error.message);
+            res.status(500).json({ error: 'Error al consultar tipos de documento en Firebird' });
+        }
+    }
+
     // GET /api/terceros
     static async getAll(req: Request, res: Response) {
         try {

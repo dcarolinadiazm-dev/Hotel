@@ -100,6 +100,15 @@ export const ModalHabitacion = ({
 
   // Formulario rápido de nuevo cliente
   const [showNewClientForm, setShowNewClientForm] = useState(false);
+  const [tiposDocumento, setTiposDocumento] = useState<Array<{ cod: number; nomCorto: string; nomLargo: string }>>([
+    { cod: 1, nomCorto: 'CC', nomLargo: 'CÉDULA DE CIUDADANÍA' },
+    { cod: 2, nomCorto: 'NIT', nomLargo: 'NIT / RUT' },
+    { cod: 3, nomCorto: 'CE', nomLargo: 'CÉDULA DE EXTRANJERÍA' },
+    { cod: 4, nomCorto: 'PAS', nomLargo: 'PASAPORTE' },
+    { cod: 5, nomCorto: 'TI', nomLargo: 'TARJETA DE IDENTIDAD' },
+    { cod: 6, nomCorto: 'PEP', nomLargo: 'PERMISO ESPECIAL' }
+  ]);
+  const [newTipoDoc, setNewTipoDoc] = useState('CC');
   const [newNit, setNewNit] = useState('');
   const [newNombre, setNewNombre] = useState('');
   const [newCelular, setNewCelular] = useState('');
@@ -211,6 +220,18 @@ export const ModalHabitacion = ({
 
   const fetchTerceros = () => {
     const token = localStorage.getItem('hotel_token');
+    fetch('/api/terceros/tipos-documento', {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        if (Array.isArray(data) && data.length > 0) {
+          setTiposDocumento(data);
+          setNewTipoDoc((prev) => prev || data[0].nomCorto);
+        }
+      })
+      .catch((err) => console.error('Error al cargar tipos de documento:', err));
+
     return fetch('/api/terceros', {
       headers: { Authorization: `Bearer ${token}` },
     })
@@ -299,8 +320,28 @@ export const ModalHabitacion = ({
 
   const handleGrabeTercero = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newNit.trim() || !newNombre.trim()) {
-      setClientError('NIT / Cédula y Nombre son campos obligatorios');
+    if (!newTipoDoc || !newTipoDoc.trim()) {
+      setClientError('El tipo de documento es obligatorio (*)');
+      return;
+    }
+    if (!newNit || !newNit.trim()) {
+      setClientError('El número de documento / Cédula / NIT es obligatorio (*)');
+      return;
+    }
+    if (!newNombre || !newNombre.trim()) {
+      setClientError('El nombre completo es obligatorio (*)');
+      return;
+    }
+    if (!newCelular || !newCelular.trim()) {
+      setClientError('El celular / teléfono es obligatorio (*)');
+      return;
+    }
+    if (!newEmail || !newEmail.trim()) {
+      setClientError('El correo electrónico es obligatorio (*)');
+      return;
+    }
+    if (!newDireccion || !newDireccion.trim()) {
+      setClientError('La dirección es obligatoria (*)');
       return;
     }
 
@@ -317,6 +358,7 @@ export const ModalHabitacion = ({
         },
         body: JSON.stringify({
           tercero: {
+            tipoId: newTipoDoc.trim(),
             nit: newNit.trim(),
             nombre: newNombre.trim(),
             cel: newCelular.trim(),
@@ -843,58 +885,79 @@ export const ModalHabitacion = ({
 
                       <div className="modal-form-row">
                         <div className="modal-form-group flex-1">
-                          <label className="modal-form-label">Cédula / NIT *:</label>
+                          <label className="modal-form-label">Tipo de Documento *:</label>
+                          <select
+                            className="modal-form-select"
+                            value={newTipoDoc}
+                            onChange={(e) => setNewTipoDoc(e.target.value)}
+                            required
+                          >
+                            {tiposDocumento.map((td) => (
+                              <option key={td.cod} value={td.nomCorto}>
+                                {td.nomCorto} - {td.nomLargo}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div className="modal-form-group flex-1">
+                          <label className="modal-form-label">Número de Documento / NIT *:</label>
                           <input
                             type="text"
                             className="modal-form-input"
                             value={newNit}
                             onChange={(e) => setNewNit(e.target.value)}
                             placeholder="Ej: 1098765432"
-                          />
-                        </div>
-                        <div className="modal-form-group flex-1">
-                          <label className="modal-form-label">Nombre Completo *:</label>
-                          <input
-                            type="text"
-                            className="modal-form-input"
-                            value={newNombre}
-                            onChange={(e) => setNewNombre(e.target.value)}
-                            placeholder="Ej: Carlos Mendoza"
+                            required
                           />
                         </div>
                       </div>
 
+                      <div className="modal-form-group">
+                        <label className="modal-form-label">Nombre Completo / Razón Social *:</label>
+                        <input
+                          type="text"
+                          className="modal-form-input"
+                          value={newNombre}
+                          onChange={(e) => setNewNombre(e.target.value)}
+                          placeholder="Ej: Carlos Alberto Mendoza"
+                          required
+                        />
+                      </div>
+
                       <div className="modal-form-row">
                         <div className="modal-form-group flex-1">
-                          <label className="modal-form-label">Celular / Teléfono:</label>
+                          <label className="modal-form-label">Celular / Teléfono *:</label>
                           <input
                             type="text"
                             className="modal-form-input"
                             value={newCelular}
                             onChange={(e) => setNewCelular(e.target.value)}
                             placeholder="310 123 4567"
+                            required
                           />
                         </div>
                         <div className="modal-form-group flex-1">
-                          <label className="modal-form-label">Email:</label>
+                          <label className="modal-form-label">Email *:</label>
                           <input
                             type="email"
                             className="modal-form-input"
                             value={newEmail}
                             onChange={(e) => setNewEmail(e.target.value)}
                             placeholder="cliente@email.com"
+                            required
                           />
                         </div>
                       </div>
 
                       <div className="modal-form-group">
-                        <label className="modal-form-label">Dirección:</label>
+                        <label className="modal-form-label">Dirección *:</label>
                         <input
                           type="text"
                           className="modal-form-input"
                           value={newDireccion}
                           onChange={(e) => setNewDireccion(e.target.value)}
                           placeholder="Carrera 15 #23-45"
+                          required
                         />
                       </div>
 
