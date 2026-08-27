@@ -25,5 +25,22 @@ export class ArticuloController {
             res.status(500).json({ error: 'Error al consultar listas de precios' });
         }
     }
+
+    static async getPrecio(req: Request, res: Response) {
+        const { artiCod, liprCod } = req.query;
+        if (!artiCod) {
+            return res.status(400).json({ error: 'artiCod es obligatorio' });
+        }
+        try {
+            const precio = await ArticuloService.getPrecioArticulo(
+                String(artiCod).trim(),
+                liprCod ? parseInt(String(liprCod), 10) : undefined
+            );
+            res.json({ artiCod: String(artiCod).trim(), liprCod: liprCod ? parseInt(String(liprCod), 10) : 1, precio });
+        } catch (error: any) {
+            console.error('Error en ArticuloController.getPrecio:', error.message);
+            res.status(500).json({ error: 'Error al consultar precio del artículo' });
+        }
+    }
 }
 

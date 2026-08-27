@@ -373,18 +373,36 @@ export const ModalHabitacion = ({
     }
   };
 
-  const handleRoomLiprChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+  const handleRoomLiprChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
     const lipr = parseInt(e.target.value, 10);
     setRoomLiprCod(lipr);
 
-    const targetCod = (roomArtiCod || '').trim();
+    const targetCod = (roomArtiCod || habitacion.artiCod || '').trim();
     if (targetCod) {
+      // 1. Intentar buscar en artículos locales si está cargado
       const found = articulos.find((a) => a.codigo.trim() === targetCod);
       if (found && found.precios && found.precios.length > 0) {
         const precioEnLista = found.precios.find((p) => p.liprCod === lipr);
-        if (precioEnLista) {
+        if (precioEnLista && precioEnLista.precio !== undefined) {
           setPrecioNoche(precioEnLista.precio);
+          return;
         }
+      }
+
+      // 2. Consultar directamente a la API de Firebird el precio de esa lista
+      const token = localStorage.getItem('hotel_token');
+      try {
+        const res = await fetch(`/api/articulos/precio?artiCod=${encodeURIComponent(targetCod)}&liprCod=${lipr}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data && data.precio !== undefined) {
+            setPrecioNoche(data.precio);
+          }
+        }
+      } catch (err) {
+        console.error('Error al consultar precio de la habitación en la lista:', err);
       }
     }
   };
