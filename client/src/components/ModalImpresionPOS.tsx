@@ -277,7 +277,7 @@ export const ModalImpresionPOS: React.FC<ModalImpresionPOSProps> = ({
               <div className="pos-ticket-footer">
                 <p className="pos-footer-msg">Favor revisar su comprobante antes de retirarse.</p>
                 <p className="pos-footer-thanks bold">¡Gracias por su estadía!</p>
-                <p className="pos-footer-system">SYSplus Cloud POS v1.0</p>
+                <p className="pos-footer-system">Software  SYSplus Cel. 320 7376878</p>
               </div>
             </div>
           )}
