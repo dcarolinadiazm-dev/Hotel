@@ -3881,70 +3881,107 @@
 }
 
 @media print {
-  /* Ocultar elementos de interfaz no imprimibles */
+  /* 1. Resetear todos los contenedores padre para eliminar cualquier offset vertical */
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box !important;
+  }
+
+  html,
+  body,
+  #root,
+  .app-root,
+  .hotel-app-container,
+  .hotel-main-content,
+  .hotel-container {
+    margin: 0 !important;
+    padding: 0 !important;
+    min-height: 0 !important;
+    height: auto !important;
+    max-height: none !important;
+    width: 100% !important;
+    display: block !important;
+    overflow: visible !important;
+    background: #ffffff !important;
+    box-shadow: none !important;
+  }
+
+  /* 2. Ocultar todos los elementos de interfaz no imprimibles */
   .no-print,
+  .hotel-navbar,
+  .hotel-header,
   .app-header,
-  .hotel-container,
   .habitaciones-container,
   .cartera-container,
   .reporte-pedidos-container,
   .modal-backdrop:not(.impresion-pos-backdrop),
-  .modal-dialog:not(.impresion-pos-dialog) {
+  .modal-dialog:not(.impresion-pos-dialog),
+  .modal-room-details,
+  .login-page-container {
     display: none !important;
-  }
-
-  html, body {
+    visibility: hidden !important;
+    height: 0 !important;
+    width: 0 !important;
     margin: 0 !important;
     padding: 0 !important;
-    background: #ffffff !important;
-    width: 100% !important;
-    height: auto !important;
-    overflow: visible !important;
   }
 
+  /* 3. Comprobante POS al tope absoluto del papel (sin márgenes ni páginas en blanco previas) */
   .impresion-pos-backdrop {
     position: static !important;
-    background: #ffffff !important;
+    inset: auto !important;
+    background: transparent !important;
+    backdrop-filter: none !important;
     padding: 0 !important;
     margin: 0 !important;
     display: block !important;
     width: 100% !important;
+    min-height: 0 !important;
     height: auto !important;
-    overflow: visible !important;
     z-index: auto !important;
+    animation: none !important;
   }
 
   .impresion-pos-dialog {
     position: static !important;
-    background: #ffffff !important;
+    background: transparent !important;
     box-shadow: none !important;
+    border-radius: 0 !important;
     border: none !important;
     width: 100% !important;
     max-width: 100% !important;
+    min-height: 0 !important;
+    height: auto !important;
+    max-height: none !important;
     margin: 0 !important;
     padding: 0 !important;
     display: block !important;
-    height: auto !important;
-    overflow: visible !important;
+    animation: none !important;
   }
 
   .impresion-pos-body {
+    display: block !important;
     padding: 0 !important;
     margin: 0 !important;
     width: 100% !important;
-    display: block !important;
+    min-height: 0 !important;
+    height: auto !important;
+    background: transparent !important;
     overflow: visible !important;
   }
 
   .pos-ticket-paper {
-    background: #ffffff !important;
-    box-shadow: none !important;
-    border: none !important;
+    position: relative !important;
+    top: 0 !important;
+    left: 0 !important;
     margin: 0 !important;
     padding: 2mm 3mm !important;
     width: 100% !important;
     max-width: 100% !important;
-    display: block !important;
+    box-shadow: none !important;
+    border: none !important;
+    background: transparent !important;
     font-size: 13.5px !important;
     line-height: 1.35 !important;
     color: #000000 !important;
