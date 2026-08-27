@@ -8,6 +8,7 @@
     "start": "npm run dev",
     "server": "tsx watch server.ts",
     "client": "npm run dev --prefix client",
+    "client:install": "npm install --prefix client",
     "client:build": "npm run build --prefix client",
     "migrate": "tsx scripts/migrate.ts",
     "test": "echo \"Error: no test specified\" && exit 1"
