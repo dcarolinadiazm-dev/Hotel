@@ -3648,12 +3648,12 @@
 .pos-ticket-paper {
   background: #ffffff;
   width: 100%;
-  max-width: 320px;
-  padding: 16px 14px;
+  max-width: 380px;
+  padding: 16px 10px;
   box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
   border: 1px dashed #cbd5e1;
-  font-family: 'Courier New', Courier, monospace;
-  font-size: 12px;
+  font-family: 'Consolas', 'Segoe UI Mono', 'Courier New', Courier, monospace;
+  font-size: 13.5px;
   color: #000000;
   line-height: 1.35;
 }
@@ -3671,33 +3671,33 @@
 }
 
 .pos-logo-img {
-  max-height: 58px;
-  max-width: 180px;
+  max-height: 68px;
+  max-width: 220px;
   object-fit: contain;
-  filter: contrast(115%);
+  filter: contrast(120%);
 }
 
 .pos-doc-main-title {
   margin: 6px 0;
-  font-size: 14px;
+  font-size: 16px;
   font-weight: 900;
   text-transform: uppercase;
-  letter-spacing: 0.2px;
+  letter-spacing: 0.3px;
 }
 
 /* Divisores Térmicos */
 .pos-divider-dashed {
-  border-bottom: 1px dashed #000000;
+  border-bottom: 1.5px dashed #000000;
   margin: 8px 0;
 }
 
 .pos-divider-solid {
-  border-bottom: 1px solid #000000;
+  border-bottom: 1.5px solid #000000;
   margin: 8px 0;
 }
 
 .pos-divider-double {
-  border-bottom: 3px double #000000;
+  border-bottom: 3.5px double #000000;
   margin: 8px 0;
 }
 
@@ -3710,13 +3710,13 @@
 .pos-info-row {
   display: flex;
   justify-content: space-between;
-  margin-bottom: 2px;
-  font-size: 11px;
+  margin-bottom: 3px;
+  font-size: 13px;
 }
 
 .pos-hab-row {
   background: #f1f5f9;
-  padding: 2px 4px;
+  padding: 3px 6px;
   border-radius: 4px;
   border: 1px solid #cbd5e1;
 }
@@ -3737,39 +3737,40 @@
 }
 
 .text-large {
-  font-size: 12.5px;
+  font-size: 14.5px;
 }
 
 /* Tabla de Items */
 .pos-table-container {
-  margin: 6px 0;
+  margin: 8px 0;
 }
 
 .pos-items-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 11px;
+  font-size: 13px;
 }
 
 .pos-items-table th {
-  border-bottom: 1px solid #000000;
+  border-bottom: 1.5px solid #000000;
   padding-bottom: 4px;
   text-align: left;
-  font-size: 11px;
+  font-size: 13px;
+  font-weight: bold;
 }
 
 .pos-items-table td {
-  padding: 4px 0;
+  padding: 5px 0;
   vertical-align: top;
 }
 
 .pos-col-desc {
-  width: 55%;
+  width: 56%;
   text-align: left;
 }
 
 .pos-col-cant {
-  width: 15%;
+  width: 14%;
   text-align: center;
 }
 
@@ -3779,19 +3780,20 @@
 }
 
 .pos-item-desc {
-  font-weight: 600;
+  font-weight: 700;
+  font-size: 13px;
 }
 
 .pos-item-unit-calc {
   display: block;
-  font-size: 9.5px;
-  color: #444444;
+  font-size: 11px;
+  color: #333333;
 }
 
 /* Bloque de Totales */
 .pos-totals-block {
-  margin: 6px 0;
-  font-size: 11.5px;
+  margin: 8px 0;
+  font-size: 13.5px;
 }
 
 .pos-total-row {
@@ -3801,70 +3803,221 @@
 }
 
 .pos-grand-total {
-  font-size: 14px;
+  font-size: 16.5px;
   font-weight: 900;
 }
 
 .pos-payment-method {
-  font-size: 12px;
-  margin-top: 4px;
+  font-size: 13.5px;
+  margin-top: 5px;
 }
 
 .pos-payment-badge {
   background: #f1f5f9;
-  padding: 1px 6px;
+  padding: 2px 8px;
   border-radius: 4px;
   border: 1px solid #94a3b8;
+  font-weight: bold;
 }
 
 /* Firma */
 .pos-signature-block {
   text-align: center;
-  margin: 16px 0 8px 0;
+  margin: 18px 0 8px 0;
 }
 
 .pos-sign-notice {
-  font-size: 10px;
-  margin-bottom: 26px;
-  color: #333333;
+  font-size: 11.5px;
+  margin-bottom: 28px;
+  color: #222222;
 }
 
 .pos-signature-line {
-  border-bottom: 1px solid #000000;
-  width: 80%;
+  border-bottom: 1.5px solid #000000;
+  width: 85%;
   margin: 0 auto 6px auto;
 }
 
 .pos-sign-label {
-  font-size: 11px;
+  font-size: 12.5px;
+  font-weight: bold;
   margin: 0;
 }
 
 .pos-sign-sublabel {
-  font-size: 10.5px;
+  font-size: 11.5px;
   margin: 2px 0 0 0;
 }
 
 /* Pie del Ticket */
 .pos-ticket-footer {
   text-align: center;
-  font-size: 10px;
-  margin-top: 6px;
+  font-size: 11.5px;
+  margin-top: 8px;
 }
 
 .pos-footer-msg {
-  margin: 2px 0;
+  margin: 3px 0;
 }
 
 .pos-footer-thanks {
-  font-size: 11px;
-  margin: 4px 0;
+  font-size: 13px;
+  font-weight: bold;
+  margin: 5px 0;
 }
 
 .pos-footer-system {
-  font-size: 9px;
-  color: #666666;
+  font-size: 10px;
+  color: #444444;
   margin: 4px 0 0 0;
+}
+
+/* ========================================================
+   REGLAS DE IMPRESIÓN DIRECTA POS (@media print)
+   ======================================================== */
+@page {
+  margin: 0;
+  size: auto;
+}
+
+@media print {
+  /* Ocultar todo el sitio web excepto el ticket */
+  body * {
+    visibility: hidden;
+  }
+
+  html, body {
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #ffffff !important;
+    width: 100% !important;
+  }
+
+  .impresion-pos-backdrop,
+  .impresion-pos-dialog,
+  .impresion-pos-body {
+    position: static !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    border: none !important;
+    display: block !important;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+
+  #pos-ticket-printable,
+  #pos-ticket-printable * {
+    visibility: visible;
+  }
+
+  #pos-ticket-printable {
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 2mm 3mm !important;
+    box-shadow: none !important;
+    border: none !important;
+    font-size: 14px !important;
+    line-height: 1.35 !important;
+    color: #000000 !important;
+  }
+
+  .pos-doc-main-title {
+    font-size: 16.5px !important;
+    font-weight: 900 !important;
+  }
+
+  .pos-info-row {
+    font-size: 13.5px !important;
+    margin-bottom: 3px !important;
+  }
+
+  .pos-items-table {
+    font-size: 13.5px !important;
+  }
+
+  .pos-items-table th {
+    font-size: 13.5px !important;
+    border-bottom: 1.5px solid #000000 !important;
+  }
+
+  .pos-items-table td {
+    padding: 4px 0 !important;
+  }
+
+  .pos-col-desc {
+    width: 56% !important;
+  }
+
+  .pos-col-cant {
+    width: 14% !important;
+  }
+
+  .pos-col-total {
+    width: 30% !important;
+  }
+
+  .pos-item-desc {
+    font-size: 13.5px !important;
+    font-weight: bold !important;
+  }
+
+  .pos-item-unit-calc {
+    font-size: 11.5px !important;
+  }
+
+  .pos-totals-block {
+    font-size: 14px !important;
+  }
+
+  .pos-grand-total {
+    font-size: 17px !important;
+    font-weight: 900 !important;
+  }
+
+  .pos-payment-method {
+    font-size: 14px !important;
+  }
+
+  .pos-signature-block {
+    margin: 18px 0 10px 0 !important;
+  }
+
+  .pos-sign-notice {
+    font-size: 12px !important;
+    margin-bottom: 30px !important;
+  }
+
+  .pos-sign-label {
+    font-size: 13px !important;
+    font-weight: bold !important;
+  }
+
+  .pos-sign-sublabel {
+    font-size: 12px !important;
+  }
+
+  .pos-ticket-footer {
+    font-size: 12px !important;
+  }
+
+  .pos-footer-thanks {
+    font-size: 13.5px !important;
+    font-weight: bold !important;
+  }
+
+  .pos-footer-system {
+    font-size: 10.5px !important;
+  }
 }
 
 /* ========================================================
