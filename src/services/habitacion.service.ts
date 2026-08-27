@@ -23,7 +23,7 @@ export class HabitacionService {
                 `${tables.HABITACION}.*`,
                 db.raw(`COALESCE(${tables.PRECIOS_ARTICULO}.PRAR_FIJO, ${tables.ARTICULO}.ARTI_PRECIO, 0) as "PRECIO_CALCULADO"`)
             )
-            .orderBy(db.raw(`CAST(${tables.HABITACION}.ID_HABITACION AS INTEGER)`), 'asc');
+            .orderBy(`${tables.HABITACION}.NUMERO`, 'asc');
 
         const result: IHabitacionDTO[] = [];
 
@@ -257,42 +257,60 @@ export class HabitacionService {
 
     // Crear una nueva habitación con ID autoincremental y ARTI_COD vinculado
     static async createHabitacion(data: INuevaHabitacionDTO) {
-        if (!data.numero || !data.numero.trim()) {
+        const numClean = sanitizeText(data.numero?.trim() || '');
+        const artiClean = sanitizeText(data.artiCod?.trim() || '');
+
+        if (!numClean) {
             throw new Error('El número de habitación es obligatorio');
         }
-        if (!data.artiCod || !data.artiCod.trim()) {
+        if (!artiClean) {
             throw new Error('Debe vincular un código de artículo (ARTI_COD) a la habitación');
         }
 
-        // Obtener el siguiente ID autoincremental
-        const maxIdResult = await db.raw('SELECT MAX(CAST(ID_HABITACION AS INTEGER)) AS MAXID FROM HABITACION');
-        const rows = maxIdResult.rows ? maxIdResult.rows : (Array.isArray(maxIdResult) ? maxIdResult : [maxIdResult]);
-        const firstRow = rows[0] || {};
-        const maxIdVal = firstRow.MAXID ?? firstRow.maxid ?? firstRow.MAX ?? firstRow.max ?? 0;
-        const nextId = (parseInt(String(maxIdVal || '0'), 10) || 0) + 1;
+        // Verificar si ya existe el número de habitación
+        const existing = await db(tables.HABITACION)
+            .whereRaw('TRIM(NUMERO) = ?', [numClean])
+            .first();
+
+        if (existing) {
+            throw new Error(`Ya existe una habitación con el número ${numClean}`);
+        }
+
+        // Obtener el siguiente ID autoincremental de forma segura
+        let nextId = 1;
+        try {
+            const maxIdResult = await db.raw('SELECT MAX(CAST(ID_HABITACION AS INTEGER)) AS MAXID FROM HABITACION');
+            const rows = maxIdResult.rows ? maxIdResult.rows : (Array.isArray(maxIdResult) ? maxIdResult : [maxIdResult]);
+            const firstRow = rows[0] || {};
+            const maxIdVal = firstRow.MAXID ?? firstRow.maxid ?? firstRow.MAX ?? firstRow.max ?? 0;
+            nextId = (parseInt(String(maxIdVal || '0'), 10) || 0) + 1;
+        } catch (e) {
+            const countRow = await db(tables.HABITACION).count('* as CNT').first();
+            nextId = (parseInt(String(countRow?.CNT || '0'), 10) || 0) + 1;
+        }
 
         const nuevaHabitacion: any = {
             ID_HABITACION: String(nextId),
-            NUMERO: data.numero.trim(),
+            NUMERO: numClean,
             ESTADO: 'Disponible',
-            TIPO: (data.tipo || 'SENCILLA').trim().toUpperCase(),
+            TIPO: data.tipo ? sanitizeText(data.tipo.trim()).toUpperCase() : 'SENCILLA',
             PISO: data.piso || 1,
-            NOTAS: (data.observaciones || '').trim(),
-            ARTI_COD: data.artiCod.trim(),
-            CARACTERISTICAS: (data.caracteristicas || '').trim()
+            NOTAS: data.observaciones ? truncateToBytes(data.observaciones, 200) : '',
+            ARTI_COD: artiClean,
+            CARACTERISTICAS: data.caracteristicas ? truncateToBytes(data.caracteristicas, 200) : ''
         };
 
         await db(tables.HABITACION).insert(nuevaHabitacion);
 
         return {
             id: String(nextId),
-            numero: String(data.numero).trim(),
-            artiCod: String(data.artiCod).trim(),
+            numero: numClean,
+            artiCod: artiClean,
             estado: 'Disponible',
-            tipo: (data.tipo || 'SENCILLA').trim().toUpperCase(),
+            tipo: nuevaHabitacion.TIPO,
             piso: data.piso || 1,
-            caracteristicas: (data.caracteristicas || '').trim(),
-            observaciones: (data.observaciones || '').trim()
+            caracteristicas: nuevaHabitacion.CARACTERISTICAS,
+            observaciones: nuevaHabitacion.NOTAS
         };
     }
 
