@@ -176,7 +176,7 @@ export const ModalCrearHabitacion = ({ habitacionToEdit, onClose, onSaved }: Mod
                 onChange={(e) => setTipo(e.target.value)}
               >
                 <option value="SENCILLA">SENCILLA</option>
-                <option value="Semidoble V (Ventilador)">Semidoble V (Ventilador)</option>
+                <option value="SEMIDOBLE V (Ventilador)">Semidoble V (Ventilador)</option>
                 <option value="SEMIDOBLE">SEMIDOBLE</option>
                 <option value="DOBLE">DOBLE</option>
                 <option value="MULTIPLE">MULTIPLE</option>
