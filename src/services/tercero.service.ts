@@ -51,7 +51,7 @@ export class TerceroService {
                     CLIE_CUPO: 10000000,
                     COBR_COD: 1,
                     VEND_COD: 1,
-                    ZONA_COD: '1',
+                    ZONA_ID: '1',
                     LIPR_COD: 1,
                     CLIE_DIAS: 0,
                     CLIE_FECHA: new Date(),
@@ -71,11 +71,12 @@ export class TerceroService {
                         CLIE_CUPO: 10000000,
                         COBR_COD: 1,
                         VEND_COD: 1,
-                        ZONA_COD: '1',
+                        ZONA_ID: '1',
                         LIPR_COD: 1
                     });
                 } catch (e2: any) {
-                    console.warn('No se pudo insertar en CLIENTES:', e2.message);
+                    console.error('Error insertando en CLIENTES:', e2.message);
+                    throw e2;
                 }
             }
         }
