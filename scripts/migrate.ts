@@ -8,7 +8,7 @@ dotenv.config();
 const dbOptions = {
     host: process.env.DB_HOST || '127.0.0.1',
     port: parseInt(process.env.DB_PORT || '3050'),
-    database: process.env.DB_PATH || 'C:\\SYSplus2025\\Datos\\EMP\\SYSPLUS.FDB',
+    database: process.env.DB_PATH || 'C:\\SYSplus\\Datos\\AV1\\sysplus.fdb',
     user: process.env.DB_USER || 'SYSDBA',
     password: process.env.DB_PASSWORD || 'masterkey',
     pageSize: 4096
@@ -25,7 +25,7 @@ function execute(db: any, sql: string, params: any[] = []): Promise<any> {
 
 async function runMigration() {
     console.log(`====================================================`);
-    console.log(`📦 INICIANDO MIGRACIÓN OFICIAL EN FIREBIRD (EMP)`);
+    console.log(`📦 INICIANDO MIGRACIÓN OFICIAL EN FIREBIRD`);
     console.log(`📁 Base de Datos: ${dbOptions.database}`);
     console.log(`====================================================`);
 
@@ -36,7 +36,7 @@ async function runMigration() {
         }
 
         try {
-            // 1. Verificar tabla HABITACION
+            // 1. Verificar y Crear Tabla HABITACION
             const checkHab = await execute(db, `SELECT RDB$RELATION_NAME FROM RDB$RELATIONS WHERE RDB$SYSTEM_FLAG = 0 AND RDB$RELATION_NAME = 'HABITACION'`);
 
             if (!checkHab || checkHab.length === 0) {
@@ -76,38 +76,19 @@ async function runMigration() {
                 ];
 
                 for (const h of habitacionesBase) {
-                    await execute(db, `
-                        INSERT INTO HABITACION (ID_HABITACION, ARTI_COD, NUMERO, ESTADO, TIPO, PISO, PRECIO_NOCHE, CARACTERISTICAS)
-                        VALUES ('${h.id}', '${h.art}', '${h.num}', '${h.estado}', '${h.tipo}', ${h.piso}, ${h.precio}, '${h.caract}')
-                    `);
+                    try {
+                        await execute(db, `
+                            INSERT INTO HABITACION (ID_HABITACION, ARTI_COD, NUMERO, ESTADO, TIPO, PISO, PRECIO_NOCHE, CARACTERISTICAS)
+                            VALUES ('${h.id}', '${h.art}', '${h.num}', '${h.estado}', '${h.tipo}', ${h.piso}, ${h.precio}, '${h.caract}')
+                        `);
+                    } catch (e: any) {}
                 }
                 console.log('✅ Habitaciones base insertadas.');
             } else {
                 console.log('ℹ️ La tabla HABITACION ya existe.');
-
-                // Asegurar columnas requeridas si no existen
-                const cols = [
-                    { name: 'ARTI_COD', type: 'VARCHAR(15)' },
-                    { name: 'PEWE_ID', type: 'INTEGER' },
-                    { name: 'HUESPED', type: 'VARCHAR(100)' },
-                    { name: 'DOCUMENTO', type: 'VARCHAR(30)' },
-                    { name: 'FECHA_RESERVA', type: 'VARCHAR(50)' },
-                    { name: 'FECHA_SALIDA', type: 'VARCHAR(50)' },
-                    { name: 'CARACTERISTICAS', type: 'VARCHAR(250)' },
-                    { name: 'PRECIO_NOCHE', type: 'NUMERIC(15,2) DEFAULT 0' },
-                ];
-
-                for (const col of cols) {
-                    try {
-                        await execute(db, `ALTER TABLE HABITACION ADD ${col.name} ${col.type}`);
-                        console.log(`✅ Columna ${col.name} agregada a HABITACION.`);
-                    } catch (e: any) {
-                        // Columna ya existe
-                    }
-                }
             }
 
-            // 2. Verificar tabla HABITACION_MOVIM
+            // 2. Verificar y Crear Tabla HABITACION_MOVIM
             const checkMov = await execute(db, `SELECT RDB$RELATION_NAME FROM RDB$RELATIONS WHERE RDB$SYSTEM_FLAG = 0 AND RDB$RELATION_NAME = 'HABITACION_MOVIM'`);
             if (!checkMov || checkMov.length === 0) {
                 console.log('📌 Creando tabla HABITACION_MOVIM...');
@@ -131,103 +112,54 @@ async function runMigration() {
                 console.log('ℹ️ La tabla HABITACION_MOVIM ya existe.');
             }
 
-            // 3. Verificar tabla PEDIDO_WEB
-            const checkPewe = await execute(db, `SELECT RDB$RELATION_NAME FROM RDB$RELATIONS WHERE RDB$SYSTEM_FLAG = 0 AND RDB$RELATION_NAME = 'PEDIDO_WEB'`);
-            if (!checkPewe || checkPewe.length === 0) {
-                console.log('📌 Creando tabla PEDIDO_WEB...');
+            // 3. Verificar y Crear Tabla HABITACION_MOVIM_ANTICIPOS
+            const checkAnt = await execute(db, `SELECT RDB$RELATION_NAME FROM RDB$RELATIONS WHERE RDB$SYSTEM_FLAG = 0 AND RDB$RELATION_NAME = 'HABITACION_MOVIM_ANTICIPOS'`);
+            if (!checkAnt || checkAnt.length === 0) {
+                console.log('📌 Creando tabla HABITACION_MOVIM_ANTICIPOS...');
                 await execute(db, `
-                    CREATE TABLE PEDIDO_WEB (
-                        PEWE_ID           INTEGER NOT NULL PRIMARY KEY,
-                        PEWE_FECHA        DATE,
-                        TERC_NIT          VARCHAR(20),
-                        PEWE_SUCURSAL     VARCHAR(2),
-                        PEWE_OBS          BLOB SUB_TYPE 1 SEGMENT SIZE 80,
-                        PEWE_ENTREGA      DATE,
-                        PEWE_DIASCR       INTEGER,
-                        VEND_COD          INTEGER,
-                        PEWE_DTOPORC      NUMERIC(9,4) DEFAULT 0,
-                        PEWE_ADICIONAL    NUMERIC(18,2) DEFAULT 0,
-                        PEWE_EXTRA        NUMERIC(18,2) DEFAULT 0,
-                        PEWE_IVAMONTO     NUMERIC(18,2) DEFAULT 0,
-                        PEWE_TOTAL        NUMERIC(18,2) DEFAULT 0,
-                        PEWE_RTFTEPORC    NUMERIC(9,4) DEFAULT 0,
-                        PEWE_RTIVAPORC    NUMERIC(9,4) DEFAULT 0,
-                        PEWE_RTICAPORC    NUMERIC(9,4) DEFAULT 0,
-                        PEWE_PREF         VARCHAR(4),
-                        PEWE_DTOMONTO     NUMERIC(18,2) DEFAULT 0,
-                        PEWE_NUMPED       VARCHAR(12),
-                        PEWE_IDPED        INTEGER,
-                        PEWE_NOMCLI       VARCHAR(60),
-                        PTVT_ID           INTEGER,
-                        PEWE_EVENTO       INTEGER,
-                        PEWE_AUTOCAR      INTEGER,
-                        PEWE_AUTOCUPO     INTEGER,
-                        PEWE_TIPOENTREGA  INTEGER,
-                        PEWE_HORAENTREGA  TIME,
-                        PEWE_IDOFFLINE    INTEGER,
-                        PEWE_LATITUD      VARCHAR(40),
-                        PEWE_LONGITUD     VARCHAR(40),
-                        PEWE_ANULADO      CHAR(1) DEFAULT 'N'
+                    CREATE TABLE HABITACION_MOVIM_ANTICIPOS (
+                        ID_MOVIM_ANT         INTEGER NOT NULL PRIMARY KEY,
+                        ID_MOVIM             INTEGER NOT NULL,
+                        ITEM_ID              INTEGER NOT NULL,
+                        RECA_ID              INTEGER NOT NULL,
+                        ANCL_ID              INTEGER NOT NULL,
+                        MONTO                NUMERIC(15,2) NOT NULL,
+                        FECHA                TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        TERC_NIT             VARCHAR(20),
+                        CONCEPTO             VARCHAR(150),
+                        ESTADO               VARCHAR(20) DEFAULT 'Activo'
                     )
                 `);
-                console.log('✅ Tabla PEDIDO_WEB creada.');
+                console.log('✅ Tabla HABITACION_MOVIM_ANTICIPOS creada.');
             } else {
-                console.log('ℹ️ La tabla PEDIDO_WEB ya existe.');
+                console.log('ℹ️ La tabla HABITACION_MOVIM_ANTICIPOS ya existe.');
             }
 
-            // 4. Verificar tabla PEDIDO_WEB_DETALLE
-            const checkPewd = await execute(db, `SELECT RDB$RELATION_NAME FROM RDB$RELATIONS WHERE RDB$SYSTEM_FLAG = 0 AND RDB$RELATION_NAME = 'PEDIDO_WEB_DETALLE'`);
-            if (!checkPewd || checkPewd.length === 0) {
-                console.log('📌 Creando tabla PEDIDO_WEB_DETALLE...');
-                await execute(db, `
-                    CREATE TABLE PEDIDO_WEB_DETALLE (
-                        PEWE_ID          INTEGER NOT NULL,
-                        PEWD_ITEM        INTEGER NOT NULL,
-                        ARTI_COD         VARCHAR(15),
-                        PEWD_CODBAR      VARCHAR(50),
-                        BODE_COD         VARCHAR(3),
-                        PEWD_CANT        NUMERIC(18,4) DEFAULT 0,
-                        PEWD_UNIDAD      VARCHAR(5),
-                        PEWD_FACTOR      NUMERIC(18,4) DEFAULT 1,
-                        LIPR_COD         INTEGER,
-                        PEWD_PRUNIT      NUMERIC(18,4) DEFAULT 0,
-                        PEWD_DTOP        NUMERIC(9,4) DEFAULT 0,
-                        PEWD_DTO1        NUMERIC(9,4) DEFAULT 0,
-                        PEWD_DTO2        NUMERIC(9,4) DEFAULT 0,
-                        PEWD_DTO3        NUMERIC(9,4) DEFAULT 0,
-                        PEWD_IVAP        NUMERIC(9,4) DEFAULT 0,
-                        PEWD_IVAMONTO    NUMERIC(18,2) DEFAULT 0,
-                        PEWD_CONSUMO     NUMERIC(18,2) DEFAULT 0,
-                        PEWD_TOTAL       NUMERIC(18,2) DEFAULT 0,
-                        PEWD_REFERENCIA  VARCHAR(20),
-                        PEWD_DTOM        NUMERIC(18,2) DEFAULT 0,
-                        PEWD_DTO1M       NUMERIC(18,2) DEFAULT 0,
-                        PEWD_DTO2M       NUMERIC(18,2) DEFAULT 0,
-                        PEWD_DTO3M       NUMERIC(18,2) DEFAULT 0,
-                        PEWD_DESC        VARCHAR(300),
-                        PEWD_ANULADO     CHAR(1) DEFAULT 'N',
-                        PRIMARY KEY (PEWE_ID, PEWD_ITEM)
-                    )
-                `);
-                console.log('✅ Tabla PEDIDO_WEB_DETALLE creada.');
-            } else {
-                console.log('ℹ️ La tabla PEDIDO_WEB_DETALLE ya existe.');
+            // 4. Generadores (Sequences)
+            const generators = ['ID_HABITACION', 'ID_HAB_MOVIM'];
+            for (const gen of generators) {
+                try {
+                    await execute(db, `CREATE GENERATOR ${gen}`);
+                    console.log(`✅ Generador ${gen} creado.`);
+                } catch (e: any) {
+                    // Generador ya existe
+                }
             }
 
-            // 5. Compilar procedimiento GRABE_PEDIDO_APP
-            const procPath = path.join(__dirname, '../src/procedimiento.sql');
+            // 5. Compilar Procedimiento GRABE_DOCUMENTO_INV_WEB
+            const procPath = path.join(__dirname, '../src/procedimiento_nuevo.sql');
             if (fs.existsSync(procPath)) {
                 const procSql = fs.readFileSync(procPath, 'utf8');
                 try {
                     await execute(db, procSql);
-                    console.log('✅ Procedimiento GRABE_PEDIDO_APP compilado y actualizado.');
+                    console.log('✅ Procedimiento GRABE_DOCUMENTO_INV_WEB compilado exitosamente.');
                 } catch (spErr: any) {
-                    console.warn('Aviso procedimiento GRABE_PEDIDO_APP:', spErr.message);
+                    console.warn('Aviso procedimiento GRABE_DOCUMENTO_INV_WEB:', spErr.message);
                 }
             }
 
             console.log(`====================================================`);
-            console.log(`🎉 MIGRACIÓN OFICIAL FINALIZADA CON ÉXITO`);
+            console.log(`🎉 MIGRACIÓN FINALIZADA CON ÉXITO`);
             console.log(`====================================================`);
         } catch (error: any) {
             console.error('❌ Error ejecutando migración:', error.message);
