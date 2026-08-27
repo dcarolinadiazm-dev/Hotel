@@ -38,28 +38,45 @@ export class TerceroService {
             .first();
 
         if (!existingCliente) {
-            await db(tables.CLIENTES).insert({
-                TERC_NIT: cleanNit,
-                CLIE_COD: cleanNit,
-                CLIE_ESTADO: 'A',
-                CLIE_RTEFTE: 0,
-                CLIE_RTEIVA: 0,
-                CLIE_RTEICA: 0,
-                CLIE_RTFTEBASE: 0,
-                CLIE_DTOMAX: 0,
-                CLIE_CUPO: 10000000,
-                COBR_COD: 1,
-                VEND_COD: 1,
-                ZONA_COD: '1',
-                LIPR_COD: 1,
-                CLIE_DIAS: 0,
-                CLIE_FECHA: new Date(),
-                CLIE_DIASBLOQ: 1,
-                CLIE_DETALLE: 'N',
-                CLIE_RESALTAR: 'N',
-                CLIE_CONTADO: 'S',
-                CLIE_FORMAP: 1
-            });
+            try {
+                await db(tables.CLIENTES).insert({
+                    TERC_NIT: cleanNit,
+                    CLIE_COD: cleanNit,
+                    CLIE_ESTADO: 'A',
+                    CLIE_RTEFTE: 0,
+                    CLIE_RTEIVA: 0,
+                    CLIE_RTEICA: 0,
+                    CLIE_RTFTEBASE: 0,
+                    CLIE_DTOMAX: 0,
+                    CLIE_CUPO: 10000000,
+                    COBR_COD: 1,
+                    VEND_COD: 1,
+                    ZONA_COD: '1',
+                    LIPR_COD: 1,
+                    CLIE_DIAS: 0,
+                    CLIE_FECHA: new Date(),
+                    CLIE_DIASBLOQ: 1,
+                    CLIE_DETALLE: 'N',
+                    CLIE_RESALTAR: 'N',
+                    CLIE_CONTADO: 'S'
+                });
+            } catch (clieErr: any) {
+                console.warn('Aviso insertando en CLIENTES (reintentando con campos esenciales):', clieErr.message);
+                try {
+                    await db(tables.CLIENTES).insert({
+                        TERC_NIT: cleanNit,
+                        CLIE_COD: cleanNit,
+                        CLIE_ESTADO: 'A',
+                        CLIE_CUPO: 10000000,
+                        COBR_COD: 1,
+                        VEND_COD: 1,
+                        ZONA_COD: '1',
+                        LIPR_COD: 1
+                    });
+                } catch (e2: any) {
+                    console.warn('No se pudo insertar en CLIENTES:', e2.message);
+                }
+            }
         }
     }
 
