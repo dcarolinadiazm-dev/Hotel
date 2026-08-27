@@ -192,9 +192,10 @@ export const ModalCrearHabitacion = ({ habitacionToEdit, onClose, onSaved }: Mod
                   value={estado}
                   onChange={(e) => setEstado(e.target.value)}
                 >
-                  <option value="Disponible">🟩 Disponible</option>
-                  <option value="Ocupada">🟥 Ocupada</option>
-                  <option value="Inhabilitada">⬛ Inhabilitada</option>
+                  <option value="Disponible">🟢 Disponible</option>
+                  <option value="Reservada">🟡 Reservada</option>
+                  <option value="Ocupada">🔴 Ocupada</option>
+                  <option value="Inhabilitada">⚫ Inhabilitada</option>
                 </select>
               </div>
             )}
