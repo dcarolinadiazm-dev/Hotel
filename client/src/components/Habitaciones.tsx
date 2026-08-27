@@ -50,9 +50,35 @@ export const Habitaciones = ({
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [habitacionAEditar, setHabitacionAEditar] = useState<Habitacion | null>(null);
   const [localSidebarOpen, setLocalSidebarOpen] = useState(false);
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
 
   const sidebarOpen = controlledSidebarOpen !== undefined ? controlledSidebarOpen : localSidebarOpen;
   const toggleSidebar = onToggleSidebar || (() => setLocalSidebarOpen((prev) => !prev));
+
+  useEffect(() => {
+    const handleBeforeInstallPrompt = (e: Event) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+    };
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    };
+  }, []);
+
+  const handleInstallApp = async () => {
+    if (deferredPrompt) {
+      deferredPrompt.prompt();
+      const { outcome } = await deferredPrompt.userChoice;
+      if (outcome === 'accepted') {
+        setDeferredPrompt(null);
+      }
+    } else {
+      alert('📲 Para instalar como App en tu equipo o celular:\n\n1. En Google Chrome / Edge: Haz clic en el ícono de instalación (computador con flecha) que aparece en la barra de direcciones o en el menú ⋮ -> "Instalar aplicación".\n2. En celular Android / iPhone: Abre el menú de opciones del navegador y presiona "Agregar a la pantalla principal" o "Instalar aplicación".');
+    }
+  };
 
 
 
@@ -264,12 +290,21 @@ export const Habitaciones = ({
           </div>
 
           <div className="topbar-right">
+            <button
+              type="button"
+              className="btn-install-pwa"
+              onClick={handleInstallApp}
+              title="Descargar e instalar como App en tu equipo o móvil"
+            >
+              <span className="install-icon">📲</span>
+              <span className="install-label">Instalar App</span>
+            </button>
+
             {!sidebarOpen && (
               <button className="btn-nav-tab" onClick={onGoToReports} title="Ver Reporte de Pedidos">
                 📊 Reportes
               </button>
             )}
-
 
             <div className="topbar-user">
               <svg className="user-icon-small" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
