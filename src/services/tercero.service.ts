@@ -58,7 +58,8 @@ export class TerceroService {
                     CLIE_DIASBLOQ: 1,
                     CLIE_DETALLE: 'N',
                     CLIE_RESALTAR: 'N',
-                    CLIE_CONTADO: 'S'
+                    CLIE_CONTADO: 'S',
+                    CLIE_FPAGO: 1
                 });
             } catch (clieErr: any) {
                 console.warn('Aviso insertando en CLIENTES (reintentando con campos esenciales):', clieErr.message);
