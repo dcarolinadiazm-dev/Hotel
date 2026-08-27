@@ -1,3 +1,5 @@
+require('./scripts/setup_bindings.js');
+
 import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
