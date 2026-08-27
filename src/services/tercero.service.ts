@@ -82,36 +82,34 @@ export class TerceroService {
         }
     }
 
-    // Obtener los tipos de documento desde TIPO_DOCUMENTO
+    // Obtener los tipos de documento desde TIPO_ID
     static async getTiposDocumento(): Promise<any[]> {
         try {
-            const rows = await db(tables.TIPO_DOCUMENTO)
+            const rows = await db(tables.TIPO_ID)
                 .select(
-                    db.raw('TIDO_COD as "cod"'),
-                    db.raw('TRIM(TIDO_NOMCORTO) as "nomCorto"'),
-                    db.raw('TRIM(TIDO_NOMLARGO) as "nomLargo"')
+                    db.raw('TRIM(TIID_COD) as "cod"'),
+                    db.raw('TRIM(COALESCE(TIID_NOM, TIID_NOMFE)) as "nombre"'),
+                    db.raw('TRIM(TIID_NOMFE) as "nomFE"')
                 )
-                .orderBy('TIDO_COD', 'asc');
+                .orderBy('TIID_COD', 'asc');
 
             if (rows && rows.length > 0) {
                 return rows.map((r: any) => ({
-                    cod: Number(r.cod || r.COD),
-                    nomCorto: String(r.nomCorto || r.NOMCORTO || '').trim(),
-                    nomLargo: String(r.nomLargo || r.NOMLARGO || '').trim()
+                    cod: String(r.cod || r.COD || '').trim(),
+                    nombre: String(r.nombre || r.NOMBRE || r.nomFE || '').trim()
                 }));
             }
         } catch (e: any) {
-            console.warn('Aviso consultando TIPO_DOCUMENTO:', e.message);
+            console.warn('Aviso consultando TIPO_ID:', e.message);
         }
 
         // Tipos de documento estándar por defecto
         return [
-            { cod: 1, nomCorto: 'CC', nomLargo: 'CÉDULA DE CIUDADANÍA' },
-            { cod: 2, nomCorto: 'NIT', nomLargo: 'NIT / RUT' },
-            { cod: 3, nomCorto: 'CE', nomLargo: 'CÉDULA DE EXTRANJERÍA' },
-            { cod: 4, nomCorto: 'PAS', nomLargo: 'PASAPORTE' },
-            { cod: 5, nomCorto: 'TI', nomLargo: 'TARJETA DE IDENTIDAD' },
-            { cod: 6, nomCorto: 'PEP', nomLargo: 'PERMISO ESPECIAL' }
+            { cod: 'C', nombre: 'CÉDULA DE CIUDADANÍA' },
+            { cod: 'N', nombre: 'NIT' },
+            { cod: 'E', nombre: 'CÉDULA DE EXTRANJERÍA' },
+            { cod: 'P', nombre: 'PASAPORTE' },
+            { cod: 'T', nombre: 'TARJETA DE IDENTIDAD' }
         ];
     }
 
@@ -161,7 +159,7 @@ export class TerceroService {
         const terceroPayload = {
             TERC_NOM: nombreCompleto,
             TERC_DV: data.dv || null,
-            TERC_TIPOID: (data.tipoId || 'CC').substring(0, 10),
+            TERC_TIPOID: (data.tipoId || 'C').substring(0, 1),
             TERC_NOMBRE1: data.nombre1 || null,
             TERC_NOMBRE2: data.nombre2 || null,
             TERC_APELLIDO1: data.apellido1 || null,

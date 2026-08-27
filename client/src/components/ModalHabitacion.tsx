@@ -100,15 +100,14 @@ export const ModalHabitacion = ({
 
   // Formulario rápido de nuevo cliente
   const [showNewClientForm, setShowNewClientForm] = useState(false);
-  const [tiposDocumento, setTiposDocumento] = useState<Array<{ cod: number; nomCorto: string; nomLargo: string }>>([
-    { cod: 1, nomCorto: 'CC', nomLargo: 'CÉDULA DE CIUDADANÍA' },
-    { cod: 2, nomCorto: 'NIT', nomLargo: 'NIT / RUT' },
-    { cod: 3, nomCorto: 'CE', nomLargo: 'CÉDULA DE EXTRANJERÍA' },
-    { cod: 4, nomCorto: 'PAS', nomLargo: 'PASAPORTE' },
-    { cod: 5, nomCorto: 'TI', nomLargo: 'TARJETA DE IDENTIDAD' },
-    { cod: 6, nomCorto: 'PEP', nomLargo: 'PERMISO ESPECIAL' }
+  const [tiposDocumento, setTiposDocumento] = useState<Array<{ cod: string; nombre: string }>>([
+    { cod: 'C', nombre: 'CÉDULA DE CIUDADANÍA' },
+    { cod: 'N', nombre: 'NIT' },
+    { cod: 'E', nombre: 'CÉDULA DE EXTRANJERÍA' },
+    { cod: 'P', nombre: 'PASAPORTE' },
+    { cod: 'T', nombre: 'TARJETA DE IDENTIDAD' }
   ]);
-  const [newTipoDoc, setNewTipoDoc] = useState('CC');
+  const [newTipoDoc, setNewTipoDoc] = useState('C');
   const [newNit, setNewNit] = useState('');
   const [newNombre, setNewNombre] = useState('');
   const [newCelular, setNewCelular] = useState('');
@@ -227,7 +226,7 @@ export const ModalHabitacion = ({
       .then((data) => {
         if (Array.isArray(data) && data.length > 0) {
           setTiposDocumento(data);
-          setNewTipoDoc((prev) => prev || data[0].nomCorto);
+          setNewTipoDoc((prev) => prev || data[0].cod);
         }
       })
       .catch((err) => console.error('Error al cargar tipos de documento:', err));
@@ -893,8 +892,8 @@ export const ModalHabitacion = ({
                             required
                           >
                             {tiposDocumento.map((td) => (
-                              <option key={td.cod} value={td.nomCorto}>
-                                {td.nomCorto} - {td.nomLargo}
+                              <option key={td.cod} value={td.cod}>
+                                {td.cod} - {td.nombre}
                               </option>
                             ))}
                           </select>
