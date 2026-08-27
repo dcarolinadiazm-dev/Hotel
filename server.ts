@@ -32,7 +32,7 @@ if (fs.existsSync(clientDistPath)) {
 app.use('/api', apiRoutes);
 
 // Fallback SPA para rutas cliente
-app.get('*', (req: Request, res: Response, next: NextFunction) => {
+app.use((req: Request, res: Response, next: NextFunction) => {
     if (req.path.startsWith('/api')) {
         return res.status(404).json({ error: `Ruta ${req.method} ${req.originalUrl} no encontrada` });
     }

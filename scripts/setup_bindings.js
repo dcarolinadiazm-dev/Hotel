@@ -10,9 +10,11 @@ if (fs.existsSync(srcPath)) {
         if (!fs.existsSync(targetDir)) {
             fs.mkdirSync(targetDir, { recursive: true });
         }
-        fs.copyFileSync(srcPath, targetFile);
-        console.log('✅ Firebird native addon vinculado correctamente a node_modules.');
+        if (!fs.existsSync(targetFile)) {
+            fs.copyFileSync(srcPath, targetFile);
+            console.log('✅ Firebird native addon vinculado correctamente a node_modules.');
+        }
     } catch (e) {
-        console.warn('⚠️ No se pudo copiar addon.node:', e.message);
+        // addon ya vinculado y en uso
     }
 }
