@@ -117,7 +117,41 @@ export class HabitacionService {
                 return fRes <= todayStr && (!fSal || fSal >= todayStr);
             });
 
-            const activeMov = todayMov || null;
+            // Consultar datos de TODOS los movimientos de la habitación para permitir búsqueda por cualquier huésped/reserva
+            const allHuespedesList: string[] = [];
+            const allDocumentosList: string[] = [];
+
+            for (const m of allMovs) {
+                const mDinwId = (m.DINW_ID || m.PEWE_ID || m.ID_DOC || m.PEDI_ID) ? parseInt(String(m.DINW_ID || m.PEWE_ID || m.ID_DOC || m.PEDI_ID), 10) : undefined;
+                if (mDinwId) {
+                    const dinwRow = await db(tables.DOC_INVENTARIO_WEB)
+                        .leftJoin(tables.TERCEROS, `${tables.DOC_INVENTARIO_WEB}.DINW_NIT`, '=', `${tables.TERCEROS}.TERC_NIT`)
+                        .where(`${tables.DOC_INVENTARIO_WEB}.DINW_ID`, mDinwId)
+                        .andWhere(function () {
+                            this.whereNull(`${tables.DOC_INVENTARIO_WEB}.DINW_IDDOC`).orWhere(`${tables.DOC_INVENTARIO_WEB}.DINW_IDDOC`, 0);
+                        })
+                        .andWhere(`${tables.DOC_INVENTARIO_WEB}.DINW_ANULADO`, 'N')
+                        .select(
+                            `${tables.DOC_INVENTARIO_WEB}.*`,
+                            `${tables.TERCEROS}.TERC_NOM`
+                        )
+                        .first();
+
+                    if (dinwRow) {
+                        let mHuesped = dinwRow.TERC_NOM ? String(dinwRow.TERC_NOM).trim() : '';
+                        const mDoc = dinwRow.DINW_NIT ? String(dinwRow.DINW_NIT).trim() : '';
+                        if (!mHuesped && dinwRow.DINW_OBS) {
+                            const obsMatch = String(dinwRow.DINW_OBS).split('-');
+                            if (obsMatch.length > 1) mHuesped = obsMatch[1].trim();
+                        }
+                        if (mHuesped && !allHuespedesList.includes(mHuesped)) allHuespedesList.push(mHuesped);
+                        if (mDoc && !allDocumentosList.includes(mDoc)) allDocumentosList.push(mDoc);
+                    }
+                }
+            }
+
+            // Seleccionar movimiento activo (priorizando el de hoy, o la primera reserva activa)
+            const activeMov = todayMov || allMovs[0] || null;
 
             let activeDinwId = (activeMov?.DINW_ID || activeMov?.PEWE_ID || activeMov?.ID_DOC || activeMov?.PEDI_ID) ? parseInt(String(activeMov.DINW_ID || activeMov.PEWE_ID || activeMov.ID_DOC || activeMov.PEDI_ID), 10) : undefined;
             let huesped = '';
@@ -125,7 +159,7 @@ export class HabitacionService {
             let fechaReserva = activeMov?.FECHA_RESERVA ? String(activeMov.FECHA_RESERVA).trim() : '';
             let fechaSalida = activeMov?.FECHA_SALIDA ? String(activeMov.FECHA_SALIDA).trim() : '';
 
-            // Consultar datos del cliente desde DOC_INVENTARIO_WEB solo si hay documento activo de hoy
+            // Consultar datos del cliente desde DOC_INVENTARIO_WEB para el movimiento activo
             if (activeDinwId) {
                 const dinwRow = await db(tables.DOC_INVENTARIO_WEB)
                     .leftJoin(tables.TERCEROS, `${tables.DOC_INVENTARIO_WEB}.DINW_NIT`, '=', `${tables.TERCEROS}.TERC_NIT`)
@@ -147,12 +181,16 @@ export class HabitacionService {
                         const obsMatch = String(dinwRow.DINW_OBS).split('-');
                         if (obsMatch.length > 1) huesped = obsMatch[1].trim();
                     }
-                } else {
+                } else if (!todayMov) {
+                    // Si no es de hoy pero hay dinwId en la reserva
                     activeDinwId = undefined;
                 }
             }
 
-            // Consultar ítems del borrador web solo si hay reserva activa de hoy
+            if (!huesped && allHuespedesList.length > 0) huesped = allHuespedesList[0];
+            if (!documento && allDocumentosList.length > 0) documento = allDocumentosList[0];
+
+            // Consultar ítems del borrador web solo si hay documento activo
             let pendingDetails: any[] = [];
             if (activeDinwId) {
                 pendingDetails = await db(tables.DOC_INVENTARIO_DET_WEB)
@@ -181,7 +219,9 @@ export class HabitacionService {
                 peweId: activeDinwId,
                 productos,
                 total,
-                totalReservasFuturas
+                totalReservasFuturas,
+                todosHuespedes: allHuespedesList.join(' | '),
+                todosDocumentos: allDocumentosList.join(' | ')
             });
         }
 

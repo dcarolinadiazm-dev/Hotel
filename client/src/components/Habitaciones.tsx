@@ -21,6 +21,8 @@ export interface Habitacion {
   productos: number;
   total: number;
   totalReservasFuturas?: number;
+  todosHuespedes?: string;
+  todosDocumentos?: string;
 }
 
 type FiltroEstado = 'TODOS' | 'DISPONIBLE' | 'RESERVADA' | 'OCUPADA' | 'INHABILITADA';
@@ -142,8 +144,12 @@ export const Habitaciones = ({
     // 2. Filtro por texto de búsqueda (Huésped, Documento o Número de Habitación)
     if (busquedaHuesped.trim()) {
       const q = busquedaHuesped.trim().toLowerCase();
-      const matchHuesped = h.huesped ? h.huesped.toLowerCase().includes(q) : false;
-      const matchDoc = h.documento ? h.documento.toLowerCase().includes(q) : false;
+      const matchHuesped =
+        (h.huesped ? h.huesped.toLowerCase().includes(q) : false) ||
+        (h.todosHuespedes ? h.todosHuespedes.toLowerCase().includes(q) : false);
+      const matchDoc =
+        (h.documento ? h.documento.toLowerCase().includes(q) : false) ||
+        (h.todosDocumentos ? h.todosDocumentos.toLowerCase().includes(q) : false);
       const matchNum = h.numero ? h.numero.toLowerCase().includes(q) : false;
       return matchHuesped || matchDoc || matchNum;
     }
@@ -575,7 +581,7 @@ export const Habitaciones = ({
 
                   {/* Detalle Huésped o Código de Artículo y Precio de Lista */}
                   <div className="room-extra-info">
-                    {hab.estado === 'Ocupada' && hab.huesped ? (
+                    {(hab.estado === 'Ocupada' || hab.estado === 'Reservada') && hab.huesped ? (
                       <span className="room-guest-name" title={hab.huesped}>
                         👤 {hab.huesped}
                       </span>

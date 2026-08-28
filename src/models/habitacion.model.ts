@@ -36,6 +36,8 @@ export interface IHabitacionDTO {
     productos: number;
     total: number;
     totalReservasFuturas?: number;
+    todosHuespedes?: string;
+    todosDocumentos?: string;
 }
 
 export interface IHabitacionMovim {
