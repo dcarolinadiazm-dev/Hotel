@@ -268,8 +268,10 @@ export const ModalHabitacion = ({
     setPeweId(m.dinwId);
     setHuesped(m.huesped || '');
     setDocumento(m.documento || '');
-    setFechaReserva(toDatetimeLocal(m.fechaReserva) || getCurrentDatetimeLocal(0));
-    setFechaSalida(toDatetimeLocal(m.fechaSalida) || getCurrentDatetimeLocal(24));
+    const fResLocal = toDatetimeLocal(m.fechaReserva) || getCurrentDatetimeLocal(0);
+    const fSalLocal = toDatetimeLocal(m.fechaSalida) || getCurrentDatetimeLocal(24);
+    setFechaReserva(fResLocal);
+    setFechaSalida(fSalLocal);
     setPrecioNoche(m.precioNoche || defaultRoomPrecio || 0);
     setDescuentoNoche(m.descuento || 0);
     if (m.liprCod) {
@@ -277,6 +279,20 @@ export const ModalHabitacion = ({
     }
     setItems(m.items || []);
     setTotalAbonos(m.totalAbonos || 0);
+
+    // Si la reserva inicia en fecha futura (> hoy), el estado debe ser 'Reservada'
+    // Si inicia hoy o en el pasado, el estado es 'Ocupada'
+    const now = new Date();
+    const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    const fResDate = String(m.fechaReserva || '').split('T')[0];
+
+    if (fResDate && fResDate > todayStr) {
+      setEstado('Reservada');
+    } else if (fResDate && fResDate <= todayStr) {
+      setEstado('Ocupada');
+    } else {
+      setEstado('Reservada');
+    }
   };
 
   const iniciarNuevaReserva = () => {
@@ -290,6 +306,7 @@ export const ModalHabitacion = ({
     setDescuentoNoche(0);
     setItems([]);
     setTotalAbonos(0);
+    setEstado('Reservada');
   };
 
   const fetchRoomDetails = () => {
@@ -1352,7 +1369,20 @@ export const ModalHabitacion = ({
                       type="datetime-local"
                       className="modal-form-input modal-datetime-picker"
                       value={fechaReserva}
-                      onChange={(e) => setFechaReserva(e.target.value)}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setFechaReserva(val);
+                        if (val) {
+                          const now = new Date();
+                          const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+                          const fDate = val.split('T')[0];
+                          if (fDate > todayStr) {
+                            setEstado('Reservada');
+                          } else {
+                            setEstado('Ocupada');
+                          }
+                        }
+                      }}
                     />
                     {fechaReserva && (
                       isReservaParaHoy ? (
