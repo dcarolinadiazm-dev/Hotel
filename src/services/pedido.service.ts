@@ -595,7 +595,7 @@ export class PedidoService {
                         FACT_IVAMONTO: totalIva,
                         FACT_SUBTOTAL: subtotalFactura,
                         FACT_FORMAP: primaryFopaId,
-                        FACT_OBS: obsString
+                        FACT_OBS: Buffer.from(obsString, 'utf-8')
                     });
 
                 // Sincronizar FADE_DTOPORC, FADE_DTOMONTO, FADE_TOTAL, FADE_IVAMONTO y FADE_BASE en FACTURAS_DETALLE
@@ -875,18 +875,39 @@ export class PedidoService {
             DINW_BODEGA: '1',
             DINW_FECHA: new Date(),
             DINW_CONCEPTO: truncateToBytes(obsString, 55),
+            DINW_IDDOC: 0,
+            DINW_ANULADO: 'N',
             DINW_OBS: obsString,
+            DINW_TIPOREF: null,
+            DINW_NUMREF: '',
             DINW_NIT: nit,
             DINW_BODDES: '1',
             DINW_NUMERO: '00000001',
             DINW_PTVTA: 1,
             DINW_VEND: 1,
             DINW_VENCE: new Date(),
+            DINW_DTOPORC: 0,
+            DINW_DTOMONTO: 0,
+            DINW_ADICIONAL: 0,
+            DINW_RTFTEPORC: 0,
+            DINW_RTICAPORC: 0,
+            DINW_RTIVAPORC: 0,
+            DINW_EXTRA: 0,
+            DINW_DTOFPORC: 0,
+            DINW_DTOFFEC: new Date(),
+            DINW_TIPOENT: 1,
+            DINW_MONEDA: 1,
+            DINW_TRM: 1,
             DINW_FORMAP: primaryFopaId,
             DINW_IMPINC: 'S',
-            DINW_IVAINC: 'S',
+            DINW_PASADA: 0,
+            DINW_STAND: '',
+            DINW_TRANSMIT: 'N',
             DINW_SUCURSAL: '01',
-            DINW_ANULADO: 'N',
+            DINW_IVAINC: 'S',
+            DINW_VALIDEZ: 0,
+            DINW_DIASCR: 0,
+            DINW_COTIZACI: '',
             DINW_BASE: Math.round(totalBase * 100) / 100,
             DINW_IVAMONTO: Math.round(totalIva * 100) / 100,
             DINW_MONTO: totalDoc,
@@ -937,7 +958,7 @@ export class PedidoService {
                         FACT_IVAMONTO: totalIva,
                         FACT_SUBTOTAL: subtotalFactura,
                         FACT_FORMAP: primaryFopaId,
-                        FACT_OBS: obsString
+                        FACT_OBS: Buffer.from(obsString, 'utf-8')
                     });
 
                 for (const sd of preparedDetails) {
