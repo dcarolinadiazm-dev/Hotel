@@ -29,6 +29,7 @@ export function cleanSpecialCharacters(text: string): string {
         .trim();
 }
 
+export class TerceroService {
     // Listar los terceros que sean clientes (TERC_CLIE = 'S') ordenados por nombre
     static async getTerceros(): Promise<ITerceroDTO[]> {
         const rows = await db(tables.TERCEROS)
