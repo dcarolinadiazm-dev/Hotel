@@ -9,8 +9,10 @@ import { sanitizeText, truncateToBytes } from '../utils/text.utils';
 
 export class HabitacionService {
 
-    // Validación automática diaria: Cambiar a 'Ocupada' las habitaciones cuya fecha de reserva ya llegó (<= hoy)
-    // y mantener 'Disponible' aquellas con reserva en fecha futura
+    // Validación automática diaria:
+    // - Si una reserva está activa hoy: Ocupada
+    // - Si no hay reserva hoy pero tiene reservas futuras: Reservada
+    // - Si no tiene reservas activas: Disponible
     static async syncHabitacionesEstadoAutomatico(): Promise<void> {
         try {
             const now = new Date();
@@ -19,34 +21,47 @@ export class HabitacionService {
             const day = String(now.getDate()).padStart(2, '0');
             const todayStr = `${year}-${month}-${day}`;
 
-            const activeMovs = await db(tables.HABITACION_MOVIM)
-                .where('ESTADO', 'Activo')
-                .select('ID_HABITACION', 'FECHA_RESERVA', 'FECHA_SALIDA');
+            const habitaciones = await db(tables.HABITACION).select('ID_HABITACION', 'ESTADO');
 
-            for (const mov of activeMovs) {
-                const habId = String(mov.ID_HABITACION).trim();
-                const hab = await db(tables.HABITACION).where('ID_HABITACION', habId).first();
-                if (!hab) continue;
-
+            for (const hab of habitaciones) {
+                const habId = String(hab.ID_HABITACION).trim();
                 const currentEstado = String(hab.ESTADO || '').trim();
                 if (currentEstado === 'Inhabilitada') continue;
 
-                if (mov.FECHA_RESERVA) {
-                    const fReservaDate = String(mov.FECHA_RESERVA).split('T')[0];
-                    if (fReservaDate <= todayStr) {
-                        // La fecha de la reserva ya llegó o es hoy: pasa a Ocupada
-                        if (currentEstado !== 'Ocupada') {
-                            await db(tables.HABITACION)
-                                .where('ID_HABITACION', habId)
-                                .update({ ESTADO: 'Ocupada' });
-                        }
-                    } else {
-                        // La fecha es futura: hoy debe permanecer Disponible
-                        if (currentEstado === 'Reservada' || currentEstado === 'Ocupada') {
-                            await db(tables.HABITACION)
-                                .where('ID_HABITACION', habId)
-                                .update({ ESTADO: 'Disponible' });
-                        }
+                const activeMovs = await db(tables.HABITACION_MOVIM)
+                    .where('ID_HABITACION', habId)
+                    .andWhere(function () {
+                        this.where('ESTADO', 'Activo').orWhereNull('ESTADO');
+                    })
+                    .select('FECHA_RESERVA', 'FECHA_SALIDA');
+
+                if (activeMovs.length === 0) {
+                    if (currentEstado !== 'Disponible') {
+                        await db(tables.HABITACION)
+                            .where('ID_HABITACION', habId)
+                            .update({ ESTADO: 'Disponible' });
+                    }
+                    continue;
+                }
+
+                const isOccupiedToday = activeMovs.some(m => {
+                    if (!m.FECHA_RESERVA) return false;
+                    const fRes = String(m.FECHA_RESERVA).split('T')[0];
+                    const fSal = m.FECHA_SALIDA ? String(m.FECHA_SALIDA).split('T')[0] : '';
+                    return fRes <= todayStr && (!fSal || fSal >= todayStr);
+                });
+
+                if (isOccupiedToday) {
+                    if (currentEstado !== 'Ocupada') {
+                        await db(tables.HABITACION)
+                            .where('ID_HABITACION', habId)
+                            .update({ ESTADO: 'Ocupada' });
+                    }
+                } else {
+                    if (currentEstado !== 'Reservada') {
+                        await db(tables.HABITACION)
+                            .where('ID_HABITACION', habId)
+                            .update({ ESTADO: 'Reservada' });
                     }
                 }
             }
@@ -695,7 +710,7 @@ export class HabitacionService {
 
         const estadoFinal = (estadoEntrante === 'Inhabilitada')
             ? 'Inhabilitada'
-            : (isOccupiedToday ? 'Ocupada' : 'Disponible');
+            : (allActiveMovs.length === 0 ? 'Disponible' : (isOccupiedToday ? 'Ocupada' : 'Reservada'));
 
         // Actualizar datos de la habitación en la tabla HABITACION
         const updatePayload: any = {
