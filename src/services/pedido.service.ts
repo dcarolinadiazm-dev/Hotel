@@ -1068,6 +1068,12 @@ export class PedidoService {
             }
         }
 
+        if (pagosList.length === 1 && pagosList[0].monto < totalPagar) {
+            pagosList[0].monto = totalPagar;
+        } else if (pagosList.length === 0) {
+            pagosList = [{ nombre: formaPagoStr || 'EFECTIVO', monto: totalPagar }];
+        }
+
         let formaPagoFinalStr = formaPagoStr;
         if (pagosList.length > 0) {
             formaPagoFinalStr = pagosList.map(p => `${p.nombre}: $${Math.round(p.monto).toLocaleString('es-CO')}`).join(' / ');
