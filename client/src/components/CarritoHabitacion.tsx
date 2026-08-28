@@ -514,9 +514,14 @@ export const CarritoHabitacion = ({
             </button>
 
             <button
-              className="btn-enviar-facturar"
+              className={`btn-enviar-facturar ${habitacion.estado !== 'Ocupada' ? 'btn-disabled-locked' : ''}`}
               onClick={handleEnviarAFacturar}
-              disabled={processingAction !== null}
+              disabled={processingAction !== null || habitacion.estado !== 'Ocupada'}
+              title={
+                habitacion.estado !== 'Ocupada'
+                  ? 'La habitación debe estar en estado OCUPADA para poder facturar'
+                  : 'Enviar a facturar (GRABE_PEDIDO_APP)'
+              }
             >
               {processingAction === 'FACTURAR' ? 'Facturando mediante GRABE_PEDIDO_APP...' : '⚡ Enviar a facturar (GRABE_PEDIDO_APP)'}
             </button>

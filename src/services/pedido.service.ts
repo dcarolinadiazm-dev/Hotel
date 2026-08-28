@@ -444,6 +444,12 @@ export class PedidoService {
     ) {
         const hab = await db(tables.HABITACION).where('ID_HABITACION', habitacionId).first();
         const habNumero = hab?.NUMERO ? String(hab.NUMERO).trim() : habitacionId;
+        const estadoHab = String(hab?.ESTADO || '').trim();
+
+        if (estadoHab !== 'Ocupada') {
+            throw new Error(`La habitación #${habNumero} se encuentra en estado "${estadoHab || 'Disponible'}". Solo es posible facturar habitaciones en estado "Ocupada".`);
+        }
+
         const nit = hab?.DOCUMENTO ? String(hab.DOCUMENTO).trim() : '800003122';
         const nombreCliente = hab?.HUESPED ? String(hab.HUESPED).trim() : 'Huésped General';
 

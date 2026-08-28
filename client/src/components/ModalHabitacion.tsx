@@ -1579,13 +1579,23 @@ export const ModalHabitacion = ({
                         <div className="modal-cart-actions-row">
                           <button
                             type="button"
-                            className="btn-modal-facturar"
+                            className={`btn-modal-facturar ${estado !== 'Ocupada' ? 'btn-disabled-locked' : ''}`}
                             onClick={requestEnviarAFacturar}
-                            disabled={processingAction !== null}
+                            disabled={processingAction !== null || estado !== 'Ocupada'}
+                            title={
+                              estado !== 'Ocupada'
+                                ? 'La habitación debe estar en estado OCUPADA para poder facturar'
+                                : 'Enviar a facturar la habitación'
+                            }
                           >
                             {processingAction === 'FACTURAR' ? 'Facturando en Firebird...' : '⚡ Enviar a facturar'}
                           </button>
                         </div>
+                        {estado !== 'Ocupada' && (
+                          <div style={{ marginTop: '6px', fontSize: '11px', color: '#64748b', textAlign: 'center' }}>
+                            🔒 El botón para facturar se activa únicamente cuando la habitación está en estado <strong>Ocupada</strong>.
+                          </div>
+                        )}
                       </>
                     )}
                   </div>

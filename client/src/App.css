@@ -1522,10 +1522,14 @@
 }
 
 .btn-grabar-pedido-web:disabled,
-.btn-enviar-facturar:disabled {
-  opacity: 0.7;
-  cursor: not-allowed;
-  transform: none;
+.btn-enviar-facturar:disabled,
+.btn-modal-facturar:disabled,
+.btn-disabled-locked {
+  opacity: 0.5 !important;
+  cursor: not-allowed !important;
+  filter: grayscale(40%);
+  box-shadow: none !important;
+  transform: none !important;
 }
 
 /* ========================================================
