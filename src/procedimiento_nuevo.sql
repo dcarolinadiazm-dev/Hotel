@@ -142,9 +142,13 @@ if (TIPO = 31) then
             IDC = 0;
             NUMREF = '';
             end
-    execute procedure calcula_total_e_iva(:id) returning_values (:BASE, :ivatot, :total);
-    BASE = BASE - :dtomonto;
-    total = BASE + ivatot;
+    select D.DINW_BASE, D.DINW_IVAMONTO, D.DINW_MONTO from DOC_INVENTARIO_WEB D where D.DINW_ID = :id into :BASE, :ivatot, :total;
+    if (BASE is null or total is null or total = 0) then
+    begin
+        execute procedure calcula_total_e_iva(:id) returning_values (:BASE, :ivatot, :total);
+        BASE = BASE - :dtomonto;
+        total = BASE + ivatot;
+    end
     RTEFTE = (:BASE * (CAST(:RTFTEPORC AS FLOAT) / 100));
     RTEICA = (:BASE * (:rticaporc / 1000.0));
     RTEIVA = (:ivatot * (:rtivaporc/100));

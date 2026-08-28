@@ -594,7 +594,6 @@ export class PedidoService {
                         FACT_TOTAL: totalDoc,
                         FACT_IVAMONTO: totalIva,
                         FACT_SUBTOTAL: subtotalFactura,
-                        FACT_BASE: subtotalFactura,
                         FACT_FORMAP: primaryFopaId,
                         FACT_OBS: obsString
                     });
