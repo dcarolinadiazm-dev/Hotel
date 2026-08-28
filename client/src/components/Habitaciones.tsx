@@ -49,6 +49,7 @@ export const Habitaciones = ({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filtroEstado, setFiltroEstado] = useState<FiltroEstado>('DISPONIBLE');
+  const [busquedaHuesped, setBusquedaHuesped] = useState<string>('');
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showFacturarDirectoModal, setShowFacturarDirectoModal] = useState(false);
   const [habitacionAEditar, setHabitacionAEditar] = useState<Habitacion | null>(null);
@@ -90,6 +91,7 @@ export const Habitaciones = ({
     const token = localStorage.getItem('hotel_token');
     try {
       setLoading(true);
+      setError(null);
       const res = await fetch('/api/habitaciones', {
         headers: {
           Authorization: `Bearer ${token}`,
@@ -125,6 +127,17 @@ export const Habitaciones = ({
   };
 
   const habitacionesFiltradas = habitaciones.filter((h) => {
+    // Si hay búsqueda por huésped: mostrar solo habitaciones en estado OCUPADA que coincidan
+    if (busquedaHuesped.trim()) {
+      const q = busquedaHuesped.trim().toLowerCase();
+      const isOcupada = h.estado.toLowerCase().trim() === 'ocupada';
+      if (!isOcupada) return false;
+      const matchHuesped = h.huesped ? h.huesped.toLowerCase().includes(q) : false;
+      const matchDoc = h.documento ? h.documento.toLowerCase().includes(q) : false;
+      const matchNum = h.numero ? h.numero.toLowerCase().includes(q) : false;
+      return matchHuesped || matchDoc || matchNum;
+    }
+
     if (filtroEstado === 'TODOS') return true;
     const e = h.estado.toLowerCase().trim();
     if (filtroEstado === 'DISPONIBLE') return e === 'disponible';
@@ -352,6 +365,35 @@ export const Habitaciones = ({
               </button>
             </div>
             <p className="rooms-subtitle">Gestión en tiempo real de habitaciones</p>
+
+            {/* Buscador de habitaciones ocupadas por huésped */}
+            <div className="rooms-guest-search-box">
+              <div className="guest-search-input-wrapper">
+                <span className="search-icon">🔍</span>
+                <input
+                  type="text"
+                  className="guest-search-input"
+                  placeholder="Buscar huésped en habitaciones ocupadas (nombre o documento)..."
+                  value={busquedaHuesped}
+                  onChange={(e) => setBusquedaHuesped(e.target.value)}
+                />
+                {busquedaHuesped && (
+                  <button
+                    type="button"
+                    className="btn-clear-guest-search"
+                    onClick={() => setBusquedaHuesped('')}
+                    title="Limpiar búsqueda"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+              {busquedaHuesped && (
+                <span className="guest-search-count-badge">
+                  Filtrando {habitacionesFiltradas.length} {habitacionesFiltradas.length === 1 ? 'habitación ocupada' : 'habitaciones ocupadas'}
+                </span>
+              )}
+            </div>
           </div>
 
           <div className="rooms-header-actions">

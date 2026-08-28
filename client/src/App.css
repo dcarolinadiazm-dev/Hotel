@@ -5041,3 +5041,77 @@
 .btn-clear-search-text:hover {
   color: #dc2626;
 }
+
+/* ========================================================
+   BUSCADOR DE HUÉSPEDES EN HABITACIONES OCUPADAS
+   ======================================================== */
+.rooms-guest-search-box {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 10px;
+  max-width: 480px;
+  width: 100%;
+}
+
+.guest-search-input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex: 1;
+}
+
+.guest-search-input-wrapper .search-icon {
+  position: absolute;
+  left: 12px;
+  font-size: 14px;
+  color: #64748b;
+  pointer-events: none;
+}
+
+.guest-search-input {
+  width: 100%;
+  padding: 8px 32px 8px 36px !important;
+  border-radius: 10px !important;
+  border: 1.5px solid #cbd5e1 !important;
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+  font-size: 13px !important;
+  font-weight: 500;
+  transition: all 0.2s ease;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+.guest-search-input:focus {
+  border-color: #2563eb !important;
+  background-color: #f8fafc !important;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15) !important;
+  outline: none;
+}
+
+.btn-clear-guest-search {
+  position: absolute;
+  right: 10px;
+  background: transparent;
+  border: none;
+  color: #94a3b8;
+  font-size: 13px;
+  font-weight: bold;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.btn-clear-guest-search:hover {
+  color: #ef4444;
+}
+
+.guest-search-count-badge {
+  font-size: 12px;
+  font-weight: 700;
+  color: #dc2626;
+  background: #fee2e2;
+  padding: 4px 10px;
+  border-radius: 8px;
+  white-space: nowrap;
+}
