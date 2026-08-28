@@ -293,8 +293,8 @@ export const ModalFacturacionDirecta: React.FC<ModalFacturacionDirectaProps> = (
     if (found) {
       setCustomDescripcion(found.descripcion);
       setCustomUnidad(found.unidad || 'UNIDAD');
-      setCustomIvaPorc(found.ivaPorc ?? 19);
-      setCustomTaivCod(found.taivCod || 6);
+      setCustomIvaPorc(found.ivaPorc !== undefined && found.ivaPorc !== null ? found.ivaPorc : 0);
+      setCustomTaivCod(found.taivCod || 0);
 
       let precioFinal = found.precio;
       if (found.precios && found.precios.length > 0) {
@@ -309,6 +309,8 @@ export const ModalFacturacionDirecta: React.FC<ModalFacturacionDirectaProps> = (
       setCustomPrecio(0);
       setCustomDescuento(0);
       setCustomCantidad(1);
+      setCustomIvaPorc(0);
+      setCustomTaivCod(0);
     }
   };
 

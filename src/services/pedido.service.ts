@@ -598,16 +598,18 @@ export class PedidoService {
                         FACT_OBS: Buffer.from(obsString, 'utf-8')
                     });
 
-                // Sincronizar FADE_DTOPORC, FADE_DTOMONTO, FADE_TOTAL, FADE_IVAMONTO y FADE_BASE en FACTURAS_DETALLE
+                // Sincronizar FADE_DTOPORC, FADE_DTOMONTO, FADE_TOTAL, FADE_IVAMONTO, FADE_IVAPORC, FADE_TIVA y FADE_BASE en FACTURAS_DETALLE
                 try {
                     const sourceDets = await db(tables.DOC_INVENTARIO_DET_WEB)
                         .where({ DINW_ID: dinwId, DIWD_ANULADO: 'N' })
-                        .select('DIWD_ITEM', 'DIWD_DTOPORC', 'DIWD_DTOMONTO', 'DIWD_TOTAL', 'DIWD_IVAMONTO');
+                        .select('DIWD_ITEM', 'DIWD_DTOPORC', 'DIWD_DTOMONTO', 'DIWD_TOTAL', 'DIWD_IVAMONTO', 'DIWD_IVAPORC', 'DIWD_TIVA');
                     for (const sd of sourceDets) {
                         const dtoporc = Number(sd.DIWD_DTOPORC || 0);
                         const dtomonto = Number(sd.DIWD_DTOMONTO || 0);
                         const totalItem = Number(sd.DIWD_TOTAL || 0);
                         const ivaMonto = Number(sd.DIWD_IVAMONTO || 0);
+                        const ivaPorc = Number(sd.DIWD_IVAPORC || 0);
+                        const tiva = Number(sd.DIWD_TIVA || 0);
                         const baseItem = Math.round((totalItem - ivaMonto) * 100) / 100;
 
                         await db('FACTURAS_DETALLE')
@@ -615,6 +617,8 @@ export class PedidoService {
                             .update({
                                 FADE_DTOPORC: dtoporc,
                                 FADE_DTOMONTO: dtomonto,
+                                FADE_IVAPORC: ivaPorc,
+                                FADE_TIVA: tiva,
                                 FADE_TOTAL: totalItem,
                                 FADE_IVAMONTO: ivaMonto,
                                 FADE_BASE: baseItem
@@ -831,9 +835,12 @@ export class PedidoService {
             const dtoPorc = it.dtoPorc !== undefined ? parseFloat(String(it.dtoPorc)) : (prunit > 0 ? (dtoMonto / prunit) * 100 : 0);
             const precioNeto = Math.max(0, prunit - dtoMonto);
             const totalItem = precioNeto * cant;
-            const ivaPorc = parseFloat(String(it.ivaPorc ?? 19));
-            const tiva = it.tiva || 6;
-            const ivaMonto = Math.round(((totalItem / (1 + (ivaPorc / 100))) * (ivaPorc / 100)) * 100) / 100;
+
+            // Consultar tarifa oficial de IVA del artículo en Firebird
+            const { taivCod, ivaPorc: dbIvaPorc } = await ArticuloService.getTarifaIvaArticulo(it.articulo);
+            const ivaPorc = it.ivaPorc !== undefined && it.ivaPorc !== null ? parseFloat(String(it.ivaPorc)) : dbIvaPorc;
+            const tiva = it.tiva || taivCod || 0;
+            const ivaMonto = ivaPorc > 0 ? Math.round(((totalItem / (100 + ivaPorc)) * ivaPorc) * 100) / 100 : 0;
             const subtotalBase = totalItem - ivaMonto;
 
             totalBase += subtotalBase;
@@ -968,6 +975,8 @@ export class PedidoService {
                         .update({
                             FADE_DTOPORC: sd.DIWD_DTOPORC,
                             FADE_DTOMONTO: sd.DIWD_DTOMONTO,
+                            FADE_IVAPORC: sd.DIWD_IVAPORC,
+                            FADE_TIVA: sd.DIWD_TIVA,
                             FADE_TOTAL: sd.DIWD_TOTAL,
                             FADE_IVAMONTO: sd.DIWD_IVAMONTO,
                             FADE_BASE: baseItem
