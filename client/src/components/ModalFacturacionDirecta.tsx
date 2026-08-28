@@ -95,11 +95,18 @@ export const calculaDigitoVerificacion = (nit: string): string => {
   return String(dv);
 };
 
+const formatMoney = (amount: number | string | undefined): string => {
+  const num = typeof amount === 'number' ? amount : parseFloat(String(amount || 0));
+  if (isNaN(num)) return '$0';
+  return `$${Math.round(num).toLocaleString('es-CO')}`;
+};
+
 export const ModalFacturacionDirecta: React.FC<ModalFacturacionDirectaProps> = ({
   isOpen,
   onClose,
   onFacturaGenerada,
 }) => {
+  const [loading, setLoading] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
@@ -109,18 +116,18 @@ export const ModalFacturacionDirecta: React.FC<ModalFacturacionDirectaProps> = (
   const [selectedNombre, setSelectedNombre] = useState<string>('');
   const [searchTercero, setSearchTercero] = useState<string>('');
 
-  // Formulario nuevo cliente
+  // Formulario rápido nuevo cliente
   const [showNewClientForm, setShowNewClientForm] = useState(false);
   const [savingClient, setSavingClient] = useState(false);
   const [clientError, setClientError] = useState<string | null>(null);
-  const [tiposDoc] = useState([
-    { cod: '13', nom: '13 - Cédula de Ciudadanía' },
-    { cod: 'J', nom: 'J - NIT PERSONA JURIDICA - 31' },
-    { cod: '31', nom: '31 - NIT PERSONA NATURAL' },
-    { cod: '22', nom: '22 - Cédula de Extranjería' },
-    { cod: '41', nom: '41 - Pasaporte' },
-    { cod: '11', nom: '11 - Registro Civil' },
-    { cod: '12', nom: '12 - Tarjeta de Identidad' },
+  const [tiposDocumento] = useState([
+    { cod: '13', nombre: 'CÉDULA DE CIUDADANÍA', codShd: 'CC' },
+    { cod: 'J', nombre: 'NIT PERSONA JURÍDICA', codShd: 'NIT' },
+    { cod: '31', nombre: 'NIT PERSONA NATURAL', codShd: 'NIT' },
+    { cod: '22', nombre: 'CÉDULA DE EXTRANJERÍA', codShd: 'CE' },
+    { cod: '41', nombre: 'PASAPORTE', codShd: 'PAS' },
+    { cod: '11', nombre: 'REGISTRO CIVIL', codShd: 'RC' },
+    { cod: '12', nombre: 'TARJETA DE IDENTIDAD', codShd: 'TI' },
   ]);
   const [newTipoDoc, setNewTipoDoc] = useState<string>('13');
   const [newNit, setNewNit] = useState<string>('');
@@ -141,7 +148,7 @@ export const ModalFacturacionDirecta: React.FC<ModalFacturacionDirectaProps> = (
   const [selectedLiprCod, setSelectedLiprCod] = useState<number>(1);
   const [articulos, setArticulos] = useState<ArticuloItem[]>([]);
 
-  // Carrito de productos
+  // Formulario agregar producto
   const [selectedArticuloCod, setSelectedArticuloCod] = useState<string>('');
   const [customDescripcion, setCustomDescripcion] = useState<string>('');
   const [customCantidad, setCustomCantidad] = useState<number>(1);
@@ -165,6 +172,7 @@ export const ModalFacturacionDirecta: React.FC<ModalFacturacionDirectaProps> = (
 
   useEffect(() => {
     if (!isOpen) return;
+    setLoading(true);
     setFeedback(null);
     setCartItems([]);
     setObservaciones('');
@@ -205,7 +213,6 @@ export const ModalFacturacionDirecta: React.FC<ModalFacturacionDirectaProps> = (
       .then((res) => res.json())
       .then((data) => {
         if (Array.isArray(data)) {
-          // Filtrar artículos que no sean habitaciones (H-*)
           const filtered = data.filter((a: ArticuloItem) => !a.codigo.toUpperCase().startsWith('H-') && a.grinCod !== 'HAB');
           setArticulos(filtered);
         }
@@ -235,7 +242,9 @@ export const ModalFacturacionDirecta: React.FC<ModalFacturacionDirectaProps> = (
       })
       .catch((e) => console.error('Error cargando prefijos:', e));
 
-    Promise.all([pTerceros, pCiudades, pListas, pArticulos, pFormasPago, pPrefijos]);
+    Promise.all([pTerceros, pCiudades, pListas, pArticulos, pFormasPago, pPrefijos]).finally(() => {
+      setLoading(false);
+    });
   }, [isOpen]);
 
   if (!isOpen) return null;
@@ -364,8 +373,7 @@ export const ModalFacturacionDirecta: React.FC<ModalFacturacionDirectaProps> = (
   const totalPagar = cartItems.reduce((acc, it) => acc + Math.max(0, it.precio - it.descuento) * it.cantidad, 0);
 
   // Registro de nuevo cliente
-  const handleGrabeTercero = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleGrabeTercero = async () => {
     if (!newTipoDoc || !newTipoDoc.trim()) {
       setClientError('El tipo de documento es obligatorio (*)');
       return;
@@ -584,531 +592,562 @@ export const ModalFacturacionDirecta: React.FC<ModalFacturacionDirectaProps> = (
   return (
     <>
       <div className="modal-backdrop" onClick={onClose}>
-        <div className="modal-container modal-wide" onClick={(e) => e.stopPropagation()}>
-          {/* Header */}
-          <div className="modal-header">
-            <div>
-              <h2 className="modal-title">🧾 Facturación Directa de Productos (POS)</h2>
-              <p className="modal-subtitle">Facturación rápida de mostrador sin reserva de habitación</p>
+        <div
+          className="modal-card-dialog modal-card-large"
+          onClick={(e) => e.stopPropagation()}
+          style={{ maxHeight: '92vh', display: 'flex', flexDirection: 'column' }}
+        >
+          {/* Header del Modal */}
+          <div className="modal-dialog-header">
+            <div className="header-title-box">
+              <h2 className="modal-dialog-title">🧾 Facturación Directa de Productos (POS)</h2>
+              <span className="badge-pewe-modal">⚡ Venta Mostrador</span>
             </div>
-            <button className="modal-close-btn" onClick={onClose} title="Cerrar ventana">
+            <button className="btn-modal-close-x" onClick={onClose} title="Cerrar ventana">
               ✕
             </button>
           </div>
 
-          {/* Feedback */}
-          {feedback && (
-            <div className={`modal-feedback-banner feedback-${feedback.type}`}>
-              {feedback.message}
-              <button className="feedback-close-btn" onClick={() => setFeedback(null)}>
-                ✕
-              </button>
+          {loading ? (
+            <div className="modal-loading" style={{ padding: '40px', textAlign: 'center' }}>
+              <div className="spinner"></div>
+              <p>Cargando información y catálogo de artículos...</p>
             </div>
-          )}
-
-          {/* Body */}
-          <div className="modal-content-grid">
-            {/* Columna Izquierda: Cliente y Selección de Productos */}
-            <div className="modal-col-left">
-              {/* Sección Cliente */}
-              <div className="modal-section-card">
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                  <label className="modal-section-title" style={{ margin: 0 }}>
-                    👤 Cliente / Tercero:
-                  </label>
-                  <button
-                    type="button"
-                    className="btn-link-action"
-                    onClick={() => setShowNewClientForm(!showNewClientForm)}
-                  >
-                    {showNewClientForm ? '✕ Cancelar nuevo cliente' : '+ Grabar nuevo cliente'}
+          ) : (
+            <div
+              className="modal-dialog-body"
+              style={{
+                overflowY: 'auto',
+                maxHeight: 'calc(92vh - 80px)',
+                paddingBottom: '20px',
+              }}
+            >
+              {feedback && (
+                <div className={`modal-action-feedback ${feedback.type}`} style={{ margin: '14px 28px 0 28px' }}>
+                  <span>{feedback.message}</span>
+                  <button className="btn-close-feedback" onClick={() => setFeedback(null)}>
+                    ✕
                   </button>
                 </div>
+              )}
 
-                {/* Formulario Inline para Grabar Nuevo Cliente */}
-                {showNewClientForm && (
-                  <form onSubmit={handleGrabeTercero} className="new-client-inline-form" style={{ marginBottom: '14px' }}>
-                    <div className="client-form-header">
-                      <span className="client-form-badge">➕ Registro Rápido de Tercero</span>
-                      {clientError && <div className="client-error-banner">{clientError}</div>}
-                    </div>
-
-                    <div className="modal-form-row">
-                      <div className="modal-form-group flex-1">
-                        <label className="modal-form-label">Tipo Doc (*):</label>
-                        <select
-                          className="modal-form-select"
-                          value={newTipoDoc}
-                          onChange={(e) => setNewTipoDoc(e.target.value)}
-                        >
-                          {tiposDoc.map((td) => (
-                            <option key={td.cod} value={td.cod}>
-                              {td.nom}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-
-                      <div className="modal-form-group flex-1">
-                        <label className="modal-form-label">Número / NIT (*):</label>
-                        <div style={{ display: 'flex', gap: '4px' }}>
-                          <input
-                            type="text"
-                            className="modal-form-input"
-                            value={newNit}
-                            onChange={(e) => {
-                              const val = e.target.value.replace(/\D/g, '');
-                              setNewNit(val);
-                              setNewDv(calculaDigitoVerificacion(val));
-                            }}
-                            placeholder="Ej: 1098765432"
-                            required
-                          />
-                          {newTipoDoc === 'J' && (
-                            <input
-                              type="text"
-                              className="modal-form-input readonly-input-field"
-                              style={{ width: '45px', textAlign: 'center', fontWeight: 'bold' }}
-                              value={newDv || calculaDigitoVerificacion(newNit)}
-                              readOnly
-                              title="Dígito de Verificación DIAN"
-                            />
-                          )}
-                        </div>
-                      </div>
-                    </div>
-
-                    {newTipoDoc === 'J' ? (
-                      <div className="modal-form-group">
-                        <label className="modal-form-label">Razón Social (*):</label>
-                        <input
-                          type="text"
-                          className="modal-form-input"
-                          value={newNombre}
-                          onChange={(e) => setNewNombre(e.target.value.toUpperCase())}
-                          placeholder="Nombre de la empresa o entidad"
-                          required
-                        />
-                      </div>
-                    ) : (
-                      <>
-                        <div className="modal-form-row">
-                          <div className="modal-form-group flex-1">
-                            <label className="modal-form-label">1er. Apellido (*):</label>
-                            <input
-                              type="text"
-                              className="modal-form-input"
-                              value={newApellido1}
-                              onChange={(e) => setNewApellido1(e.target.value.toUpperCase())}
-                              placeholder="Primer Apellido"
-                              required
-                            />
-                          </div>
-                          <div className="modal-form-group flex-1">
-                            <label className="modal-form-label">2do. Apellido:</label>
-                            <input
-                              type="text"
-                              className="modal-form-input"
-                              value={newApellido2}
-                              onChange={(e) => setNewApellido2(e.target.value.toUpperCase())}
-                              placeholder="Segundo Apellido"
-                            />
-                          </div>
-                        </div>
-                        <div className="modal-form-row">
-                          <div className="modal-form-group flex-1">
-                            <label className="modal-form-label">1er. Nombre (*):</label>
-                            <input
-                              type="text"
-                              className="modal-form-input"
-                              value={newNombre1}
-                              onChange={(e) => setNewNombre1(e.target.value.toUpperCase())}
-                              placeholder="Primer Nombre"
-                              required
-                            />
-                          </div>
-                          <div className="modal-form-group flex-1">
-                            <label className="modal-form-label">2do. Nombre:</label>
-                            <input
-                              type="text"
-                              className="modal-form-input"
-                              value={newNombre2}
-                              onChange={(e) => setNewNombre2(e.target.value.toUpperCase())}
-                              placeholder="Segundo Nombre"
-                            />
-                          </div>
-                        </div>
-                      </>
-                    )}
-
-                    <div className="modal-form-row">
-                      <div className="modal-form-group flex-1">
-                        <label className="modal-form-label">Celular / Teléfono (*):</label>
-                        <input
-                          type="text"
-                          className="modal-form-input"
-                          value={newCelular}
-                          onChange={(e) => setNewCelular(e.target.value)}
-                          placeholder="Ej: 3001234567"
-                          required
-                        />
-                      </div>
-                      <div className="modal-form-group flex-1">
-                        <label className="modal-form-label">Email (*):</label>
-                        <input
-                          type="email"
-                          className="modal-form-input"
-                          value={newEmail}
-                          onChange={(e) => setNewEmail(e.target.value)}
-                          placeholder="cliente@correo.com"
-                          required
-                        />
-                      </div>
-                    </div>
-
-                    <div className="modal-form-row">
-                      <div className="modal-form-group flex-1">
-                        <label className="modal-form-label">Dirección (*):</label>
-                        <input
-                          type="text"
-                          className="modal-form-input"
-                          value={newDireccion}
-                          onChange={(e) => setNewDireccion(e.target.value)}
-                          placeholder="Ej: Calle 10 # 20 - 30"
-                          required
-                        />
-                      </div>
-                      <div className="modal-form-group flex-1">
-                        <label className="modal-form-label">Ciudad (*):</label>
-                        <select
-                          className="modal-form-select"
-                          value={newCodCiu}
-                          onChange={(e) => setNewCodCiu(e.target.value)}
-                          required
-                        >
-                          {ciudades.map((c) => (
-                            <option key={c.cod} value={c.cod}>
-                              {c.nom} {c.dpto ? `- ${c.dpto}` : ''}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    </div>
-
-                    <div className="client-form-actions">
-                      <button type="button" className="btn-secondary-outline" onClick={() => setShowNewClientForm(false)}>
-                        Cancelar
-                      </button>
-                      <button type="submit" className="btn-primary-action" disabled={savingClient}>
-                        {savingClient ? '⏳ Guardando...' : '💾 Guardar Cliente'}
+              <div className="modal-two-columns">
+                {/* Columna Izquierda: Huésped / Cliente y Selección de Artículos */}
+                <div className="modal-left-col">
+                  {/* 1. Selección y Registro de Cliente */}
+                  <div className="modal-form-group">
+                    <div className="label-with-action">
+                      <label className="modal-form-label">👤 Cliente / Tercero:</label>
+                      <button
+                        type="button"
+                        className="btn-toggle-new-client"
+                        onClick={() => setShowNewClientForm(!showNewClientForm)}
+                      >
+                        {showNewClientForm ? '✕ Cancelar' : '+ Grabar nuevo cliente'}
                       </button>
                     </div>
-                  </form>
-                )}
 
-                {/* Selector de Tercero */}
-                <div style={{ marginBottom: '8px' }}>
-                  <input
-                    type="text"
-                    className="modal-form-input"
-                    placeholder="🔍 Buscar cliente por nombre o documento..."
-                    value={searchTercero}
-                    onChange={(e) => setSearchTercero(e.target.value)}
-                    style={{ marginBottom: '6px' }}
-                  />
-                  <select
-                    className="modal-form-select"
-                    value={selectedNit}
-                    onChange={handleTerceroSelect}
-                    style={{ fontWeight: selectedNit ? 600 : 'normal' }}
-                  >
-                    <option value="">-- Seleccione un cliente --</option>
-                    {filteredTerceros.map((t) => (
-                      <option key={t.nit} value={t.nit}>
-                        {t.nombre} ({t.nit})
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                    {/* Formulario Rápido de Grabar Tercero */}
+                    {showNewClientForm && (
+                      <div className="quick-client-form-card" style={{ marginBottom: '14px' }}>
+                        <h4 className="quick-form-title">➕ Grabar Nuevo Cliente (SYSPLUS)</h4>
+                        {clientError && <div className="quick-error-alert">{clientError}</div>}
 
-                {selectedNit && (
-                  <div className="selected-client-badge">
-                    <span>👤 <strong>{selectedNombre}</strong> (NIT/C.C.: {selectedNit})</span>
-                  </div>
-                )}
-              </div>
+                        <div className="modal-form-row">
+                          <div className="modal-form-group flex-1">
+                            <label className="modal-form-label">Tipo de Documento *:</label>
+                            <select
+                              className="modal-form-select"
+                              value={newTipoDoc}
+                              onChange={(e) => setNewTipoDoc(e.target.value)}
+                              required
+                            >
+                              {tiposDocumento.map((td) => (
+                                <option key={td.cod} value={td.cod}>
+                                  {td.cod} - {td.nombre} {td.codShd ? `(${td.codShd})` : ''}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
 
-              {/* Selector de Artículos y Lista de Precios */}
-              <div className="modal-section-card" style={{ marginTop: '12px' }}>
-                <h3 className="modal-section-title">📦 Agregar Productos a la Venta</h3>
-
-                <div className="modal-form-row">
-                  <div className="modal-form-group flex-1">
-                    <label className="modal-form-label">Lista de Precios:</label>
-                    <select
-                      className="modal-form-select"
-                      value={selectedLiprCod}
-                      onChange={handleLiprChange}
-                    >
-                      {listasPrecios.map((lp) => (
-                        <option key={lp.liprCod} value={lp.liprCod}>
-                          {lp.nombre} {lp.esPredeterminada ? '(Predeterminada)' : ''}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div className="modal-form-group flex-2">
-                    <label className="modal-form-label">Catálogo de Artículos:</label>
-                    <select
-                      className="modal-form-select"
-                      value={selectedArticuloCod}
-                      onChange={handleArticuloSelect}
-                    >
-                      <option value="">-- Seleccione un producto o ingrese manual --</option>
-                      {articulos.map((a) => (
-                        <option key={a.codigo} value={a.codigo}>
-                          {a.descripcion} ({a.codigo}) - ${Number(a.precio).toLocaleString('es-CO')}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-
-                <div className="modal-form-group">
-                  <label className="modal-form-label">Descripción del Producto:</label>
-                  <input
-                    type="text"
-                    className="modal-form-input"
-                    value={customDescripcion}
-                    onChange={(e) => setCustomDescripcion(e.target.value)}
-                    placeholder="Descripción o nombre del producto..."
-                  />
-                </div>
-
-                <div className="modal-form-row">
-                  <div className="modal-form-group flex-1">
-                    <label className="modal-form-label">Precio Unitario ($):</label>
-                    <input
-                      type="number"
-                      className="modal-form-input"
-                      value={customPrecio || ''}
-                      onChange={(e) => setCustomPrecio(parseFloat(e.target.value) || 0)}
-                      placeholder="0"
-                      min="0"
-                    />
-                  </div>
-
-                  <div className="modal-form-group flex-1">
-                    <label className="modal-form-label">Descuento Unit. ($):</label>
-                    <input
-                      type="number"
-                      className="modal-form-input"
-                      value={customDescuento || ''}
-                      onChange={(e) => setCustomDescuento(parseFloat(e.target.value) || 0)}
-                      placeholder="0"
-                      min="0"
-                    />
-                  </div>
-
-                  <div className="modal-form-group flex-1">
-                    <label className="modal-form-label">Cantidad:</label>
-                    <input
-                      type="number"
-                      className="modal-form-input"
-                      value={customCantidad}
-                      onChange={(e) => setCustomCantidad(parseInt(e.target.value, 10) || 1)}
-                      min="1"
-                    />
-                  </div>
-                </div>
-
-                <button
-                  type="button"
-                  className="btn-primary-action"
-                  style={{ width: '100%', marginTop: '8px', padding: '10px' }}
-                  onClick={handleAddItemToCart}
-                >
-                  ➕ Agregar al Carrito
-                </button>
-              </div>
-            </div>
-
-            {/* Columna Derecha: Carrito de Compras y Facturación */}
-            <div className="modal-col-right">
-              <div className="modal-section-card" style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-                  <h3 className="modal-section-title" style={{ margin: 0 }}>
-                    🛒 Carrito de Venta ({cartItems.length} {cartItems.length === 1 ? 'producto' : 'productos'})
-                  </h3>
-                  {cartItems.length > 0 && (
-                    <button
-                      type="button"
-                      className="btn-link-action"
-                      style={{ color: '#ef4444' }}
-                      onClick={() => setCartItems([])}
-                    >
-                      Vaciar Carrito
-                    </button>
-                  )}
-                </div>
-
-                {/* Items del Carrito */}
-                <div className="cart-items-scroll-area" style={{ flex: 1, minHeight: '220px', maxHeight: '340px', overflowY: 'auto' }}>
-                  {cartItems.length === 0 ? (
-                    <div style={{ textAlign: 'center', padding: '40px 10px', color: '#64748b' }}>
-                      <span style={{ fontSize: '2.5rem', display: 'block', marginBottom: '8px' }}>🛍️</span>
-                      <p style={{ margin: 0, fontWeight: 500 }}>El carrito está vacío</p>
-                      <small>Selecciona productos a la izquierda para agregarlos a la venta directa.</small>
-                    </div>
-                  ) : (
-                    cartItems.map((it, idx) => {
-                      const netoUnit = Math.max(0, it.precio - it.descuento);
-                      const subtotalItem = netoUnit * it.cantidad;
-
-                      return (
-                        <div key={it.id} className="cart-item-row">
-                          <div style={{ flex: 1 }}>
-                            <div style={{ fontWeight: 600, color: '#1e293b' }}>
-                              #{idx + 1} {it.descripcion}
-                            </div>
-                            <div style={{ fontSize: '0.82rem', color: '#64748b', marginTop: '2px' }}>
-                              ${it.precio.toLocaleString('es-CO')} c/u
-                              {it.descuento > 0 && (
-                                <span style={{ color: '#16a34a', fontWeight: 'bold', marginLeft: '6px' }}>
-                                  (Dto: ${it.descuento.toLocaleString('es-CO')})
+                          <div className="modal-form-group flex-1">
+                            <label className="modal-form-label">Número de Documento / NIT *:</label>
+                            <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                              <input
+                                type="text"
+                                className="modal-form-input"
+                                style={{ flex: 1 }}
+                                value={newNit}
+                                onChange={(e) => {
+                                  const val = e.target.value.replace(/\D/g, '');
+                                  setNewNit(val);
+                                  setNewDv(calculaDigitoVerificacion(val));
+                                }}
+                                placeholder="Ej: 1098765432"
+                                required
+                              />
+                              {newTipoDoc === 'J' && (
+                                <span
+                                  style={{
+                                    padding: '8px 10px',
+                                    background: '#f1f5f9',
+                                    color: '#0f172a',
+                                    fontWeight: 800,
+                                    fontSize: '12px',
+                                    borderRadius: '6px',
+                                    border: '1px solid #cbd5e1',
+                                    whiteSpace: 'nowrap',
+                                  }}
+                                  title="Dígito de Verificación calculado"
+                                >
+                                  DV: {newDv || calculaDigitoVerificacion(newNit)}
                                 </span>
                               )}
                             </div>
                           </div>
-
-                          {/* Control de Cantidad */}
-                          <div className="cart-item-qty-controls">
-                            <button
-                              type="button"
-                              className="btn-qty"
-                              onClick={() => handleUpdateItemCantidad(it.id, -1)}
-                            >
-                              -
-                            </button>
-                            <span className="qty-number">{it.cantidad}</span>
-                            <button
-                              type="button"
-                              className="btn-qty"
-                              onClick={() => handleUpdateItemCantidad(it.id, 1)}
-                            >
-                              +
-                            </button>
-                          </div>
-
-                          {/* Subtotal y Borrar */}
-                          <div style={{ textAlign: 'right', minWidth: '90px' }}>
-                            <div style={{ fontWeight: 700, color: '#0f172a' }}>
-                              ${subtotalItem.toLocaleString('es-CO')}
-                            </div>
-                          </div>
-
-                          <button
-                            type="button"
-                            className="btn-remove-item"
-                            onClick={() => handleRemoveItem(it.id)}
-                            title="Eliminar producto"
-                          >
-                            ✕
-                          </button>
                         </div>
-                      );
-                    })
-                  )}
+
+                        {newTipoDoc?.trim().toUpperCase() === 'J' ? (
+                          <div className="modal-form-group">
+                            <label className="modal-form-label">Razón Social / Nombre de la Empresa *:</label>
+                            <input
+                              type="text"
+                              className="modal-form-input"
+                              value={newNombre}
+                              onChange={(e) => setNewNombre(e.target.value.toUpperCase())}
+                              placeholder="Ej: INVERSIONES S.A.S."
+                              required
+                            />
+                          </div>
+                        ) : (
+                          <>
+                            <div className="modal-form-row">
+                              <div className="modal-form-group flex-1">
+                                <label className="modal-form-label">1er. Apellido *:</label>
+                                <input
+                                  type="text"
+                                  className="modal-form-input"
+                                  value={newApellido1}
+                                  onChange={(e) => setNewApellido1(e.target.value.toUpperCase())}
+                                  placeholder="Primer Apellido"
+                                  required
+                                />
+                              </div>
+                              <div className="modal-form-group flex-1">
+                                <label className="modal-form-label">2do. Apellido:</label>
+                                <input
+                                  type="text"
+                                  className="modal-form-input"
+                                  value={newApellido2}
+                                  onChange={(e) => setNewApellido2(e.target.value.toUpperCase())}
+                                  placeholder="Segundo Apellido"
+                                />
+                              </div>
+                            </div>
+
+                            <div className="modal-form-row">
+                              <div className="modal-form-group flex-1">
+                                <label className="modal-form-label">1er. Nombre *:</label>
+                                <input
+                                  type="text"
+                                  className="modal-form-input"
+                                  value={newNombre1}
+                                  onChange={(e) => setNewNombre1(e.target.value.toUpperCase())}
+                                  placeholder="Primer Nombre"
+                                  required
+                                />
+                              </div>
+                              <div className="modal-form-group flex-1">
+                                <label className="modal-form-label">2do. Nombre:</label>
+                                <input
+                                  type="text"
+                                  className="modal-form-input"
+                                  value={newNombre2}
+                                  onChange={(e) => setNewNombre2(e.target.value.toUpperCase())}
+                                  placeholder="Segundo Nombre"
+                                />
+                              </div>
+                            </div>
+                          </>
+                        )}
+
+                        <div className="modal-form-row">
+                          <div className="modal-form-group flex-1">
+                            <label className="modal-form-label">Celular / Teléfono *:</label>
+                            <input
+                              type="text"
+                              className="modal-form-input"
+                              value={newCelular}
+                              onChange={(e) => setNewCelular(e.target.value)}
+                              placeholder="310 123 4567"
+                              required
+                            />
+                          </div>
+                          <div className="modal-form-group flex-1">
+                            <label className="modal-form-label">Email *:</label>
+                            <input
+                              type="email"
+                              className="modal-form-input"
+                              value={newEmail}
+                              onChange={(e) => setNewEmail(e.target.value)}
+                              placeholder="cliente@email.com"
+                              required
+                            />
+                          </div>
+                        </div>
+
+                        <div className="modal-form-row">
+                          <div className="modal-form-group flex-1">
+                            <label className="modal-form-label">Dirección *:</label>
+                            <input
+                              type="text"
+                              className="modal-form-input"
+                              value={newDireccion}
+                              onChange={(e) => setNewDireccion(e.target.value)}
+                              placeholder="Calle 10 # 20 - 30"
+                              required
+                            />
+                          </div>
+                          <div className="modal-form-group flex-1">
+                            <label className="modal-form-label">Ciudad *:</label>
+                            <select
+                              className="modal-form-select"
+                              value={newCodCiu}
+                              onChange={(e) => setNewCodCiu(e.target.value)}
+                              required
+                            >
+                              {ciudades.map((c) => (
+                                <option key={c.cod} value={c.cod}>
+                                  {c.nom} {c.dpto ? `(${c.dpto})` : ''}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+
+                        <button
+                          type="button"
+                          className="btn-quick-save-client"
+                          onClick={handleGrabeTercero}
+                          disabled={savingClient}
+                        >
+                          {savingClient ? 'Grabando en Firebird...' : '💾 Grabar Cliente en Firebird'}
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Selector de Cliente */}
+                    <input
+                      type="text"
+                      className="modal-form-input"
+                      style={{ marginBottom: '6px' }}
+                      placeholder="🔍 Buscar cliente por nombre o documento..."
+                      value={searchTercero}
+                      onChange={(e) => setSearchTercero(e.target.value)}
+                    />
+                    <select
+                      className="modal-form-select"
+                      value={selectedNit}
+                      onChange={handleTerceroSelect}
+                      style={{ fontWeight: selectedNit ? 700 : 'normal' }}
+                    >
+                      <option value="">-- Seleccione un cliente --</option>
+                      {filteredTerceros.map((t) => (
+                        <option key={t.nit} value={t.nit}>
+                          {t.nombre} ({t.nit})
+                        </option>
+                      ))}
+                    </select>
+
+                    {selectedNit && (
+                      <div style={{ marginTop: '6px', fontSize: '13px', color: '#1e40af', fontWeight: 600 }}>
+                        👤 Cliente: <strong>{selectedNombre}</strong> (NIT/CC: {selectedNit})
+                      </div>
+                    )}
+                  </div>
+
+                  {/* 2. Catálogo y Agregar Productos */}
+                  <h3 className="modal-section-subtitle" style={{ marginTop: '16px' }}>
+                    📦 Seleccionar Producto para Agregar
+                  </h3>
+
+                  <div className="modal-add-item-box">
+                    <div className="modal-form-row">
+                      <div className="modal-form-group flex-2">
+                        <label className="modal-form-label">Catálogo de Artículos:</label>
+                        <select
+                          className="modal-form-select"
+                          value={selectedArticuloCod}
+                          onChange={handleArticuloSelect}
+                        >
+                          <option value="">-- Seleccione un artículo o ingrese manual --</option>
+                          {articulos.map((a) => (
+                            <option key={a.codigo} value={a.codigo}>
+                              {a.descripcion} ({formatMoney(a.precio)}) - {a.unidad} {a.ivaPorc ? `[IVA ${a.ivaPorc}%]` : ''}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div className="modal-form-group flex-1">
+                        <label className="modal-form-label">Lista de Precios:</label>
+                        <select
+                          className="modal-form-select"
+                          value={selectedLiprCod}
+                          onChange={handleLiprChange}
+                        >
+                          {listasPrecios.map((lp) => (
+                            <option key={lp.liprCod} value={lp.liprCod}>
+                              {lp.nombre} {lp.esPredeterminada ? '(Pred.)' : ''}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="modal-form-group">
+                      <label className="modal-form-label">Descripción del Producto:</label>
+                      <input
+                        type="text"
+                        className="modal-form-input"
+                        value={customDescripcion}
+                        onChange={(e) => setCustomDescripcion(e.target.value)}
+                        placeholder="Descripción o nombre del producto"
+                      />
+                    </div>
+
+                    <div className="modal-form-row">
+                      <div className="modal-form-group flex-1">
+                        <label className="modal-form-label">Precio Unit. ($):</label>
+                        <input
+                          type="number"
+                          className="modal-form-input"
+                          value={customPrecio || ''}
+                          onChange={(e) => setCustomPrecio(parseFloat(e.target.value) || 0)}
+                          placeholder="0"
+                          min="0"
+                        />
+                      </div>
+
+                      <div className="modal-form-group flex-1">
+                        <label className="modal-form-label">Descuento Unit. ($):</label>
+                        <input
+                          type="number"
+                          className="modal-form-input"
+                          value={customDescuento || ''}
+                          onChange={(e) => setCustomDescuento(parseFloat(e.target.value) || 0)}
+                          placeholder="0"
+                          min="0"
+                        />
+                      </div>
+
+                      <div className="modal-form-group flex-1">
+                        <label className="modal-form-label">Cantidad:</label>
+                        <input
+                          type="number"
+                          className="modal-form-input"
+                          value={customCantidad}
+                          onChange={(e) => setCustomCantidad(parseInt(e.target.value, 10) || 1)}
+                          min="1"
+                        />
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      className="btn-modal-add-item"
+                      onClick={handleAddItemToCart}
+                      style={{ marginTop: '4px' }}
+                    >
+                      ➕ Agregar Producto al Carrito
+                    </button>
+                  </div>
+
+                  {/* 3. Observaciones */}
+                  <div className="modal-form-group" style={{ marginTop: '16px' }}>
+                    <label className="modal-form-label">Observaciones de la Factura:</label>
+                    <textarea
+                      className="modal-form-textarea"
+                      rows={2}
+                      value={observaciones}
+                      onChange={(e) => setObservaciones(e.target.value)}
+                      placeholder="Notas especiales de la venta..."
+                    />
+                  </div>
                 </div>
 
-                {/* Observaciones */}
-                <div style={{ marginTop: '12px' }}>
-                  <label className="modal-form-label">Observaciones de la Factura:</label>
-                  <input
-                    type="text"
-                    className="modal-form-input"
-                    value={observaciones}
-                    onChange={(e) => setObservaciones(e.target.value)}
-                    placeholder="Notas o concepto de la venta..."
-                  />
-                </div>
+                {/* Columna Derecha: Carrito de Compras */}
+                <div className="modal-right-col">
+                  <div className="modal-cart-card">
+                    <div className="header-title-box" style={{ marginBottom: '10px' }}>
+                      <h3 className="modal-section-subtitle" style={{ margin: 0 }}>
+                        🛒 Carrito de Venta ({cartItems.length} {cartItems.length === 1 ? 'ítem' : 'ítems'})
+                      </h3>
+                      {cartItems.length > 0 && (
+                        <button
+                          type="button"
+                          className="btn-link-action"
+                          style={{ color: '#ef4444', fontSize: '12px' }}
+                          onClick={() => setCartItems([])}
+                        >
+                          Vaciar
+                        </button>
+                      )}
+                    </div>
 
-                {/* Resumen Total */}
-                <div className="cart-total-banner" style={{ marginTop: '12px' }}>
-                  <span className="cart-total-label">Total a Pagar:</span>
-                  <span className="cart-total-amount">${totalPagar.toLocaleString('es-CO')}</span>
-                </div>
+                    {/* Lista de Items */}
+                    <div className="modal-cart-items-wrapper" style={{ minHeight: '220px', maxHeight: '340px' }}>
+                      {cartItems.length === 0 ? (
+                        <div className="cart-empty-state" style={{ padding: '36px 12px', textAlign: 'center' }}>
+                          <span style={{ fontSize: '2.5rem', display: 'block', marginBottom: '8px' }}>🛍️</span>
+                          <p style={{ margin: 0, fontWeight: 600, color: '#64748b' }}>El carrito está vacío</p>
+                          <small style={{ color: '#94a3b8' }}>
+                            Seleccione productos a la izquierda para agregarlos a la venta.
+                          </small>
+                        </div>
+                      ) : (
+                        cartItems.map((item, idx) => {
+                          const neto = Math.max(0, item.precio - item.descuento);
+                          const subtotal = neto * item.cantidad;
 
-                {/* Botón Facturar */}
-                <button
-                  type="button"
-                  className="btn-confirm-success"
-                  style={{ width: '100%', marginTop: '12px', padding: '14px', fontSize: '1.05rem' }}
-                  disabled={cartItems.length === 0 || !selectedNit || processing}
-                  onClick={handleOpenFacturarModal}
-                >
-                  ⚡ Enviar a Facturar (${totalPagar.toLocaleString('es-CO')})
-                </button>
+                          return (
+                            <div key={item.id} className="modal-cart-item-row-interactive">
+                              <div className="item-info">
+                                <span className="item-title">
+                                  <span className="item-number-badge">#{idx + 1}</span> {item.descripcion}
+                                </span>
+                                <span className="item-unit-price">
+                                  {formatMoney(item.precio)} c/u
+                                  {item.descuento > 0 && (
+                                    <span style={{ color: '#16a34a', fontWeight: 'bold', marginLeft: '6px' }}>
+                                      (-{formatMoney(item.descuento)})
+                                    </span>
+                                  )}
+                                </span>
+                              </div>
+
+                              <div className="item-actions-box">
+                                <div className="modal-stepper">
+                                  <button
+                                    type="button"
+                                    className="stepper-btn-mini"
+                                    onClick={() => handleUpdateItemCantidad(item.id, -1)}
+                                  >
+                                    -
+                                  </button>
+                                  <span className="stepper-count">{item.cantidad}</span>
+                                  <button
+                                    type="button"
+                                    className="stepper-btn-mini"
+                                    onClick={() => handleUpdateItemCantidad(item.id, 1)}
+                                  >
+                                    +
+                                  </button>
+                                </div>
+
+                                <span className="item-subtotal">{formatMoney(subtotal)}</span>
+
+                                <button
+                                  type="button"
+                                  className="btn-remove-mini"
+                                  onClick={() => handleRemoveItem(item.id)}
+                                  title="Eliminar"
+                                >
+                                  ✕
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
+
+                    {/* Resumen Total y Botón Facturar */}
+                    <div className="modal-cart-totals-breakdown-card" style={{ marginTop: '12px' }}>
+                      <div className="modal-cart-total-row">
+                        <span className="modal-total-label">Total a pagar:</span>
+                        <span className="modal-total-value">{formatMoney(totalPagar)}</span>
+                      </div>
+                    </div>
+
+                    <div className="modal-cart-actions-row" style={{ marginTop: '12px' }}>
+                      <button
+                        type="button"
+                        className="btn-modal-facturar"
+                        onClick={handleOpenFacturarModal}
+                        disabled={cartItems.length === 0 || !selectedNit || processing}
+                      >
+                        {processing ? 'Facturando en Firebird...' : `⚡ Enviar a facturar (${formatMoney(totalPagar)})`}
+                      </button>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
-          </div>
-
-          {/* Footer */}
-          <div className="modal-footer">
-            <button type="button" className="btn-secondary-outline" onClick={onClose}>
-              Cerrar
-            </button>
-          </div>
+          )}
         </div>
       </div>
 
-      {/* Modal de Confirmación y Formas de Pago */}
+      {/* Modal de Confirmación para Facturación y Formas de Pago */}
       {showConfirmModal && (
-        <div className="modal-backdrop modal-backdrop-confirm" style={{ zIndex: 1100 }}>
-          <div className="modal-container confirm-modal-container" style={{ maxWidth: '560px' }}>
-            <div className="confirm-modal-header">
-              <div className="confirm-modal-icon-badge icon-badge-success">🧾</div>
-              <h3 className="confirm-modal-title">Factura de Venta Directa</h3>
-              <p className="confirm-modal-message">
-                Confirma el prefijo y las formas de pago para <strong>{selectedNombre}</strong>:
-              </p>
+        <div
+          className="confirm-modal-backdrop"
+          onClick={() => setShowConfirmModal(false)}
+          style={{ zIndex: 1200 }}
+        >
+          <div
+            className="confirm-modal-card"
+            onClick={(e) => e.stopPropagation()}
+            style={{ maxWidth: '560px' }}
+          >
+            <div className="confirm-modal-icon-wrapper icon-success">
+              <span className="confirm-modal-symbol">🧾</span>
             </div>
 
-            <div className="confirm-modal-body">
-              {/* Prefijo */}
-              <div className="modal-form-group" style={{ marginBottom: '14px' }}>
-                <label className="modal-form-label">📄 Prefijo de Facturación (Tipo 31):</label>
+            <h3 className="confirm-modal-title">🧾 Factura de Venta Directa</h3>
+            <p className="confirm-modal-message">
+              Revisa y confirma los datos de facturación para <strong>{selectedNombre}</strong>:
+            </p>
+
+            <div className="factura-config-grid">
+              {/* Selector de Prefijo */}
+              <div className="factura-field-group">
+                <label className="factura-modal-label">📑 Prefijo de Facturación (Tipo 31):</label>
                 <select
-                  className="modal-form-select"
+                  className="select-prefijo-factura"
                   value={selectedPrefijo}
                   onChange={(e) => setSelectedPrefijo(e.target.value)}
                 >
-                  {prefijosFactura.map((p) => (
-                    <option key={p.prefijo} value={p.prefijo}>
-                      Prefijo: {p.prefijo} — Consecutivo Actual: {p.actual} {p.activo ? '⭐ [Activo]' : ''}
-                    </option>
-                  ))}
+                  {prefijosFactura.length > 0 ? (
+                    prefijosFactura.map((p) => (
+                      <option key={p.prefijo} value={p.prefijo}>
+                        Prefijo: {p.prefijo} {p.actual ? `— Consecutivo Actual: ${p.actual}` : ''}{' '}
+                        {p.activo ? '⭐ [Activo]' : ''}
+                      </option>
+                    ))
+                  ) : (
+                    <option value="0000">0000 (Predeterminado)</option>
+                  )}
                 </select>
               </div>
 
-              {/* Formas de Pago */}
-              <div className="modal-form-group">
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                  <label className="modal-form-label" style={{ margin: 0 }}>
+              {/* Formas de Pago Múltiples */}
+              <div className="formas-pago-container">
+                <div className="formas-pago-header-row">
+                  <label className="factura-modal-label">
                     💳 Formas de Pago ({lineasPago.length}):
                   </label>
-                  <button type="button" className="btn-link-action" onClick={handleAddLineaPago}>
-                    + Agregar forma de pago
+                  <button type="button" className="btn-add-forma-pago" onClick={handleAddLineaPago}>
+                    ➕ Agregar forma de pago
                   </button>
                 </div>
 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  {lineasPago.map((linea, idx) => (
-                    <div key={linea.id} className="pago-row">
-                      <span className="pago-item-badge">#{idx + 1}</span>
+                <div className="lineas-pago-list">
+                  {lineasPago.map((linea, index) => (
+                    <div key={linea.id} className="linea-pago-row">
+                      <span className="linea-pago-num">#{index + 1}</span>
                       <select
-                        className="modal-form-select flex-1"
+                        className="select-forma-pago-item"
                         value={linea.formaPagoId}
                         onChange={(e) => handleUpdateLineaPago(linea.id, 'formaPagoId', parseInt(e.target.value, 10))}
                       >
@@ -1119,18 +1158,18 @@ export const ModalFacturacionDirecta: React.FC<ModalFacturacionDirectaProps> = (
                         ))}
                       </select>
 
-                      <div className="pago-monto-input-wrapper flex-1">
-                        <span className="currency-symbol">$</span>
+                      <div className="input-monto-pago-wrapper">
+                        <span className="currency-prefix">$</span>
                         <input
                           type="number"
-                          className="modal-form-input"
+                          className="input-monto-pago"
                           placeholder="0"
                           value={linea.monto === 0 ? '' : linea.monto}
                           onChange={(e) => handleUpdateLineaPago(linea.id, 'monto', e.target.value)}
                         />
                       </div>
 
-                      {lineasPago.length > 1 && (
+                      {lineasPago.length > 1 ? (
                         <button
                           type="button"
                           className="btn-remove-linea-pago"
@@ -1139,20 +1178,22 @@ export const ModalFacturacionDirecta: React.FC<ModalFacturacionDirectaProps> = (
                         >
                           🗑️
                         </button>
+                      ) : (
+                        <div></div>
                       )}
                     </div>
                   ))}
                 </div>
 
                 {/* Tarjeta de Balance */}
-                <div className={`pago-balance-card ${esTotalCuadrado ? 'balance-ok' : 'balance-mismatch'}`} style={{ marginTop: '12px' }}>
+                <div className={`pago-balance-card ${esTotalCuadrado ? 'balance-ok' : 'balance-mismatch'}`}>
                   <div className="balance-item">
                     <span>Total Factura:</span>
-                    <strong>${totalPagar.toLocaleString('es-CO')}</strong>
+                    <strong>{formatMoney(totalPagar)}</strong>
                   </div>
                   <div className="balance-item">
                     <span>Total Pagos:</span>
-                    <strong>${totalPagosAsignados.toLocaleString('es-CO')}</strong>
+                    <strong>{formatMoney(totalPagosAsignados)}</strong>
                   </div>
                   <div className="balance-item">
                     <span>Balance:</span>
@@ -1160,8 +1201,8 @@ export const ModalFacturacionDirecta: React.FC<ModalFacturacionDirectaProps> = (
                       {esTotalCuadrado
                         ? '✅ Cuadrado exacto'
                         : diferenciaPagos > 0
-                          ? `⚠️ Faltan $${diferenciaPagos.toLocaleString('es-CO')}`
-                          : `⚠️ Excede en $${Math.abs(diferenciaPagos).toLocaleString('es-CO')}`}
+                          ? `⚠️ Faltan ${formatMoney(diferenciaPagos)}`
+                          : `⚠️ Excede en ${formatMoney(Math.abs(diferenciaPagos))}`}
                     </strong>
                   </div>
                 </div>
