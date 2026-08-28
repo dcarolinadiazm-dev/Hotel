@@ -240,24 +240,27 @@ export class HabitacionService {
             ? parseFloat(String(roomDetail.DIWD_DTOPORC))
             : 0;
 
+        const estadoHab = String(hab.ESTADO || hab.estado || 'Disponible').trim();
+        const isDisponible = estadoHab === 'Disponible';
+
         return {
             id: habId,
             artiCod: hab.ARTI_COD ? String(hab.ARTI_COD).trim() : undefined,
             numero: num,
-            estado: String(hab.ESTADO || hab.estado || 'Disponible').trim(),
+            estado: estadoHab,
             tipo: hab.TIPO ? String(hab.TIPO).trim() : 'SENCILLA',
             piso: hab.PISO ? parseInt(String(hab.PISO), 10) : 1,
-            huesped,
-            documento,
-            fechaReserva,
-            fechaSalida,
+            huesped: isDisponible ? '' : huesped,
+            documento: isDisponible ? '' : documento,
+            fechaReserva: isDisponible ? '' : fechaReserva,
+            fechaSalida: isDisponible ? '' : fechaSalida,
             precioNoche,
-            descuento,
-            dtoPorc,
+            descuento: isDisponible ? 0 : descuento,
+            dtoPorc: isDisponible ? 0 : dtoPorc,
             liprCod,
             caracteristicas: (hab.CARACTERISTICAS || hab.caracteristicas) ? String(hab.CARACTERISTICAS || hab.caracteristicas).trim() : '',
-            observaciones: (hab.NOTAS || hab.observaciones) ? String(hab.NOTAS || hab.observaciones).trim() : '',
-            peweId: activeDinwId,
+            observaciones: isDisponible ? '' : ((hab.NOTAS || hab.observaciones) ? String(hab.NOTAS || hab.observaciones).trim() : ''),
+            peweId: isDisponible ? undefined : activeDinwId,
             items,
             totalPagar
         };
@@ -631,11 +634,12 @@ export class HabitacionService {
                 .update({ ESTADO: 'Cancelado' });
         }
 
-        // 4. Dejar la habitación en estado 'Disponible'
+        // 4. Dejar la habitación en estado 'Disponible' y limpiar observaciones
         await db(tables.HABITACION)
             .where('ID_HABITACION', id)
             .update({
-                ESTADO: 'Disponible'
+                ESTADO: 'Disponible',
+                NOTAS: ''
             });
 
         return { message: 'Reserva cancelada correctamente, anticipos anulados y habitación liberada.' };

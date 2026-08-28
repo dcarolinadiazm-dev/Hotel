@@ -584,19 +584,19 @@ export class PedidoService {
             throw new Error(`Error en GRABE_DOCUMENTO_INV_WEB de Firebird (Código de error: ${nError})`);
         }
 
-        // Registrar múltiples formas de pago en FACTURAS_CONTADO_PAGO y sincronizar FACTURAS
-        if (idGenerado) {
-            try {
+                const subtotalFactura = Math.round((totalDoc - totalIva) * 100) / 100;
                 await db('FACTURAS')
                     .where('FACT_ID', idGenerado)
                     .update({
                         FACT_TOTAL: totalDoc,
                         FACT_IVAMONTO: totalIva,
+                        FACT_SUBTOTAL: subtotalFactura,
+                        FACT_BASE: subtotalFactura,
                         FACT_FORMAP: primaryFopaId,
                         FACT_OBS: obsString
                     });
 
-                // Sincronizar FADE_DTOPORC, FADE_DTOMONTO, FADE_TOTAL y FADE_IVAMONTO en FACTURAS_DETALLE
+                // Sincronizar FADE_DTOPORC, FADE_DTOMONTO, FADE_TOTAL, FADE_IVAMONTO y FADE_BASE en FACTURAS_DETALLE
                 try {
                     const sourceDets = await db(tables.DOC_INVENTARIO_DET_WEB)
                         .where({ DINW_ID: dinwId, DIWD_ANULADO: 'N' })
@@ -606,6 +606,7 @@ export class PedidoService {
                         const dtomonto = Number(sd.DIWD_DTOMONTO || 0);
                         const totalItem = Number(sd.DIWD_TOTAL || 0);
                         const ivaMonto = Number(sd.DIWD_IVAMONTO || 0);
+                        const baseItem = Math.round((totalItem - ivaMonto) * 100) / 100;
 
                         await db('FACTURAS_DETALLE')
                             .where({ FACT_ID: idGenerado, FADE_ITEM: sd.DIWD_ITEM })
@@ -613,7 +614,8 @@ export class PedidoService {
                                 FADE_DTOPORC: dtoporc,
                                 FADE_DTOMONTO: dtomonto,
                                 FADE_TOTAL: totalItem,
-                                FADE_IVAMONTO: ivaMonto
+                                FADE_IVAMONTO: ivaMonto,
+                                FADE_BASE: baseItem
                             });
                     }
                 } catch (dtoErr: any) {
@@ -681,11 +683,12 @@ export class PedidoService {
 
         const mensajeExito = `Factura de Venta generada exitosamente con número ${numDocGenerado}`;
 
-        // Dejar la habitación en estado 'Disponible'
+        // Dejar la habitación en estado 'Disponible' y limpiar notas/observaciones
         await db(tables.HABITACION)
             .where('ID_HABITACION', habitacionId)
             .update({
-                ESTADO: 'Disponible'
+                ESTADO: 'Disponible',
+                NOTAS: ''
             });
 
         // Marcar el movimiento en HABITACION_MOVIM como Facturado y asignar ID_DOC y TIPO = 31
@@ -980,45 +983,67 @@ export class PedidoService {
         const docNit = first.NIT || fallbackHeader?.TERC_NIT || '';
 
         // Mapear los ítems
-        const items = rawRows
-            .filter((r: any) => r.ARTICULO || r.ARTIDES || r.TOTAL)
-            .map((r: any) => {
-                const desc = String(r.ARTIDES || r.DESCORTA || r.ARTICULO || 'Producto / Hospedaje').trim();
-                const cant = parseFloat(String(r.CANT || '1'));
-                const prunit = parseFloat(String(r.PRUNIT || r.PRNETO || '0'));
-                const totalItem = parseFloat(String(r.TOTAL || (cant * prunit)));
-                const ivaPorc = parseFloat(String(r.IVAPORC || '0'));
-                const ivaMonto = parseFloat(String(r.IVAITMONTO || '0'));
+        let items: any[] = [];
+        if (isFactura) {
+            try {
+                const facDets = await db('FACTURAS_DETALLE')
+                    .where({ FACT_ID: idDoc, FADE_ANULADO: 'N' })
+                    .orderBy('FADE_ITEM', 'asc');
+                if (facDets && facDets.length > 0) {
+                    items = facDets.map((d: any) => ({
+                        item: parseInt(String(d.FADE_ITEM || '1'), 10),
+                        articulo: String(d.ARTI_COD || '').trim(),
+                        descripcion: String(d.FADE_DESC || d.ARTI_COD || 'Producto / Hospedaje').trim(),
+                        referencia: String(d.FADE_REFERENCIA || '').trim(),
+                        cantidad: parseFloat(String(d.FADE_CANT || '1')),
+                        precioUnitario: parseFloat(String(d.FADE_PRUNIT || '0')),
+                        ivaPorc: parseFloat(String(d.FADE_IVAPORC || '0')),
+                        ivaMonto: parseFloat(String(d.FADE_IVAMONTO || '0')),
+                        total: parseFloat(String(d.FADE_TOTAL || '0'))
+                    }));
+                }
+            } catch (facDetErr: any) {
+                console.warn('Aviso consultando FACTURAS_DETALLE para impresion:', facDetErr.message);
+            }
+        }
 
-                return {
-                    item: parseInt(String(r.ITEM || '1'), 10),
-                    articulo: String(r.ARTICULO || '').trim(),
-                    descripcion: desc,
-                    referencia: String(r.REFITEM || '').trim(),
-                    cantidad: cant,
-                    precioUnitario: prunit,
-                    ivaPorc,
-                    ivaMonto,
-                    total: totalItem
-                };
-            });
+        if (items.length === 0) {
+            items = rawRows
+                .filter((r: any) => r.ARTICULO || r.ARTIDES || r.TOTAL)
+                .map((r: any) => {
+                    const desc = String(r.ARTIDES || r.DESCORTA || r.ARTICULO || 'Producto / Hospedaje').trim();
+                    const cant = parseFloat(String(r.CANT || '1'));
+                    const prunit = parseFloat(String(r.PRUNIT || r.PRNETO || '0'));
+                    const totalItem = parseFloat(String(r.TOTAL || (cant * prunit)));
+                    const ivaPorc = parseFloat(String(r.IVAPORC || '0'));
+                    const ivaMonto = parseFloat(String(r.IVAITMONTO || '0'));
+
+                    return {
+                        item: parseInt(String(r.ITEM || '1'), 10),
+                        articulo: String(r.ARTICULO || '').trim(),
+                        descripcion: desc,
+                        referencia: String(r.REFITEM || '').trim(),
+                        cantidad: cant,
+                        precioUnitario: prunit,
+                        ivaPorc,
+                        ivaMonto,
+                        total: totalItem
+                    };
+                });
+        }
 
         // Totales con fallback a sumatoria de items o tabla principal
         const sumItemsTotal = items.reduce((acc, it) => acc + (it.total || 0), 0);
         const sumItemsIva = items.reduce((acc, it) => acc + (it.ivaMonto || 0), 0);
 
-        let totalPagar = parseFloat(String(first.TOTALFAC || first.TOTALPAGAR || fallbackHeader?.REVT_TOTAL || fallbackHeader?.FACT_TOTAL || '0'));
-        let ivaTotal = parseFloat(String(first.IVAMONTO || fallbackHeader?.REVT_IVAMONTO || fallbackHeader?.FACT_IVAMONTO || '0'));
-        let subtotal = parseFloat(String(first.SUBTOTAL || '0'));
+        let totalPagar = parseFloat(String(fallbackHeader?.FACT_TOTAL || fallbackHeader?.REVT_TOTAL || first.TOTALFAC || first.TOTALPAGAR || '0'));
+        let ivaTotal = parseFloat(String(fallbackHeader?.FACT_IVAMONTO || fallbackHeader?.REVT_IVAMONTO || first.IVAMONTO || '0'));
+        let subtotal = parseFloat(String(fallbackHeader?.FACT_SUBTOTAL || fallbackHeader?.FACT_BASE || first.SUBTOTAL || '0'));
 
-        if (totalPagar <= 0 && sumItemsTotal > 0) {
+        if (sumItemsTotal > 0) {
             totalPagar = sumItemsTotal;
-        }
-        if (ivaTotal <= 0 && sumItemsIva > 0) {
             ivaTotal = sumItemsIva;
-        }
-        if (subtotal <= 0) {
-            subtotal = totalPagar - ivaTotal;
+            subtotal = Math.round((totalPagar - ivaTotal) * 100) / 100;
         }
 
         let pagosList: Array<{ nombre: string; monto: number }> = [];
