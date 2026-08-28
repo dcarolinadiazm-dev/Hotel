@@ -1254,13 +1254,11 @@ export const ModalHabitacion = ({
                     <label className="modal-form-label">Precio por noche ($):</label>
                     <input
                       type="text"
-                      className="modal-form-input"
+                      className="modal-form-input readonly-input-field"
                       value={Number(precioNoche || 0).toLocaleString('es-CO')}
-                      onChange={(e) => {
-                        const raw = e.target.value.replace(/\D/g, '');
-                        setPrecioNoche(raw ? parseInt(raw, 10) : 0);
-                      }}
-                      placeholder="0"
+                      readOnly
+                      disabled
+                      title="El precio base se calcula según la Lista de Precios seleccionada. Utilice el campo Descuento para aplicar rebajas."
                     />
                   </div>
 
