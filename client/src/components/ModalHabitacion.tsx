@@ -122,12 +122,41 @@ export const ModalHabitacion = ({
   ]);
   const [newTipoDoc, setNewTipoDoc] = useState('C');
   const [newNit, setNewNit] = useState('');
+  const [newDv, setNewDv] = useState('');
   const [newNombre, setNewNombre] = useState('');
+  const [newApellido1, setNewApellido1] = useState('');
+  const [newApellido2, setNewApellido2] = useState('');
+  const [newNombre1, setNewNombre1] = useState('');
+  const [newNombre2, setNewNombre2] = useState('');
   const [newCelular, setNewCelular] = useState('');
   const [newEmail, setNewEmail] = useState('');
   const [newDireccion, setNewDireccion] = useState('');
   const [savingClient, setSavingClient] = useState(false);
   const [clientError, setClientError] = useState<string | null>(null);
+
+  // Cálculo del dígito de verificación DIAN
+  const calculaDigitoVerificacion = (nit: string): string => {
+    const cleanNit = nit.trim();
+    if (cleanNit && !isNaN(Number(cleanNit))) {
+      const pesos = [3, 7, 13, 17, 19, 23, 29, 37, 41, 43, 47, 53, 59, 67, 71];
+      let suma = 0;
+      const nitString = cleanNit.toString();
+
+      for (let i = 0; i < nitString.length; i++) {
+        suma += parseInt(nitString.charAt(nitString.length - 1 - i), 10) * pesos[i];
+      }
+
+      const residuo = suma % 11;
+      const dv = residuo > 1 ? 11 - residuo : residuo;
+      return String(dv);
+    }
+    return '';
+  };
+
+  const handleNitChange = (val: string) => {
+    setNewNit(val);
+    setNewDv(calculaDigitoVerificacion(val));
+  };
 
   // Helper para obtener fecha y hora actual en formato 'YYYY-MM-DDTHH:mm'
   const getCurrentDatetimeLocal = (offsetHours = 0): string => {
@@ -340,10 +369,23 @@ export const ModalHabitacion = ({
       setClientError('El número de documento / Cédula / NIT es obligatorio (*)');
       return;
     }
-    if (!newNombre || !newNombre.trim()) {
-      setClientError('El nombre completo es obligatorio (*)');
-      return;
+
+    if (newTipoDoc === 'J') {
+      if (!newNombre || !newNombre.trim()) {
+        setClientError('La razón social / nombre de la empresa es obligatorio (*)');
+        return;
+      }
+    } else {
+      if (!newApellido1 || !newApellido1.trim()) {
+        setClientError('El primer apellido es obligatorio (*)');
+        return;
+      }
+      if (!newNombre1 || !newNombre1.trim()) {
+        setClientError('El primer nombre es obligatorio (*)');
+        return;
+      }
     }
+
     if (!newCelular || !newCelular.trim()) {
       setClientError('El celular / teléfono es obligatorio (*)');
       return;
@@ -361,6 +403,10 @@ export const ModalHabitacion = ({
     setClientError(null);
     const token = localStorage.getItem('hotel_token');
 
+    const calculatedName = newTipoDoc === 'J'
+      ? newNombre.trim()
+      : [newApellido1.trim(), newApellido2.trim(), newNombre1.trim(), newNombre2.trim()].filter(Boolean).join(' ').trim();
+
     try {
       const res = await fetch('/api/terceros/grabeTercero', {
         method: 'POST',
@@ -372,7 +418,12 @@ export const ModalHabitacion = ({
           tercero: {
             tipoId: newTipoDoc.trim(),
             nit: newNit.trim(),
-            nombre: newNombre.trim(),
+            dv: newDv || calculaDigitoVerificacion(newNit),
+            nombre: newTipoDoc === 'J' ? newNombre.trim() : calculatedName,
+            apellido1: newTipoDoc !== 'J' ? newApellido1.trim() : undefined,
+            apellido2: newTipoDoc !== 'J' ? newApellido2.trim() : undefined,
+            nombre1: newTipoDoc !== 'J' ? newNombre1.trim() : undefined,
+            nombre2: newTipoDoc !== 'J' ? newNombre2.trim() : undefined,
             cel: newCelular.trim(),
             email: newEmail.trim(),
             dir: newDireccion.trim(),
@@ -384,18 +435,23 @@ export const ModalHabitacion = ({
       if (!res.ok) throw new Error(data.message || 'Error al grabar tercero');
 
       setDocumento(newNit.trim());
-      setHuesped(newNombre.trim());
+      setHuesped(calculatedName);
       await fetchTerceros();
 
       setNewNit('');
+      setNewDv('');
       setNewNombre('');
+      setNewApellido1('');
+      setNewApellido2('');
+      setNewNombre1('');
+      setNewNombre2('');
       setNewCelular('');
       setNewEmail('');
       setNewDireccion('');
       setShowNewClientForm(false);
       setActionFeedback({
         type: 'success',
-        message: `✅ Cliente "${newNombre.trim()}" registrado exitosamente en Firebird`,
+        message: `✅ Cliente "${calculatedName}" registrado exitosamente en Firebird`,
       });
     } catch (err: any) {
       setClientError(err.message || 'Error al conectar con el servidor');
@@ -913,28 +969,102 @@ export const ModalHabitacion = ({
                         </div>
                         <div className="modal-form-group flex-1">
                           <label className="modal-form-label">Número de Documento / NIT *:</label>
-                          <input
-                            type="text"
-                            className="modal-form-input"
-                            value={newNit}
-                            onChange={(e) => setNewNit(e.target.value)}
-                            placeholder="Ej: 1098765432"
-                            required
-                          />
+                          <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                            <input
+                              type="text"
+                              className="modal-form-input"
+                              style={{ flex: 1 }}
+                              value={newNit}
+                              onChange={(e) => handleNitChange(e.target.value)}
+                              placeholder="Ej: 900123456"
+                              required
+                            />
+                            {newDv && (
+                              <span
+                                style={{
+                                  padding: '8px 10px',
+                                  background: '#f1f5f9',
+                                  color: '#0f172a',
+                                  fontWeight: 800,
+                                  fontSize: '12px',
+                                  borderRadius: '6px',
+                                  border: '1px solid #cbd5e1',
+                                  whiteSpace: 'nowrap',
+                                }}
+                                title="Dígito de Verificación calculado"
+                              >
+                                DV: {newDv}
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </div>
 
-                      <div className="modal-form-group">
-                        <label className="modal-form-label">Nombre Completo / Razón Social *:</label>
-                        <input
-                          type="text"
-                          className="modal-form-input"
-                          value={newNombre}
-                          onChange={(e) => setNewNombre(e.target.value)}
-                          placeholder="Ej: Carlos Alberto Mendoza"
-                          required
-                        />
-                      </div>
+                      {/* Si es Persona Jurídica (J - NIT PERSONA JURIDICA) pide Razón Social */}
+                      {newTipoDoc === 'J' ? (
+                        <div className="modal-form-group">
+                          <label className="modal-form-label">Razón Social / Nombre de la Empresa *:</label>
+                          <input
+                            type="text"
+                            className="modal-form-input"
+                            value={newNombre}
+                            onChange={(e) => setNewNombre(e.target.value)}
+                            placeholder="Ej: INVERSIONES HOTELERAS S.A.S."
+                            required
+                          />
+                        </div>
+                      ) : (
+                        /* Si es Persona Natural pide Apellidos y Nombres */
+                        <>
+                          <div className="modal-form-row">
+                            <div className="modal-form-group flex-1">
+                              <label className="modal-form-label">Primer Apellido *:</label>
+                              <input
+                                type="text"
+                                className="modal-form-input"
+                                value={newApellido1}
+                                onChange={(e) => setNewApellido1(e.target.value)}
+                                placeholder="Ej: Gómez"
+                                required
+                              />
+                            </div>
+                            <div className="modal-form-group flex-1">
+                              <label className="modal-form-label">Segundo Apellido:</label>
+                              <input
+                                type="text"
+                                className="modal-form-input"
+                                value={newApellido2}
+                                onChange={(e) => setNewApellido2(e.target.value)}
+                                placeholder="Ej: Pérez"
+                              />
+                            </div>
+                          </div>
+
+                          <div className="modal-form-row">
+                            <div className="modal-form-group flex-1">
+                              <label className="modal-form-label">Primer Nombre *:</label>
+                              <input
+                                type="text"
+                                className="modal-form-input"
+                                value={newNombre1}
+                                onChange={(e) => setNewNombre1(e.target.value)}
+                                placeholder="Ej: Carlos"
+                                required
+                              />
+                            </div>
+                            <div className="modal-form-group flex-1">
+                              <label className="modal-form-label">Segundo Nombre:</label>
+                              <input
+                                type="text"
+                                className="modal-form-input"
+                                value={newNombre2}
+                                onChange={(e) => setNewNombre2(e.target.value)}
+                                placeholder="Ej: Alberto"
+                              />
+                            </div>
+                          </div>
+                        </>
+                      )}
 
                       <div className="modal-form-row">
                         <div className="modal-form-group flex-1">

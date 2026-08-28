@@ -127,6 +127,24 @@ export class TerceroService {
         ];
     }
 
+export function calculaDigitoVerificacion(nit: string): string {
+    const cleanNit = nit.trim();
+    if (cleanNit && !isNaN(Number(cleanNit))) {
+        const pesos = [3, 7, 13, 17, 19, 23, 29, 37, 41, 43, 47, 53, 59, 67, 71];
+        let suma = 0;
+        const nitString = cleanNit.toString();
+
+        for (let i = 0; i < nitString.length; i++) {
+            suma += parseInt(nitString.charAt(nitString.length - 1 - i), 10) * pesos[i];
+        }
+
+        const residuo = suma % 11;
+        const dv = residuo > 1 ? 11 - residuo : residuo;
+        return String(dv);
+    }
+    return '';
+}
+
     // Grabar o actualizar tercero (cliente / huésped) similar a SYSplusCloudBE
     static async grabeTercero(data: IGrabeTercero): Promise<any> {
         if (!data.tipoId || data.tipoId.trim() === '') {
@@ -137,13 +155,41 @@ export class TerceroService {
             throw new Error('El NIT / Cédula / Documento es obligatorio');
         }
 
-        // Construir nombre completo si vienen nombres y apellidos separados
-        let nombreCompleto = data.nombre ? data.nombre.trim() : '';
-        if (!nombreCompleto && (data.nombre1 || data.apellido1)) {
-            nombreCompleto = [data.nombre1, data.nombre2, data.apellido1, data.apellido2]
-                .filter(Boolean)
-                .join(' ')
-                .trim();
+        const nit = data.nit.trim();
+        const tipoDoc = (data.tipoId || 'C').trim().substring(0, 1).toUpperCase();
+        const dvCalculado = data.dv ? data.dv.trim() : calculaDigitoVerificacion(nit);
+
+        let nombreCompleto = '';
+        let nom1: string | null = null;
+        let nom2: string | null = null;
+        let ape1: string | null = null;
+        let ape2: string | null = null;
+
+        if (tipoDoc === 'J') {
+            // Persona Jurídica: solo razón social en TERC_NOM
+            if (!data.nombre || data.nombre.trim() === '') {
+                throw new Error('La razón social / nombre de la empresa es obligatorio');
+            }
+            nombreCompleto = data.nombre.trim();
+        } else {
+            // Persona Natural: mínimo un apellido y un nombre
+            ape1 = data.apellido1 ? data.apellido1.trim() : null;
+            ape2 = data.apellido2 ? data.apellido2.trim() : null;
+            nom1 = data.nombre1 ? data.nombre1.trim() : null;
+            nom2 = data.nombre2 ? data.nombre2.trim() : null;
+
+            if (!ape1 && (!data.nombre || data.nombre.trim() === '')) {
+                throw new Error('El primer apellido es obligatorio');
+            }
+            if (!nom1 && (!data.nombre || data.nombre.trim() === '')) {
+                throw new Error('El primer nombre es obligatorio');
+            }
+
+            if (ape1 || nom1) {
+                nombreCompleto = [ape1, ape2, nom1, nom2].filter(Boolean).join(' ').trim();
+            } else {
+                nombreCompleto = data.nombre ? data.nombre.trim() : '';
+            }
         }
 
         if (!nombreCompleto) {
@@ -162,7 +208,6 @@ export class TerceroService {
             throw new Error('La dirección es obligatoria');
         }
 
-        const nit = data.nit.trim();
         const telefono = (data.cel || data.tel || '').trim();
 
         // 1. Verificar si el tercero ya existe en la tabla TERCEROS
@@ -172,12 +217,13 @@ export class TerceroService {
 
         const terceroPayload = {
             TERC_NOM: nombreCompleto,
-            TERC_DV: data.dv || null,
-            TERC_TIPOID: (data.tipoId || 'C').substring(0, 1),
-            TERC_NOMBRE1: data.nombre1 || null,
-            TERC_NOMBRE2: data.nombre2 || null,
-            TERC_APELLIDO1: data.apellido1 || null,
-            TERC_APELLIDO2: data.apellido2 || null,
+            TERC_DV: dvCalculado || null,
+            TERC_DVDIAN: dvCalculado || null,
+            TERC_TIPOID: tipoDoc,
+            TERC_NOMBRE1: nom1,
+            TERC_NOMBRE2: nom2,
+            TERC_APELLIDO1: ape1,
+            TERC_APELLIDO2: ape2,
             TERC_DIR: data.dir ? data.dir.trim() : null,
             TERC_TEL: telefono,
             TERC_CEL: telefono,
