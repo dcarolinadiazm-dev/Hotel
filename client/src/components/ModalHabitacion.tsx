@@ -1229,7 +1229,7 @@ export const ModalHabitacion = ({
                   </div>
                 </div>
 
-                {/* 4. Lista de Precios, Precio por noche, Descuento ($) & Características */}
+                {/* 4. Lista de Precios, Precio por noche & Descuento ($) */}
                 <div className="modal-form-row">
                   <div className="modal-form-group flex-1">
                     <label className="modal-form-label">Lista de Precios:</label>
@@ -1284,18 +1284,6 @@ export const ModalHabitacion = ({
                       placeholder="0"
                     />
                   </div>
-
-                  <div className="modal-form-group flex-1">
-                    <label className="modal-form-label">Características / Tipo:</label>
-                    <input
-                      type="text"
-                      className="modal-form-input readonly-input-field"
-                      value={caracteristicas || habitacion.tipo || 'SENCILLA'}
-                      disabled
-                      readOnly
-                      title="Las características y tipo se configuran desde la edición de la habitación"
-                    />
-                  </div>
                 </div>
 
                 {/* Badge informativo de cálculo de días de estadía */}
@@ -1309,13 +1297,26 @@ export const ModalHabitacion = ({
                     </div>
                     {Number(precioNoche || 0) > 0 && (
                       <span className="dias-estadia-subtotal">
-                        {calculateDiasEstadia(fechaReserva, fechaSalida)} x {formatMoney(Number(precioNoche || 0))} = <strong>{formatMoney(calculateDiasEstadia(fechaReserva, fechaSalida) * Number(precioNoche || 0))}</strong>
+                        {calculateDiasEstadia(fechaReserva, fechaSalida)} x {formatMoney(Math.max(0, Number(precioNoche || 0) - Number(descuentoNoche || 0)))} = <strong>{formatMoney(calculateDiasEstadia(fechaReserva, fechaSalida) * Math.max(0, Number(precioNoche || 0) - Number(descuentoNoche || 0)))}</strong>
                       </span>
                     )}
                   </div>
                 )}
 
-                {/* 5. Observaciones */}
+                {/* 5. Características / Tipo */}
+                <div className="modal-form-group">
+                  <label className="modal-form-label">Características / Tipo:</label>
+                  <input
+                    type="text"
+                    className="modal-form-input readonly-input-field"
+                    value={caracteristicas || habitacion.tipo || 'SENCILLA'}
+                    disabled
+                    readOnly
+                    title="Las características y tipo se configuran desde la edición de la habitación"
+                  />
+                </div>
+
+                {/* 6. Observaciones */}
                 <div className="modal-form-group">
                   <label className="modal-form-label">Observaciones:</label>
                   <textarea
