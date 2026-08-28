@@ -1390,8 +1390,8 @@ export const ModalHabitacion = ({
                           ⚡ Inicia hoy: Al guardar quedará en estado <strong>OCUPADA</strong>.
                         </span>
                       ) : (
-                        <span style={{ display: 'block', marginTop: '4px', fontSize: '11px', color: '#ea580c', fontWeight: 700 }}>
-                          📅 Reserva futura: La habitación quedará en estado <strong>RESERVADA</strong> y pasará a <strong>OCUPADA</strong> automáticamente el día de su inicio.
+                        <span style={{ display: 'block', marginTop: '4px', fontSize: '11px', color: '#059669', fontWeight: 700 }}>
+                          📅 Reserva futura: La habitación permanecerá <strong>DISPONIBLE</strong> hoy y pasará a <strong>OCUPADA</strong> automáticamente el día de su inicio.
                         </span>
                       )
                     )}

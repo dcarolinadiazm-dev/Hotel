@@ -58,10 +58,10 @@ export class HabitacionService {
                             .update({ ESTADO: 'Ocupada' });
                     }
                 } else {
-                    if (currentEstado !== 'Reservada') {
+                    if (currentEstado !== 'Disponible') {
                         await db(tables.HABITACION)
                             .where('ID_HABITACION', habId)
-                            .update({ ESTADO: 'Reservada' });
+                            .update({ ESTADO: 'Disponible' });
                     }
                 }
             }
@@ -710,7 +710,7 @@ export class HabitacionService {
 
         const estadoFinal = (estadoEntrante === 'Inhabilitada')
             ? 'Inhabilitada'
-            : (allActiveMovs.length === 0 ? 'Disponible' : (isOccupiedToday ? 'Ocupada' : 'Reservada'));
+            : (isOccupiedToday ? 'Ocupada' : 'Disponible');
 
         // Actualizar datos de la habitación en la tabla HABITACION
         const updatePayload: any = {
