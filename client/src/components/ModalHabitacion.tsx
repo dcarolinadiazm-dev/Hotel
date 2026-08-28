@@ -47,6 +47,22 @@ interface ListaPrecioItem {
 
 
 
+export interface MovimientoReserva {
+  idMovim: number;
+  dinwId?: number;
+  huesped?: string;
+  documento?: string;
+  fechaReserva?: string;
+  fechaSalida?: string;
+  precioNoche?: number;
+  descuento?: number;
+  dtoPorc?: number;
+  liprCod?: number;
+  items?: ConsumoItem[];
+  totalPagar?: number;
+  totalAbonos?: number;
+}
+
 interface ModalHabitacionProps {
   habitacion: Habitacion;
   onClose: () => void;
@@ -67,7 +83,12 @@ export const ModalHabitacion = ({
   const [processingAction, setProcessingAction] = useState<string | null>(null);
   const [actionFeedback, setActionFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
-  // Campos editables de la habitación
+  // Múltiples reservas de la habitación
+  const [movimientos, setMovimientos] = useState<MovimientoReserva[]>([]);
+  const [selectedMovimId, setSelectedMovimId] = useState<number | 'NUEVA' | null>(null);
+  const [defaultRoomPrecio, setDefaultRoomPrecio] = useState<number>(0);
+
+  // Campos editables de la reserva activa / seleccionada
   const [estado, setEstado] = useState<string>(habitacion.estado || 'Disponible');
   const [roomArtiCod, setRoomArtiCod] = useState<string>(habitacion.artiCod || '');
   const [peweId, setPeweId] = useState<number | undefined>(habitacion.peweId);
@@ -242,8 +263,36 @@ export const ModalHabitacion = ({
     return diffDays > 0 ? diffDays : 1;
   };
 
-  const fetchRoomDetails = () => {
+  const cargarMovimientoEnFormulario = (m: MovimientoReserva) => {
+    setSelectedMovimId(m.idMovim);
+    setPeweId(m.dinwId);
+    setHuesped(m.huesped || '');
+    setDocumento(m.documento || '');
+    setFechaReserva(toDatetimeLocal(m.fechaReserva) || getCurrentDatetimeLocal(0));
+    setFechaSalida(toDatetimeLocal(m.fechaSalida) || getCurrentDatetimeLocal(24));
+    setPrecioNoche(m.precioNoche || defaultRoomPrecio || 0);
+    setDescuentoNoche(m.descuento || 0);
+    if (m.liprCod) {
+      setRoomLiprCod(m.liprCod);
+    }
+    setItems(m.items || []);
+    setTotalAbonos(m.totalAbonos || 0);
+  };
 
+  const iniciarNuevaReserva = () => {
+    setSelectedMovimId('NUEVA');
+    setPeweId(undefined);
+    setHuesped('');
+    setDocumento('');
+    setFechaReserva(getCurrentDatetimeLocal(0));
+    setFechaSalida(getCurrentDatetimeLocal(24));
+    setPrecioNoche(defaultRoomPrecio || 0);
+    setDescuentoNoche(0);
+    setItems([]);
+    setTotalAbonos(0);
+  };
+
+  const fetchRoomDetails = () => {
     const token = localStorage.getItem('hotel_token');
     const fetchHab = fetch(`/api/habitaciones/${habitacion.id}`, {
       headers: { Authorization: `Bearer ${token}` },
@@ -252,19 +301,25 @@ export const ModalHabitacion = ({
       .then((data) => {
         setEstado(data.estado || habitacion.estado || 'Disponible');
         setRoomArtiCod(data.artiCod || habitacion.artiCod || '');
-        setPeweId(data.peweId);
-        setHuesped(data.huesped || '');
-        setDocumento(data.documento || '');
-        setFechaReserva(toDatetimeLocal(data.fechaReserva) || getCurrentDatetimeLocal(0));
-        setFechaSalida(toDatetimeLocal(data.fechaSalida) || getCurrentDatetimeLocal(24));
-        setPrecioNoche(data.precioNoche || 0);
-        setDescuentoNoche(data.descuento || 0);
-        if (data.liprCod) {
-          setRoomLiprCod(data.liprCod);
-        }
         setCaracteristicas(data.caracteristicas || 'Cama Doble, Aire Acondicionado, Wi-Fi');
         setObservaciones(data.observaciones || '');
-        setItems(data.items || []);
+        if (data.precioNoche) setDefaultRoomPrecio(data.precioNoche);
+
+        const movs: MovimientoReserva[] = data.movimientos || [];
+        setMovimientos(movs);
+
+        if (movs.length > 0) {
+          let target = movs.find(m => m.idMovim === selectedMovimId);
+          if (!target && selectedMovimId !== 'NUEVA') {
+            target = (data.peweId ? movs.find(m => m.dinwId === data.peweId) : null) || movs[0];
+          }
+          if (target) {
+            cargarMovimientoEnFormulario(target);
+          }
+        } else {
+          iniciarNuevaReserva();
+          setPrecioNoche(data.precioNoche || 0);
+        }
         return data;
       });
 
@@ -789,11 +844,18 @@ export const ModalHabitacion = ({
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
+        body: JSON.stringify({
+          idMovim: selectedMovimId === 'NUEVA' ? undefined : selectedMovimId
+        })
       });
       const data = await res.json();
       if (res.ok) {
+        setActionFeedback({
+          type: 'success',
+          message: '✅ Reserva cancelada correctamente.',
+        });
         if (onHabitacionUpdated) onHabitacionUpdated();
-        onClose();
+        await fetchRoomDetails();
       } else {
         alert(data.error || 'Error al cancelar la reserva');
       }
@@ -806,12 +868,14 @@ export const ModalHabitacion = ({
 
   // Abrir modal de confirmación para Cancelar Reserva
   const requestCancelarReserva = () => {
+    const targetMov = movimientos.find(m => m.idMovim === selectedMovimId);
+    const guestInfo = targetMov?.huesped ? `de ${targetMov.huesped}` : '';
     setConfirmModal({
       isOpen: true,
       type: 'CANCELAR_RESERVA',
       title: '¿Confirmar Cancelación de Reserva?',
-      message: `¿Estás seguro de que deseas cancelar la reserva de la Habitación ${habitacion.numero}?`,
-      details: 'La habitación volverá a estado "Disponible", se anulará el pedido web activo y se anularán los anticipos y recibos de caja asociados en el sistema.',
+      message: `¿Estás seguro de que deseas cancelar la reserva ${guestInfo} en la Habitación ${habitacion.numero}?`,
+      details: 'Se anulará el pedido web activo de esta reserva y se anularán los anticipos y recibos de caja asociados en el sistema.',
       confirmText: 'Sí, Cancelar Reserva',
       confirmButtonClass: 'btn-confirm-danger',
       onConfirm: executeCancelarReserva,
@@ -833,6 +897,8 @@ export const ModalHabitacion = ({
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
+          idMovim: selectedMovimId === 'NUEVA' ? undefined : selectedMovimId,
+          esNuevaReserva: selectedMovimId === 'NUEVA',
           estado,
           artiCod: roomArtiCod,
           huesped,
@@ -849,16 +915,15 @@ export const ModalHabitacion = ({
         }),
       });
 
-
+      const d = await res.json();
       if (res.ok) {
         setActionFeedback({
           type: 'success',
-          message: '✅ Datos guardados, la habitacion quedo en estado ' + estado + '.',
+          message: '✅ Reserva guardada exitosamente.',
         });
         await fetchRoomDetails();
         if (onHabitacionUpdated) onHabitacionUpdated();
       } else {
-        const d = await res.json();
         alert(d.error || 'Error al guardar cambios de habitación');
       }
     } catch (err) {
@@ -942,6 +1007,51 @@ export const ModalHabitacion = ({
               </div>
             )}
 
+
+            {/* Pestañas de Selección de Reservas de la Habitación */}
+            <div className="room-reservations-tabs-bar">
+              <div className="room-reservations-tabs-header">
+                <span>🗓️ Reservas / Estadías de la Habitación ({movimientos.length})</span>
+                <span style={{ fontSize: '11px', color: '#64748b', textTransform: 'none' }}>
+                  {selectedMovimId === 'NUEVA' ? '➕ Creando nueva reserva' : '👁️ Viendo reserva seleccionada'}
+                </span>
+              </div>
+              <div className="room-reservations-tabs-list">
+                {movimientos.map((m) => {
+                  const isSelected = selectedMovimId === m.idMovim;
+                  const fIni = m.fechaReserva ? m.fechaReserva.split('T')[0] : 'Sin fecha';
+                  const fFin = m.fechaSalida ? m.fechaSalida.split('T')[0] : '';
+                  const guestName = m.huesped || 'Huésped';
+
+                  const now = new Date();
+                  const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+                  const isToday = fIni <= todayStr && (!fFin || fFin >= todayStr);
+
+                  return (
+                    <button
+                      key={m.idMovim}
+                      type="button"
+                      className={`room-reserva-tab-btn ${isSelected ? 'active' : ''}`}
+                      onClick={() => cargarMovimientoEnFormulario(m)}
+                      title={`Reserva de ${guestName}: del ${fIni} al ${fFin}`}
+                    >
+                      <span>{isToday ? '🟢 Hoy:' : '📅'}</span>
+                      <span className="tab-reserva-dates">{fIni}{fFin ? ` ➔ ${fFin}` : ''}</span>
+                      <span className="tab-guest-name">({guestName})</span>
+                    </button>
+                  );
+                })}
+
+                <button
+                  type="button"
+                  className={`room-reserva-tab-btn btn-nueva-reserva-tab ${selectedMovimId === 'NUEVA' ? 'active' : ''}`}
+                  onClick={iniciarNuevaReserva}
+                  title="Programar una nueva reserva para otros días en esta habitación"
+                >
+                  ➕ Nueva Reserva
+                </button>
+              </div>
+            </div>
 
             <div className="modal-two-columns">
               {/* Columna Izquierda: Formulario de Reserva & Huésped */}
@@ -1210,6 +1320,24 @@ export const ModalHabitacion = ({
                     </span>
                   )}
                 </div>
+
+                {/* Lista de rangos de fechas ya ocupados en esta habitación */}
+                {movimientos.filter(m => selectedMovimId === 'NUEVA' || m.idMovim !== selectedMovimId).length > 0 && (
+                  <div className="reserved-ranges-card">
+                    <div className="reserved-ranges-title">
+                      <span>🔒 Fechas ya reservadas en esta habitación:</span>
+                    </div>
+                    <ul className="reserved-ranges-list">
+                      {movimientos
+                        .filter(m => selectedMovimId === 'NUEVA' || m.idMovim !== selectedMovimId)
+                        .map(m => (
+                          <li key={m.idMovim}>
+                            <strong>{m.fechaReserva ? m.fechaReserva.replace('T', ' ') : ''}</strong> hasta <strong>{m.fechaSalida ? m.fechaSalida.replace('T', ' ') : ''}</strong> — {m.huesped || 'Huésped'}
+                          </li>
+                        ))}
+                    </ul>
+                  </div>
+                )}
 
                 {/* 3. Fechas de Entrada y Salida con Calendario y Selector de Horas */}
                 <div className="modal-form-row">

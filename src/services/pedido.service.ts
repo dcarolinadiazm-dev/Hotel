@@ -44,6 +44,86 @@ export class PedidoService {
         }));
     }
 
+    // Crear un nuevo DOC_INVENTARIO_WEB exclusivo para una nueva reserva
+    static async createNewDinw(habitacionId: string, habNumero: string, nit?: string, huesped?: string): Promise<number> {
+        const maxDinwRow = await db.raw('SELECT MAX(DINW_ID) AS MAXID FROM DOC_INVENTARIO_WEB');
+        const maxDinwRows = maxDinwRow.rows ? maxDinwRow.rows : (Array.isArray(maxDinwRow) ? maxDinwRow : [maxDinwRow]);
+        const maxDinwVal = maxDinwRows[0]?.MAXID ?? maxDinwRows[0]?.maxid ?? maxDinwRows[0]?.MAX ?? 0;
+        const dinwId = (parseInt(String(maxDinwVal || '0'), 10) || 0) + 1;
+
+        const clienteNit = nit || '800003122';
+        const clienteNom = huesped || 'Huésped General';
+
+        try {
+            await TerceroService.ensureCliente(clienteNit);
+        } catch (e: any) {
+            console.warn('Aviso ensureCliente:', e.message);
+        }
+
+        let pref = 'SETT';
+        try {
+            const prefRow = await db(tables.PREFIJOS)
+                .where('TIDO_COD', 31)
+                .andWhere(function () {
+                    this.where('PREF_ACTIVO', 'S').orWhereNull('PREF_ACTIVO');
+                })
+                .first();
+            if (prefRow?.PREF_PRE) pref = String(prefRow.PREF_PRE).trim();
+        } catch (e) {}
+
+        const { ptvtId, bodeCod } = await this.getDefaultPuntoVentaAndBodega();
+        const obsString = sanitizeText(`Hospedaje Habitacion ${habNumero} - ${clienteNom}`);
+
+        await db(tables.DOC_INVENTARIO_WEB).insert({
+            DINW_ID: dinwId,
+            DINW_TIPO: 31,
+            DINW_PREF: pref,
+            DINW_BODEGA: bodeCod,
+            DINW_FECHA: new Date(),
+            DINW_CONCEPTO: truncateToBytes(obsString, 55),
+            DINW_IDDOC: 0,
+            DINW_ANULADO: 'N',
+            DINW_OBS: obsString,
+            DINW_TIPOREF: null,
+            DINW_NUMREF: '',
+            DINW_NIT: clienteNit,
+            DINW_BODDES: bodeCod,
+            DINW_NUMERO: '00000001',
+            DINW_PTVTA: ptvtId,
+            DINW_VEND: 1,
+            DINW_VENCE: new Date(),
+            DINW_DTOPORC: 0,
+            DINW_DTOMONTO: 0,
+            DINW_ADICIONAL: 0,
+            DINW_RTFTEPORC: 0,
+            DINW_RTICAPORC: 0,
+            DINW_RTIVAPORC: 0,
+            DINW_EXTRA: 0,
+            DINW_DTOFPORC: 0,
+            DINW_DTOFFEC: new Date(),
+            DINW_TIPOENT: 1,
+            DINW_MONEDA: 1,
+            DINW_TRM: 1,
+            DINW_FORMAP: 1,
+            DINW_IMPINC: 'S',
+            DINW_PASADA: 0,
+            DINW_STAND: '',
+            DINW_TRANSMIT: 'N',
+            DINW_SUCURSAL: '01',
+            DINW_IVAINC: 'S',
+            DINW_VALIDEZ: 0,
+            DINW_DIASCR: 0,
+            DINW_COTIZACI: '',
+            DINW_BASE: 0,
+            DINW_IVAMONTO: 0,
+            DINW_MONTO: 0,
+            DINW_CANAL: 1,
+            DINW_COBRADOR: 1
+        });
+
+        return dinwId;
+    }
+
     // Obtener o inicializar el DOC_INVENTARIO_WEB activo (borrador/carrito) de una habitación
     static async getActiveDinw(habitacionId: string, habNumero: string, nit?: string, huesped?: string): Promise<number> {
         const ref = `HAB-${habNumero}`;

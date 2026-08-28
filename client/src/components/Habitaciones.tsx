@@ -19,6 +19,7 @@ export interface Habitacion {
   peweId?: number;
   productos: number;
   total: number;
+  totalReservasFuturas?: number;
 }
 
 type FiltroEstado = 'TODOS' | 'DISPONIBLE' | 'RESERVADA' | 'OCUPADA' | 'INHABILITADA';
@@ -482,6 +483,23 @@ export const Habitaciones = ({
                     ) : (
                       <span className="room-art-tag">
                         🏷️ Art: {hab.artiCod || '001'} · ${Number(hab.precioNoche || 0).toLocaleString('es-CO')}
+                      </span>
+                    )}
+                    {hab.estado === 'Disponible' && Boolean(hab.totalReservasFuturas && hab.totalReservasFuturas > 0) && (
+                      <span
+                        style={{
+                          fontSize: '11px',
+                          color: '#b45309',
+                          background: '#fef3c7',
+                          padding: '2px 6px',
+                          borderRadius: '4px',
+                          fontWeight: 700,
+                          display: 'inline-block',
+                          marginTop: '4px',
+                        }}
+                        title={`${hab.totalReservasFuturas} reserva(s) programada(s) para fechas futuras`}
+                      >
+                        📅 {hab.totalReservasFuturas} {hab.totalReservasFuturas === 1 ? 'reserva futura' : 'reservas futuras'}
                       </span>
                     )}
                   </div>

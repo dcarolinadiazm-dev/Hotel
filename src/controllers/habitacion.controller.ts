@@ -78,9 +78,10 @@ export class HabitacionController {
     // POST /api/habitaciones/:id/cancelar-reserva
     static async cancelarReserva(req: Request, res: Response) {
         const id = String(req.params.id);
+        const { idMovim } = req.body;
         try {
-            const result = await HabitacionService.cancelarReserva(id);
-            res.json({ success: true, message: result.message });
+            const result = await HabitacionService.cancelarReserva(id, idMovim);
+            res.json({ success: true, message: result.message || 'Reserva cancelada exitosamente' });
         } catch (error: any) {
             console.error(`Error en HabitacionController.cancelarReserva (${id}):`, error.message);
             res.status(500).json({ error: error.message });
