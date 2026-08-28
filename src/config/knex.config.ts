@@ -14,7 +14,8 @@ export const dbOptions: any = {
     pageSize: 4096,
     lowercase_keys: false,
     charset: process.env.DB_CHARSET || 'ISO8859_1',
-    encoding: process.env.DB_CHARSET || 'ISO8859_1'
+    encoding: process.env.DB_CHARSET || 'ISO8859_1',
+    charSetForNONE: process.env.DB_CHARSET_NONE || 'latin1'
 };
 
 // Instancia principal de Knex con el dialecto de Firebird

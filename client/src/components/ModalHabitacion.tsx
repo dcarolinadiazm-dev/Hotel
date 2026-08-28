@@ -1156,7 +1156,9 @@ export const ModalHabitacion = ({
                           >
                             {ciudades.map((c) => (
                               <option key={c.cod} value={c.cod}>
-                                {c.nom} {c.dpto ? `(${c.dpto})` : ''}
+                                {c.dpto && !c.nom.toLowerCase().includes(c.dpto.toLowerCase())
+                                  ? `${c.nom} (${c.dpto})`
+                                  : c.nom}
                               </option>
                             ))}
                           </select>
