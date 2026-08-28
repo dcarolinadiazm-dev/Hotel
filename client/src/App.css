@@ -4842,88 +4842,83 @@
 }
 
 /* ========================================================
-   PESTAÑAS DE MÚLTIPLES RESERVAS EN MODAL DE HABITACIÓN
+   SELECTOR DE MÚLTIPLES RESERVAS EN MODAL DE HABITACIÓN
    ======================================================== */
-.room-reservations-tabs-bar {
+.room-reservations-selector-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
   background: #f8fafc;
   border: 1px solid #e2e8f0;
   border-radius: 10px;
-  padding: 8px 10px;
+  padding: 10px 14px;
   margin-bottom: 16px;
+  flex-wrap: wrap;
 }
 
-.room-reservations-tabs-header {
+.room-reservations-selector-group {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  margin-bottom: 6px;
-  font-size: 11.5px;
+  gap: 10px;
+  flex: 1;
+  min-width: 260px;
+}
+
+.reservations-selector-label {
+  font-size: 12.5px;
   font-weight: 700;
-  color: #475569;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
+  color: #334155;
+  white-space: nowrap;
 }
 
-.room-reservations-tabs-list {
-  display: flex;
-  gap: 8px;
-  overflow-x: auto;
-  padding-bottom: 4px;
+.reservations-dropdown-select {
+  flex: 1;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1.5px solid #cbd5e1;
+  background-color: #ffffff;
+  color: #0f172a;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  outline: none;
+  transition: all 0.2s ease;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
 }
 
-.room-reserva-tab-btn {
+.reservations-dropdown-select:focus {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+}
+
+.btn-nueva-reserva-compact {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 6px 12px;
+  padding: 8px 16px;
+  background: #10b981;
+  color: #ffffff;
+  border: 1px solid #059669;
   border-radius: 8px;
-  border: 1px solid #cbd5e1;
-  background: #ffffff;
-  color: #334155;
-  font-size: 12px;
-  font-weight: 600;
+  font-size: 13px;
+  font-weight: 700;
   cursor: pointer;
   white-space: nowrap;
   transition: all 0.2s ease;
+  box-shadow: 0 2px 6px rgba(16, 185, 129, 0.25);
 }
 
-.room-reserva-tab-btn:hover {
-  background: #f1f5f9;
-  border-color: #94a3b8;
+.btn-nueva-reserva-compact:hover {
+  background: #059669;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 10px rgba(16, 185, 129, 0.35);
 }
 
-.room-reserva-tab-btn.active {
-  background: #2563eb;
-  color: #ffffff;
-  border-color: #1d4ed8;
-  box-shadow: 0 2px 6px rgba(37, 99, 235, 0.25);
-}
-
-.room-reserva-tab-btn.btn-nueva-reserva-tab {
-  background: #ecfdf5;
-  border-color: #6ee7b7;
-  color: #047857;
-  font-weight: 700;
-}
-
-.room-reserva-tab-btn.btn-nueva-reserva-tab:hover {
-  background: #d1fae5;
-  border-color: #34d399;
-}
-
-.room-reserva-tab-btn.btn-nueva-reserva-tab.active {
-  background: #10b981;
-  border-color: #059669;
-  color: #ffffff;
-}
-
-.tab-reserva-dates {
-  font-weight: 700;
-}
-
-.tab-guest-name {
-  opacity: 0.85;
-  font-size: 11px;
+.btn-nueva-reserva-compact.active {
+  background: #047857;
+  border-color: #065f46;
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.2);
 }
 
 .reserved-ranges-card {

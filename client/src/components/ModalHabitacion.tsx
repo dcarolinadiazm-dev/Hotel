@@ -1008,48 +1008,54 @@ export const ModalHabitacion = ({
             )}
 
 
-            {/* Pestañas de Selección de Reservas de la Habitación */}
-            <div className="room-reservations-tabs-bar">
-              <div className="room-reservations-tabs-header">
-                <span>🗓️ Reservas / Estadías de la Habitación ({movimientos.length})</span>
-                <span style={{ fontSize: '11px', color: '#64748b', textTransform: 'none' }}>
-                  {selectedMovimId === 'NUEVA' ? '➕ Creando nueva reserva' : '👁️ Viendo reserva seleccionada'}
-                </span>
-              </div>
-              <div className="room-reservations-tabs-list">
-                {movimientos.map((m) => {
-                  const isSelected = selectedMovimId === m.idMovim;
-                  const fIni = m.fechaReserva ? m.fechaReserva.split('T')[0] : 'Sin fecha';
-                  const fFin = m.fechaSalida ? m.fechaSalida.split('T')[0] : '';
-                  const guestName = m.huesped || 'Huésped';
-
-                  const now = new Date();
-                  const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-                  const isToday = fIni <= todayStr && (!fFin || fFin >= todayStr);
-
-                  return (
-                    <button
-                      key={m.idMovim}
-                      type="button"
-                      className={`room-reserva-tab-btn ${isSelected ? 'active' : ''}`}
-                      onClick={() => cargarMovimientoEnFormulario(m)}
-                      title={`Reserva de ${guestName}: del ${fIni} al ${fFin}`}
-                    >
-                      <span>{isToday ? '🟢 Hoy:' : '📅'}</span>
-                      <span className="tab-reserva-dates">{fIni}{fFin ? ` ➔ ${fFin}` : ''}</span>
-                    </button>
-                  );
-                })}
-
-                <button
-                  type="button"
-                  className={`room-reserva-tab-btn btn-nueva-reserva-tab ${selectedMovimId === 'NUEVA' ? 'active' : ''}`}
-                  onClick={iniciarNuevaReserva}
-                  title="Programar una nueva reserva para otros días en esta habitación"
+            {/* Barra con Selector de Reserva y Botón Nueva Reserva */}
+            <div className="room-reservations-selector-bar">
+              <div className="room-reservations-selector-group">
+                <label className="reservations-selector-label">
+                  🗓️ Reserva a gestionar:
+                </label>
+                <select
+                  className="reservations-dropdown-select"
+                  value={selectedMovimId ?? ''}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    if (val === 'NUEVA') {
+                      iniciarNuevaReserva();
+                    } else {
+                      const found = movimientos.find((m) => m.idMovim === Number(val));
+                      if (found) cargarMovimientoEnFormulario(found);
+                    }
+                  }}
                 >
-                  ➕ Nueva Reserva
-                </button>
+                  {movimientos.map((m) => {
+                    const fIni = m.fechaReserva ? m.fechaReserva.split('T')[0] : 'Sin fecha';
+                    const fFin = m.fechaSalida ? m.fechaSalida.split('T')[0] : '';
+                    const guestName = m.huesped || 'Huésped';
+
+                    const now = new Date();
+                    const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+                    const isToday = fIni <= todayStr && (!fFin || fFin >= todayStr);
+
+                    return (
+                      <option key={m.idMovim} value={m.idMovim}>
+                        {isToday ? '🟢 [Hoy] ' : '📅 '} {fIni} ➔ {fFin} · {guestName}
+                      </option>
+                    );
+                  })}
+                  {selectedMovimId === 'NUEVA' && (
+                    <option value="NUEVA">➕ [Creando Nueva Reserva...]</option>
+                  )}
+                </select>
               </div>
+
+              <button
+                type="button"
+                className={`btn-nueva-reserva-compact ${selectedMovimId === 'NUEVA' ? 'active' : ''}`}
+                onClick={iniciarNuevaReserva}
+                title="Programar una nueva reserva para otros días en esta habitación"
+              >
+                ➕ Nueva Reserva
+              </button>
             </div>
 
             <div className="modal-two-columns">
