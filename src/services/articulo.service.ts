@@ -163,14 +163,17 @@ export class ArticuloService {
                     };
                 });
 
+            const taivVal = r.taivCod ?? r.TAIVCOD ?? r.TAIV_COD ?? 0;
+            const ivaPorcVal = r.ivaPorc ?? r.IVAPORC ?? r.TAIV_PORC ?? 0;
+
             return {
                 codigo: cod,
                 descripcion: String(r.descripcion || r.ARTI_DES || '').trim(),
                 precio: parseFloat(r.precio || '0'),
                 unidad: String(r.unidad || r.ARTI_UNIDAD || 'UND').trim() || 'UND',
                 grinCod: String(r.grinCod || r.GRIN_COD || '').trim(),
-                taivCod: r.taivCod !== null && r.taivCod !== undefined ? parseInt(String(r.taivCod), 10) : 0,
-                ivaPorc: r.ivaPorc !== null && r.ivaPorc !== undefined ? parseFloat(String(r.ivaPorc)) : 0,
+                taivCod: parseInt(String(taivVal || '0'), 10) || 0,
+                ivaPorc: parseFloat(String(ivaPorcVal || '0')) || 0,
                 precios: preciosArticulo.length > 0 ? preciosArticulo : [
                     { liprCod: defaultLipr, listaNombre: 'DETAL', precio: parseFloat(r.precio || '0'), esPredeterminada: true }
                 ]

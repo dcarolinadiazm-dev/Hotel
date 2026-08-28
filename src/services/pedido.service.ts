@@ -838,8 +838,8 @@ export class PedidoService {
 
             // Consultar tarifa oficial de IVA del artículo en Firebird
             const { taivCod, ivaPorc: dbIvaPorc } = await ArticuloService.getTarifaIvaArticulo(it.articulo);
-            const ivaPorc = it.ivaPorc !== undefined && it.ivaPorc !== null ? parseFloat(String(it.ivaPorc)) : dbIvaPorc;
-            const tiva = it.tiva || taivCod || 0;
+            const ivaPorc = dbIvaPorc > 0 ? dbIvaPorc : (it.ivaPorc !== undefined && it.ivaPorc !== null ? parseFloat(String(it.ivaPorc)) : 0);
+            const tiva = taivCod || it.tiva || 0;
             const ivaMonto = ivaPorc > 0 ? Math.round(((totalItem / (100 + ivaPorc)) * ivaPorc) * 100) / 100 : 0;
             const subtotalBase = totalItem - ivaMonto;
 
