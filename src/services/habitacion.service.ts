@@ -109,14 +109,15 @@ export class HabitacionService {
                 return fRes > todayStr;
             }).length;
 
-            // Movimiento activo de hoy (si existe) o el primero activo
+            // Movimiento activo de hoy (si existe)
             const todayMov = allMovs.find(m => {
+                if (!m.FECHA_RESERVA) return false;
                 const fRes = String(m.FECHA_RESERVA).split('T')[0];
                 const fSal = m.FECHA_SALIDA ? String(m.FECHA_SALIDA).split('T')[0] : '';
                 return fRes <= todayStr && (!fSal || fSal >= todayStr);
             });
 
-            const activeMov = todayMov || allMovs[0] || null;
+            const activeMov = todayMov || null;
 
             let activeDinwId = (activeMov?.DINW_ID || activeMov?.PEWE_ID || activeMov?.ID_DOC || activeMov?.PEDI_ID) ? parseInt(String(activeMov.DINW_ID || activeMov.PEWE_ID || activeMov.ID_DOC || activeMov.PEDI_ID), 10) : undefined;
             let huesped = '';
@@ -124,7 +125,7 @@ export class HabitacionService {
             let fechaReserva = activeMov?.FECHA_RESERVA ? String(activeMov.FECHA_RESERVA).trim() : '';
             let fechaSalida = activeMov?.FECHA_SALIDA ? String(activeMov.FECHA_SALIDA).trim() : '';
 
-            // Consultar datos del cliente desde DOC_INVENTARIO_WEB si hay documento activo
+            // Consultar datos del cliente desde DOC_INVENTARIO_WEB solo si hay documento activo de hoy
             if (activeDinwId) {
                 const dinwRow = await db(tables.DOC_INVENTARIO_WEB)
                     .leftJoin(tables.TERCEROS, `${tables.DOC_INVENTARIO_WEB}.DINW_NIT`, '=', `${tables.TERCEROS}.TERC_NIT`)
@@ -151,31 +152,12 @@ export class HabitacionService {
                 }
             }
 
-            // Consultar ítems del borrador web de esta habitación desde DOC_INVENTARIO_DET_WEB
+            // Consultar ítems del borrador web solo si hay reserva activa de hoy
             let pendingDetails: any[] = [];
             if (activeDinwId) {
                 pendingDetails = await db(tables.DOC_INVENTARIO_DET_WEB)
                     .where({ DINW_ID: activeDinwId, DIWD_ANULADO: 'N' })
                     .select('DINW_ID', 'DIWD_CANT', 'DIWD_TOTAL');
-            } else {
-                pendingDetails = await db(tables.DOC_INVENTARIO_DET_WEB)
-                    .join(tables.DOC_INVENTARIO_WEB, `${tables.DOC_INVENTARIO_DET_WEB}.DINW_ID`, '=', `${tables.DOC_INVENTARIO_WEB}.DINW_ID`)
-                    .where(`${tables.DOC_INVENTARIO_DET_WEB}.DIWD_REF`, ref)
-                    .andWhere(function () {
-                        this.whereNull(`${tables.DOC_INVENTARIO_WEB}.DINW_IDDOC`)
-                            .orWhere(`${tables.DOC_INVENTARIO_WEB}.DINW_IDDOC`, 0);
-                    })
-                    .andWhere(`${tables.DOC_INVENTARIO_WEB}.DINW_ANULADO`, 'N')
-                    .andWhere(`${tables.DOC_INVENTARIO_DET_WEB}.DIWD_ANULADO`, 'N')
-                    .select(
-                        `${tables.DOC_INVENTARIO_DET_WEB}.DINW_ID`,
-                        `${tables.DOC_INVENTARIO_DET_WEB}.DIWD_CANT`,
-                        `${tables.DOC_INVENTARIO_DET_WEB}.DIWD_TOTAL`
-                    );
-
-                if (pendingDetails.length > 0) {
-                    activeDinwId = parseInt(String(pendingDetails[0].DINW_ID), 10);
-                }
             }
 
             const productos = pendingDetails.reduce((sum: number, it: any) => sum + parseInt(it.DIWD_CANT || '1', 10), 0);

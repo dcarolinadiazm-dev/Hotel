@@ -476,7 +476,7 @@ export const Habitaciones = ({
 
                   {/* Detalle Huésped o Código de Artículo y Precio de Lista */}
                   <div className="room-extra-info">
-                    {hab.huesped ? (
+                    {hab.estado === 'Ocupada' && hab.huesped ? (
                       <span className="room-guest-name" title={hab.huesped}>
                         👤 {hab.huesped}
                       </span>
@@ -504,22 +504,24 @@ export const Habitaciones = ({
                     )}
                   </div>
 
-                  {/* Indicador de Productos & Pedido Web */}
-                  <div className="room-product-indicator">
-                    {hab.productos > 0 ? (
-                      <span className="badge-con-productos">
-                        Con productos <span className="product-count-circle">{hab.productos}</span>
-                      </span>
-                    ) : (
-                      <span className="badge-sin-productos">Sin consumos</span>
-                    )}
+                  {/* Indicador de Productos & Pedido Web (solo cuando se encuentre ocupada) */}
+                  {hab.estado === 'Ocupada' && (
+                    <div className="room-product-indicator">
+                      {hab.productos > 0 ? (
+                        <span className="badge-con-productos">
+                          Con productos <span className="product-count-circle">{hab.productos}</span>
+                        </span>
+                      ) : (
+                        <span className="badge-sin-productos">Sin consumos</span>
+                      )}
 
-                    {hab.peweId && (
-                      <span className="badge-pewe-id" title={`Pedido Web activo #${hab.peweId}`}>
-                        WEB #{hab.peweId}
-                      </span>
-                    )}
-                  </div>
+                      {hab.peweId && (
+                        <span className="badge-pewe-id" title={`Pedido Web activo #${hab.peweId}`}>
+                          WEB #{hab.peweId}
+                        </span>
+                      )}
+                    </div>
+                  )}
                 </div>
               );
             })}
