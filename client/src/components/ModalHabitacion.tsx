@@ -1037,7 +1037,6 @@ export const ModalHabitacion = ({
                     >
                       <span>{isToday ? '🟢 Hoy:' : '📅'}</span>
                       <span className="tab-reserva-dates">{fIni}{fFin ? ` ➔ ${fFin}` : ''}</span>
-                      <span className="tab-guest-name">({guestName})</span>
                     </button>
                   );
                 })}
