@@ -13,7 +13,7 @@ export const dbOptions: any = {
     password: process.env.DB_PASSWORD || 'masterkey',
     pageSize: 4096,
     lowercase_keys: false,
-    charset: 'UTF8'
+    charset: process.env.DB_CHARSET || 'WIN1252'
 };
 
 // Instancia principal de Knex con el dialecto de Firebird

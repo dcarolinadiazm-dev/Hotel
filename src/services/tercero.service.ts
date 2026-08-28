@@ -20,7 +20,15 @@ export function calculaDigitoVerificacion(nit: string): string {
     return '';
 }
 
-export class TerceroService {
+export function cleanSpecialCharacters(text: string): string {
+    if (!text) return '';
+    return text
+        .normalize('NFC')
+        .replace(/\uFFFD/g, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
     // Listar los terceros que sean clientes (TERC_CLIE = 'S') ordenados por nombre
     static async getTerceros(): Promise<ITerceroDTO[]> {
         const rows = await db(tables.TERCEROS)
@@ -114,7 +122,7 @@ export class TerceroService {
             if (rows && rows.length > 0) {
                 return rows.map((r: any) => ({
                     cod: String(r.COD || r.cod || '').trim(),
-                    nombre: String(r.NOM || r.nom || '').trim(),
+                    nombre: cleanSpecialCharacters(String(r.NOM || r.nom || '')),
                     codShd: r.CODSHD || r.codshd ? String(r.CODSHD || r.codshd).trim() : ''
                 })).filter((item: any) => item.cod && item.nombre);
             }
@@ -160,8 +168,8 @@ export class TerceroService {
             if (rows && rows.length > 0) {
                 return rows.map((r: any) => ({
                     cod: String(r.cod || r.COD || '').trim(),
-                    nom: String(r.nom || r.NOM || '').trim(),
-                    dpto: r.dpto || r.DPTO ? String(r.dpto || r.DPTO).trim() : ''
+                    nom: cleanSpecialCharacters(String(r.nom || r.NOM || '')),
+                    dpto: cleanSpecialCharacters(String(r.dpto || r.DPTO || ''))
                 })).filter((c: any) => c.cod && c.nom);
             }
         } catch (e: any) {
