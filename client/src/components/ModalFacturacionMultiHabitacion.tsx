@@ -105,26 +105,40 @@ export const ModalFacturacionMultiHabitacion: React.FC<ModalFacturacionMultiHabi
               const dataHab = await resHab.json();
               const hNum = String(hab.numero || hab.id);
 
-              // Si tiene items en pendingDetails o cart
-              if (dataHab.pendingDetails && Array.isArray(dataHab.pendingDetails)) {
-                dataHab.pendingDetails.forEach((it: any) => {
-                  const cant = Number(it.DIWD_CANT || 1);
-                  const prunit = Number(it.DIWD_COSTO || it.DIWD_PRUNIT || 0);
-                  const dto = Number(it.DIWD_DTOMONTO || 0);
-                  const total = it.DIWD_TOTAL ? Number(it.DIWD_TOTAL) : cant * prunit - dto;
+              const roomItems = dataHab.items || (dataHab.movimientos && dataHab.movimientos[0]?.items) || [];
+              if (roomItems.length > 0) {
+                roomItems.forEach((it: any) => {
+                  const cant = Number(it.cantidad || it.DIWD_CANT || 1);
+                  const prunit = Number(it.precio || it.DIWD_COSTO || it.DIWD_PRUNIT || 0);
+                  const dto = Number(it.descuento || it.DIWD_DTOMONTO || 0);
+                  const total = it.subtotal ? Number(it.subtotal) : (it.DIWD_TOTAL ? Number(it.DIWD_TOTAL) : (cant * prunit - dto));
 
                   todosLosItems.push({
-                    id: it.DIWD_ITEM || Date.now() + Math.random(),
+                    id: it.id || it.DIWD_ITEM || Date.now() + Math.random(),
                     habId: hab.id,
                     habNumero: hNum,
-                    articulo: it.DIWD_ARTICULO || '001',
-                    descripcion: String(it.DIWD_DESCART || it.DIWD_ARTICULO || 'Consumo').trim(),
+                    articulo: it.articulo || it.DIWD_ARTICULO || '001',
+                    descripcion: String(it.articulo || it.DIWD_DESCART || it.DIWD_ARTICULO || 'Consumo').trim(),
                     cantidad: cant,
                     precio: prunit,
                     descuento: dto,
-                    ivaPorc: Number(it.DIWD_IVAPORC || 0),
+                    ivaPorc: Number(it.ivaPorc || it.DIWD_IVAPORC || 0),
                     subtotal: total,
                   });
+                });
+              } else if (dataHab.precioNoche && Number(dataHab.precioNoche) > 0) {
+                const pNoche = Number(dataHab.precioNoche);
+                todosLosItems.push({
+                  id: 1,
+                  habId: hab.id,
+                  habNumero: hNum,
+                  articulo: dataHab.artiCod || '001',
+                  descripcion: `Hospedaje Habitación ${hNum}`,
+                  cantidad: 1,
+                  precio: pNoche,
+                  descuento: 0,
+                  ivaPorc: 0,
+                  subtotal: pNoche,
                 });
               }
             }
@@ -252,35 +266,56 @@ export const ModalFacturacionMultiHabitacion: React.FC<ModalFacturacionMultiHabi
   const primerDoc = habitaciones[0]?.documento || 'Sin documento';
 
   return (
-    <div className="modal-overlay" style={{ zIndex: 1000 }}>
-      <div className="modal-container modal-multi-hab-container">
-        <div className="modal-header-multi">
-          <div className="modal-header-info">
-            <h2 className="modal-title-multi">
+    <div className="modal-backdrop" onClick={onClose} style={{ zIndex: 1050 }}>
+      <div
+        className="modal-card-dialog modal-card-large"
+        onClick={(e) => e.stopPropagation()}
+        style={{ maxHeight: '92vh', display: 'flex', flexDirection: 'column' }}
+      >
+        <div className="modal-dialog-header">
+          <div className="header-title-box">
+            <h2 className="modal-dialog-title">
               🧾 Facturación Consolidada de Múltiples Habitaciones
             </h2>
-            <span className="modal-subtitle-multi">
-              Habitaciones seleccionadas: <strong>{habitaciones.map((h) => `#${h.numero}`).join(' · ')}</strong>
+            <span className="badge-pewe-modal" style={{ background: '#2563eb' }}>
+              Habitaciones: {habitaciones.map((h) => `#${h.numero}`).join(' · ')}
             </span>
           </div>
-          <button type="button" className="btn-modal-close" onClick={onClose} disabled={processing}>
+          <button
+            type="button"
+            className="btn-modal-close-x"
+            onClick={onClose}
+            disabled={processing}
+            title="Cerrar ventana"
+          >
             ✕
           </button>
         </div>
 
         {error && (
-          <div className="modal-error-banner" style={{ margin: '16px' }}>
-            ⚠️ {error}
+          <div className="modal-action-feedback error" style={{ margin: '14px 28px 0 28px' }}>
+            <span>⚠️ {error}</span>
+            <button className="btn-close-feedback" onClick={() => setError(null)}>✕</button>
           </div>
         )}
 
         {loading ? (
-          <div className="rooms-loading-state" style={{ padding: '40px' }}>
+          <div className="modal-loading" style={{ padding: '40px', textAlign: 'center' }}>
             <div className="spinner"></div>
             <p>Consolidando consumos de las habitaciones seleccionadas...</p>
           </div>
         ) : (
-          <div className="modal-multi-content-body">
+          <div
+            className="modal-dialog-body"
+            style={{
+              overflowY: 'auto',
+              maxHeight: 'calc(92vh - 80px)',
+              padding: '16px 28px 20px 28px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '16px',
+            }}
+          >
             {/* Banner del Huésped / Empresa */}
             <div className="multi-guest-header-card">
               <div className="guest-col">

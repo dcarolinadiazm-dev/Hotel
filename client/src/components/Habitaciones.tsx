@@ -624,7 +624,7 @@ export const Habitaciones = ({
         )}
 
         {/* Barra Flotante de Facturación Múltiple */}
-        {selectedHabIds.length > 0 && (
+        {selectedHabIds.length > 0 && !showMultiFacturarModal && (
           <div className="multi-room-floating-bar">
             <div className="floating-bar-info">
               <span className="floating-bar-badge">
