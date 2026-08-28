@@ -10,6 +10,9 @@ router.post('/grabar-web', verifyToken, PedidoController.grabarPedidoWeb);
 // Enviar a facturar usando GRABE_PEDIDO_APP
 router.post('/enviar-facturar', verifyToken, PedidoController.enviarAFacturar);
 
+// Facturar venta directa de productos (POS sin habitación)
+router.post('/facturar-directo', verifyToken, PedidoController.facturarDirecto);
+
 // Agregar nuevo ítem al carrito de habitación
 router.post('/agregar-item', verifyToken, PedidoController.agregarConsumo);
 

@@ -53,6 +53,30 @@ export class PedidoController {
         }
     }
 
+    // POST /api/pedidos/facturar-directo
+    static async facturarDirecto(req: Request, res: Response) {
+        const { clienteNit, clienteNom, items, formaPagoId, prefijo, pagos, observaciones } = req.body;
+        if (!items || !Array.isArray(items) || items.length === 0) {
+            return res.status(400).json({ error: 'El carrito no contiene productos para facturar' });
+        }
+
+        try {
+            const resultado = await PedidoService.facturarDirecto(
+                clienteNit,
+                clienteNom,
+                items,
+                formaPagoId ? parseInt(String(formaPagoId), 10) : undefined,
+                prefijo ? String(prefijo).trim() : undefined,
+                pagos,
+                observaciones ? String(observaciones).trim() : undefined
+            );
+            res.json(resultado);
+        } catch (error: any) {
+            console.error('Error en PedidoController.facturarDirecto:', error.message);
+            res.status(500).json({ error: error.message || 'Error al facturar productos' });
+        }
+    }
+
     // POST /api/pedidos/agregar-item
     static async agregarConsumo(req: Request, res: Response) {
         const { habitacionId, item } = req.body;

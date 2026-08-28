@@ -737,6 +737,285 @@ export class PedidoService {
         };
     }
 
+    // 3.1 Facturación Directa de Productos (POS Directo sin Habitación)
+    static async facturarDirecto(
+        clienteNit: string,
+        clienteNom: string,
+        items: Array<{
+            articulo: string;
+            descripcion: string;
+            cantidad: number;
+            precio: number;
+            descuento?: number;
+            dtoPorc?: number;
+            ivaPorc?: number;
+            tiva?: number;
+            lista?: number;
+            unidad?: string;
+        }>,
+        formaPagoId?: number,
+        prefijoParam?: string,
+        pagosParam?: Array<{ formaPagoId: number; monto: number }>,
+        observacionesParam?: string
+    ) {
+        if (!items || items.length === 0) {
+            throw new Error('El carrito no contiene productos para facturar');
+        }
+
+        const nit = clienteNit ? String(clienteNit).trim() : '800003122';
+        const nom = clienteNom ? String(clienteNom).trim() : 'Cliente General';
+
+        // Asegurar que el tercero exista como cliente
+        try {
+            await TerceroService.ensureCliente(nit);
+        } catch (e: any) {
+            console.warn('Aviso asegurando cliente en facturarDirecto:', e.message);
+        }
+
+        // Obtener nuevo DINW_ID
+        const maxDinwRow = await db.raw('SELECT MAX(DINW_ID) AS MAXID FROM DOC_INVENTARIO_WEB');
+        const maxDinwRows = maxDinwRow.rows ? maxDinwRow.rows : (Array.isArray(maxDinwRow) ? maxDinwRow : [maxDinwRow]);
+        const maxDinwVal = maxDinwRows[0]?.MAXID ?? maxDinwRows[0]?.maxid ?? maxDinwRows[0]?.MAX ?? 0;
+        const dinwId = (parseInt(String(maxDinwVal || '0'), 10) || 0) + 1;
+
+        // Determinar pagos múltiples o forma de pago única
+        let listaPagos: Array<{ formaPagoId: number; monto: number }> = [];
+        if (pagosParam && Array.isArray(pagosParam) && pagosParam.length > 0) {
+            listaPagos = pagosParam.map(p => ({
+                formaPagoId: parseInt(String(p.formaPagoId), 10) || 1,
+                monto: parseFloat(String(p.monto)) || 0
+            }));
+        } else if (formaPagoId) {
+            listaPagos = [{
+                formaPagoId: parseInt(String(formaPagoId), 10) || 1,
+                monto: 0
+            }];
+        } else {
+            listaPagos = [{ formaPagoId: 1, monto: 0 }];
+        }
+
+        const primaryFopaId = listaPagos[0]?.formaPagoId || 1;
+
+        // Obtener prefijo de facturación
+        let prefijo = prefijoParam ? String(prefijoParam).trim() : '';
+        if (!prefijo) {
+            try {
+                const prefRow = await db(tables.PREFIJOS)
+                    .where('TIDO_COD', 31)
+                    .andWhere(function () {
+                        this.where('PREF_ACTIVO', 'S').orWhereNull('PREF_ACTIVO');
+                    })
+                    .first();
+                if (prefRow?.PREF_PRE) prefijo = String(prefRow.PREF_PRE).trim();
+            } catch (e) {
+                // Usar prefijo por defecto
+            }
+        }
+        if (!prefijo) prefijo = 'SETT';
+
+        const obsTexto = observacionesParam && observacionesParam.trim() ? observacionesParam.trim() : `Venta Directa - ${nom}`;
+        const obsString = sanitizeText(obsTexto);
+
+        // Calcular totales
+        let totalBase = 0;
+        let totalIva = 0;
+        let totalDoc = 0;
+
+        const preparedDetails = [];
+
+        for (let i = 0; i < items.length; i++) {
+            const it = items[i];
+            const cant = parseFloat(String(it.cantidad || '1'));
+            const prunit = parseFloat(String(it.precio || '0'));
+            const dtoMonto = parseFloat(String(it.descuento || '0'));
+            const dtoPorc = it.dtoPorc !== undefined ? parseFloat(String(it.dtoPorc)) : (prunit > 0 ? (dtoMonto / prunit) * 100 : 0);
+            const precioNeto = Math.max(0, prunit - dtoMonto);
+            const totalItem = precioNeto * cant;
+            const ivaPorc = parseFloat(String(it.ivaPorc ?? 19));
+            const tiva = it.tiva || 6;
+            const ivaMonto = Math.round(((totalItem / (1 + (ivaPorc / 100))) * (ivaPorc / 100)) * 100) / 100;
+            const subtotalBase = totalItem - ivaMonto;
+
+            totalBase += subtotalBase;
+            totalIva += ivaMonto;
+            totalDoc += totalItem;
+
+            preparedDetails.push({
+                DINW_ID: dinwId,
+                DIWD_ITEM: i + 1,
+                DIWD_ARTICULO: it.articulo,
+                DIWD_DESCART: truncateToBytes(it.descripcion || it.articulo, 100),
+                DIWD_CANT: cant,
+                DIWD_UNIDAD: it.unidad || 'UNIDAD',
+                DIWD_COSTO: prunit,
+                DIWD_PRUNIT: prunit,
+                DIWD_DTOPORC: Math.round(dtoPorc * 100) / 100,
+                DIWD_DTOMONTO: dtoMonto,
+                DIWD_IVAPORC: ivaPorc,
+                DIWD_TIVA: tiva,
+                DIWD_IVAMONTO: ivaMonto,
+                DIWD_TOTAL: totalItem,
+                DIWD_BODEGA: '01',
+                DIWD_ANULADO: 'N',
+                DIWD_FACTOR: 1,
+                DIWD_LISTA: it.lista || 1,
+                DIWD_REF: 'VENTA-DIRECTA'
+            });
+        }
+
+        if (listaPagos.length === 1 && (!listaPagos[0].monto || listaPagos[0].monto === 0)) {
+            listaPagos[0].monto = totalDoc;
+        }
+
+        // 1. Insertar encabezado DOC_INVENTARIO_WEB
+        await db(tables.DOC_INVENTARIO_WEB).insert({
+            DINW_ID: dinwId,
+            DINW_TIPO: 31,
+            DINW_PREF: prefijo,
+            DINW_BODEGA: '1',
+            DINW_FECHA: new Date(),
+            DINW_CONCEPTO: truncateToBytes(obsString, 55),
+            DINW_OBS: obsString,
+            DINW_NIT: nit,
+            DINW_BODDES: '1',
+            DINW_NUMERO: '00000001',
+            DINW_PTVTA: 1,
+            DINW_VEND: 1,
+            DINW_VENCE: new Date(),
+            DINW_FORMAP: primaryFopaId,
+            DINW_IMPINC: 'S',
+            DINW_IVAINC: 'S',
+            DINW_SUCURSAL: '01',
+            DINW_ANULADO: 'N',
+            DINW_BASE: Math.round(totalBase * 100) / 100,
+            DINW_IVAMONTO: Math.round(totalIva * 100) / 100,
+            DINW_MONTO: totalDoc,
+            DINW_CANAL: 1,
+            DINW_COBRADOR: 1
+        });
+
+        // 2. Insertar detalles
+        for (const det of preparedDetails) {
+            await db(tables.DOC_INVENTARIO_DET_WEB).insert(det);
+        }
+
+        // Garantizar consecutivo
+        try {
+            const maxReca = await db('RECIBOS_CAJA').max('RECA_NUMERO as MAXR').first();
+            const maxVal = parseInt(String(maxReca?.MAXR || '0'), 10) || 0;
+            const prefReca = await db(tables.PREFIJOS).where('TIDO_COD', 61).first();
+            const curVal = parseInt(String(prefReca?.PREF_ACTUAL || '0'), 10) || 0;
+            if (curVal <= maxVal) {
+                await db(tables.PREFIJOS).where('TIDO_COD', 61).update({
+                    PREF_ACTUAL: String(maxVal + 1).padStart(6, '0')
+                });
+            }
+        } catch (syncPrefErr) {
+            console.warn('Aviso sincronizando prefijo de recibos de caja:', syncPrefErr);
+        }
+
+        // 3. Ejecutar procedimiento almacenado GRABE_DOCUMENTO_INV_WEB(31, ID)
+        const spResult = await db.raw('SELECT * FROM GRABE_DOCUMENTO_INV_WEB(?, ?)', [31, dinwId]);
+        const resultRow = spResult.rows ? spResult.rows[0] : (Array.isArray(spResult) ? spResult[0] : spResult);
+
+        const idGenerado = resultRow?.IDDOC || resultRow?.iddoc;
+        const numDocGenerado = String(resultRow?.NUMDOC || resultRow?.numdoc || `${prefijo}-${dinwId}`).trim();
+        const nError = resultRow?.NERROR ?? resultRow?.nerror ?? 0;
+
+        if (nError !== 0 && nError !== null && !idGenerado) {
+            throw new Error(`Error en GRABE_DOCUMENTO_INV_WEB de Firebird (Código de error: ${nError})`);
+        }
+
+        // 4. Sincronizar FACTURAS, FACTURAS_DETALLE y FACTURAS_CONTADO_PAGO
+        if (idGenerado) {
+            try {
+                const subtotalFactura = Math.round((totalDoc - totalIva) * 100) / 100;
+                await db('FACTURAS')
+                    .where('FACT_ID', idGenerado)
+                    .update({
+                        FACT_TOTAL: totalDoc,
+                        FACT_IVAMONTO: totalIva,
+                        FACT_SUBTOTAL: subtotalFactura,
+                        FACT_FORMAP: primaryFopaId,
+                        FACT_OBS: obsString
+                    });
+
+                for (const sd of preparedDetails) {
+                    const baseItem = Math.round((sd.DIWD_TOTAL - sd.DIWD_IVAMONTO) * 100) / 100;
+                    await db('FACTURAS_DETALLE')
+                        .where({ FACT_ID: idGenerado, FADE_ITEM: sd.DIWD_ITEM })
+                        .update({
+                            FADE_DTOPORC: sd.DIWD_DTOPORC,
+                            FADE_DTOMONTO: sd.DIWD_DTOMONTO,
+                            FADE_TOTAL: sd.DIWD_TOTAL,
+                            FADE_IVAMONTO: sd.DIWD_IVAMONTO,
+                            FADE_BASE: baseItem
+                        });
+                }
+
+                // Sincronizar formas de pago
+                let codbco = '';
+                try {
+                    const ptvt = await db('PUNTO_VENTA').first();
+                    const cajaId = ptvt?.CAJA_ID ? parseInt(String(ptvt.CAJA_ID), 10) : 1;
+                    const cajaRow = await db('CAJAS').where('CAJA_ID', cajaId).first();
+                    if (cajaRow?.CAJA_FPBCO) codbco = String(cajaRow.CAJA_FPBCO).trim();
+                } catch (cajaErr) { }
+
+                await db('FACTURAS_CONTADO_PAGO').where('FCNT_ID', idGenerado).del();
+
+                for (let i = 0; i < listaPagos.length; i++) {
+                    const p = listaPagos[i];
+                    const isEfectivo = p.formaPagoId === 1;
+                    let numBco = '';
+                    if (!isEfectivo && codbco) {
+                        try {
+                            const maxRcpa = await db('RECIBOS_CAJA_PAGO')
+                                .where({ RCPA_BANCO: codbco, RCPA_CUENTA: '9999' })
+                                .max('RCPA_NUMERO as MAXN')
+                                .first();
+                            const maxDpca = await db('DOCUMENTOS_PAGO_CAJA')
+                                .where({ FOPA_ID: p.formaPagoId })
+                                .max('DPCA_NUMERO as MAXD')
+                                .first();
+                            const maxVal = Math.max(
+                                parseInt(String(maxRcpa?.MAXN || '0'), 10) || 0,
+                                parseInt(String(maxDpca?.MAXD || '0'), 10) || 0
+                            );
+                            numBco = String(maxVal + 1 + i).padStart(6, '0');
+                        } catch (e) {
+                            numBco = '000001';
+                        }
+                    }
+
+                    await db('FACTURAS_CONTADO_PAGO').insert({
+                        FCNT_ID: idGenerado,
+                        FCNP_ITEM: i + 1,
+                        FOPA_ID: p.formaPagoId,
+                        FCNP_BANCO: isEfectivo ? '' : codbco,
+                        FCNP_CUENTA: isEfectivo ? '' : '9999',
+                        FCNP_NUMERO: isEfectivo ? '' : numBco,
+                        FCNP_FECHA: new Date(),
+                        FCNP_MONTO: p.monto,
+                        FCNP_ANULADO: 'N',
+                        FCNP_CERRADO: 'N'
+                    });
+                }
+            } catch (syncErr: any) {
+                console.error('Error sincronizando facturarDirecto:', syncErr.message);
+            }
+        }
+
+        return {
+            idDoc: idGenerado,
+            numDoc: numDocGenerado,
+            total: totalDoc,
+            totalBase,
+            totalIva,
+            mensaje: `Factura de Venta #${numDocGenerado} generada exitosamente.`
+        };
+    }
+
     // 4. Reporte de Facturas de Venta consultando directamente la tabla FACTURAS
     static async getReportePedidos(fechaDesde?: string, fechaHasta?: string): Promise<{ pedidos: any[]; totales: { totalArticulos: number; totalVentas: number; totalesPorFormaPago?: { [key: string]: number } } }> {
         let query = db('FACTURAS as F')

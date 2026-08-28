@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { ModalCrearHabitacion } from './ModalCrearHabitacion';
+import { ModalFacturacionDirecta } from './ModalFacturacionDirecta';
 
 export interface Habitacion {
   id: string;
@@ -48,6 +49,7 @@ export const Habitaciones = ({
   const [error, setError] = useState<string | null>(null);
   const [filtroEstado, setFiltroEstado] = useState<FiltroEstado>('DISPONIBLE');
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showFacturarDirectoModal, setShowFacturarDirectoModal] = useState(false);
   const [habitacionAEditar, setHabitacionAEditar] = useState<Habitacion | null>(null);
   const [localSidebarOpen, setLocalSidebarOpen] = useState(false);
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
@@ -340,6 +342,13 @@ export const Habitaciones = ({
               >
                 + Crear Habitación
               </button>
+              <button
+                className="btn-facturar-inline"
+                onClick={() => setShowFacturarDirectoModal(true)}
+                title="Facturar productos sin habitación (Venta directa / POS)"
+              >
+                🧾 Facturar
+              </button>
             </div>
             <p className="rooms-subtitle">Gestión en tiempo real de habitaciones</p>
           </div>
@@ -519,6 +528,15 @@ export const Habitaciones = ({
               setHabitacionAEditar(null);
             }}
             onSaved={() => fetchHabitaciones()}
+          />
+        )}
+
+        {/* Modal de Facturación Directa de Productos (POS) */}
+        {showFacturarDirectoModal && (
+          <ModalFacturacionDirecta
+            isOpen={showFacturarDirectoModal}
+            onClose={() => setShowFacturarDirectoModal(false)}
+            onFacturaGenerada={() => fetchHabitaciones()}
           />
         )}
       </div>
