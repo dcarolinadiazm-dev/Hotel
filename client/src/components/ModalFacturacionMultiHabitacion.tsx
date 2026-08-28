@@ -76,8 +76,8 @@ export const ModalFacturacionMultiHabitacion: React.FC<ModalFacturacionMultiHabi
       try {
         // 1. Cargar prefijos y formas de pago
         const [resPref, resFormas] = await Promise.all([
-          fetch('/api/pedidos/prefijos-factura', { credentials: 'omit', headers: { Authorization: `Bearer ${token}` } }),
-          fetch('/api/pagos/formas-pago', { credentials: 'omit', headers: { Authorization: `Bearer ${token}` } }),
+          fetch('/api/pedidos/prefijos-factura', { headers: { Authorization: `Bearer ${token}` } }),
+          fetch('/api/abonos/formas-pago', { headers: { Authorization: `Bearer ${token}` } }),
         ]);
 
         if (resPref.ok) {
@@ -87,9 +87,13 @@ export const ModalFacturacionMultiHabitacion: React.FC<ModalFacturacionMultiHabi
           setSelectedPrefijo(defaultPref);
         }
 
+        let loadedFormas: FormaPagoItem[] = [];
         if (resFormas.ok) {
           const fData = await resFormas.json();
-          setFormasPago(fData);
+          loadedFormas = Array.isArray(fData) ? fData : (fData?.formasPago || []);
+          if (Array.isArray(loadedFormas) && loadedFormas.length > 0) {
+            setFormasPago(loadedFormas);
+          }
         }
 
         // 2. Cargar detalles de cada habitación seleccionada
@@ -155,7 +159,7 @@ export const ModalFacturacionMultiHabitacion: React.FC<ModalFacturacionMultiHabi
         setLineasPago([
           {
             id: 1,
-            formaPagoId: 1, // Efectivo
+            formaPagoId: loadedFormas[0]?.id || 1, // Efectivo o primera forma
             monto: totalCalculado,
           },
         ]);
