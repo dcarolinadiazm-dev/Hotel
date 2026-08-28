@@ -170,19 +170,61 @@ export const Habitaciones = ({
     return 'status-disponible';
   };
 
-  const toggleSelectHab = (e: React.MouseEvent, id: string) => {
+  const toggleSelectHab = (e: React.MouseEvent, targetHab: Habitacion) => {
     e.stopPropagation();
-    setSelectedHabIds((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
-    );
+    const isCurrentlySelected = selectedHabIds.includes(targetHab.id);
+
+    if (isCurrentlySelected) {
+      setSelectedHabIds((prev) => prev.filter((x) => x !== targetHab.id));
+      return;
+    }
+
+    // Validar que todas las habitaciones seleccionadas pertenezcan al mismo huésped/empresa
+    if (selectedHabIds.length > 0) {
+      const alreadySelected = habitaciones.filter((h) => selectedHabIds.includes(h.id));
+      const firstDoc = (alreadySelected[0]?.documento || '').trim().toLowerCase();
+      const firstHuesped = (alreadySelected[0]?.huesped || '').trim().toLowerCase();
+      const targetDoc = (targetHab.documento || '').trim().toLowerCase();
+      const targetHuesped = (targetHab.huesped || '').trim().toLowerCase();
+
+      const sameDoc = firstDoc && targetDoc && firstDoc === targetDoc;
+      const sameHuesped = firstHuesped && targetHuesped && firstHuesped === targetHuesped;
+
+      if (!sameDoc && !sameHuesped && (firstDoc || targetDoc || firstHuesped || targetHuesped)) {
+        alert(
+          `⚠️ No se pueden consolidar habitaciones de diferentes clientes en una sola factura.\n\n` +
+          `Cliente actual: ${alreadySelected[0]?.huesped || 'Sin nombre'} (${alreadySelected[0]?.documento || 'Sin doc'})\n` +
+          `Habitación #${targetHab.numero}: ${targetHab.huesped || 'Sin nombre'} (${targetHab.documento || 'Sin doc'})`
+        );
+        return;
+      }
+    }
+
+    setSelectedHabIds((prev) => [...prev, targetHab.id]);
   };
 
   const handleSelectAllFilteredOccupied = () => {
-    const occupiedIds = occupiedFiltered.map((h) => h.id);
-    if (selectedHabIds.length === occupiedIds.length && occupiedIds.length > 0) {
+    const occupied = occupiedFiltered;
+    if (occupied.length === 0) return;
+
+    const firstDoc = (occupied[0]?.documento || '').trim().toLowerCase();
+    const firstHuesped = (occupied[0]?.huesped || '').trim().toLowerCase();
+
+    // Seleccionar solo aquellas que tengan coincidencia de cliente con la primera
+    const sameClientHabs = occupied.filter((h) => {
+      const doc = (h.documento || '').trim().toLowerCase();
+      const nom = (h.huesped || '').trim().toLowerCase();
+      if (firstDoc && doc) return doc === firstDoc;
+      if (firstHuesped && nom) return nom === firstHuesped;
+      return true;
+    });
+
+    const sameClientIds = sameClientHabs.map((h) => h.id);
+
+    if (selectedHabIds.length === sameClientIds.length && sameClientIds.length > 0) {
       setSelectedHabIds([]);
     } else {
-      setSelectedHabIds(occupiedIds);
+      setSelectedHabIds(sameClientIds);
     }
   };
 
@@ -411,7 +453,10 @@ export const Habitaciones = ({
                   <button
                     type="button"
                     className="btn-clear-guest-search"
-                    onClick={() => setBusquedaHuesped('')}
+                    onClick={() => {
+                      setBusquedaHuesped('');
+                      setSelectedHabIds([]);
+                    }}
                     title="Limpiar búsqueda"
                   >
                     ✕
@@ -509,6 +554,7 @@ export const Habitaciones = ({
               const isOcupada = hab.estado === 'Ocupada';
               const isLocked = isReservada || isOcupada;
               const isSelected = selectedHabIds.includes(hab.id);
+              const hasFiltroActivo = busquedaHuesped.trim().length > 0;
 
               return (
                 <div
@@ -518,10 +564,10 @@ export const Habitaciones = ({
                 >
                   <div className="room-card-top-bar">
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      {isOcupada && (
+                      {isOcupada && hasFiltroActivo && (
                         <div
                           className={`room-checkbox-selector ${isSelected ? 'checked' : ''}`}
-                          onClick={(e) => toggleSelectHab(e, hab.id)}
+                          onClick={(e) => toggleSelectHab(e, hab)}
                           title={isSelected ? 'Deseleccionar habitación' : 'Seleccionar habitación para facturación conjunta'}
                         >
                           <input
