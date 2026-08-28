@@ -201,7 +201,7 @@ if (TIPO = 31) then
 
         DO
         BEGIN
-        TOTAL = COSTO * CANT;
+        TOTAL = (COSTO - (COSTO * (COALESCE(DTOPORC, 0) / 100))) * CANT;
         SELECT ARTI_CONSUMO, TAIV_COD, ARTI_DES, ARTI_DESVAR FROM ARTICULO A WHERE ARTI_COD = :articulo INTO :consumo, :TIVA, :descriparti, :DESVAR;
 
         /* Descripcion variable */

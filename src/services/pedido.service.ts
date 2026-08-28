@@ -582,23 +582,28 @@ export class PedidoService {
                         FACT_FORMAP: primaryFopaId
                     });
 
-                // Sincronizar FADE_DTOPORC y FADE_DTOMONTO en FACTURAS_DETALLE
+                // Sincronizar FADE_DTOPORC, FADE_DTOMONTO, FADE_TOTAL y FADE_IVAMONTO en FACTURAS_DETALLE
                 try {
                     const sourceDets = await db(tables.DOC_INVENTARIO_DET_WEB)
                         .where({ DINW_ID: dinwId, DIWD_ANULADO: 'N' })
-                        .select('DIWD_ITEM', 'DIWD_DTOPORC', 'DIWD_DTOMONTO');
+                        .select('DIWD_ITEM', 'DIWD_DTOPORC', 'DIWD_DTOMONTO', 'DIWD_TOTAL', 'DIWD_IVAMONTO');
                     for (const sd of sourceDets) {
-                        if (Number(sd.DIWD_DTOPORC || 0) > 0 || Number(sd.DIWD_DTOMONTO || 0) > 0) {
-                            await db('FACTURAS_DETALLE')
-                                .where({ FACT_ID: idGenerado, FADE_ITEM: sd.DIWD_ITEM })
-                                .update({
-                                    FADE_DTOPORC: sd.DIWD_DTOPORC || 0,
-                                    FADE_DTOMONTO: sd.DIWD_DTOMONTO || 0
-                                });
-                        }
+                        const dtoporc = Number(sd.DIWD_DTOPORC || 0);
+                        const dtomonto = Number(sd.DIWD_DTOMONTO || 0);
+                        const totalItem = Number(sd.DIWD_TOTAL || 0);
+                        const ivaMonto = Number(sd.DIWD_IVAMONTO || 0);
+
+                        await db('FACTURAS_DETALLE')
+                            .where({ FACT_ID: idGenerado, FADE_ITEM: sd.DIWD_ITEM })
+                            .update({
+                                FADE_DTOPORC: dtoporc,
+                                FADE_DTOMONTO: dtomonto,
+                                FADE_TOTAL: totalItem,
+                                FADE_IVAMONTO: ivaMonto
+                            });
                     }
                 } catch (dtoErr: any) {
-                    console.warn('Aviso sincronizando FADE_DTOPORC/FADE_DTOMONTO:', dtoErr.message);
+                    console.warn('Aviso sincronizando FADE_DTOPORC/FADE_DTOMONTO/FADE_TOTAL:', dtoErr.message);
                 }
 
                 // Obtener caja del punto de venta
