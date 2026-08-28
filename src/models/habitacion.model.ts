@@ -28,6 +28,8 @@ export interface IHabitacionDTO {
     fechaReserva?: string;
     fechaSalida?: string;
     precioNoche?: number;
+    descuento?: number;
+    dtoPorc?: number;
     caracteristicas?: string;
     observaciones?: string;
     peweId?: number;

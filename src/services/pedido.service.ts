@@ -582,6 +582,25 @@ export class PedidoService {
                         FACT_FORMAP: primaryFopaId
                     });
 
+                // Sincronizar FADE_DTOPORC y FADE_DTOMONTO en FACTURAS_DETALLE
+                try {
+                    const sourceDets = await db(tables.DOC_INVENTARIO_DET_WEB)
+                        .where({ DINW_ID: dinwId, DIWD_ANULADO: 'N' })
+                        .select('DIWD_ITEM', 'DIWD_DTOPORC', 'DIWD_DTOMONTO');
+                    for (const sd of sourceDets) {
+                        if (Number(sd.DIWD_DTOPORC || 0) > 0 || Number(sd.DIWD_DTOMONTO || 0) > 0) {
+                            await db('FACTURAS_DETALLE')
+                                .where({ FACT_ID: idGenerado, FADE_ITEM: sd.DIWD_ITEM })
+                                .update({
+                                    FADE_DTOPORC: sd.DIWD_DTOPORC || 0,
+                                    FADE_DTOMONTO: sd.DIWD_DTOMONTO || 0
+                                });
+                        }
+                    }
+                } catch (dtoErr: any) {
+                    console.warn('Aviso sincronizando FADE_DTOPORC/FADE_DTOMONTO:', dtoErr.message);
+                }
+
                 // Obtener caja del punto de venta
                 let cajaId = 1;
                 let codbco = '';

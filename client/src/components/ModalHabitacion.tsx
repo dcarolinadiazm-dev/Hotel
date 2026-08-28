@@ -76,6 +76,7 @@ export const ModalHabitacion = ({
   const [fechaReserva, setFechaReserva] = useState<string>('');
   const [fechaSalida, setFechaSalida] = useState<string>('');
   const [precioNoche, setPrecioNoche] = useState<number | string>(0);
+  const [descuentoNoche, setDescuentoNoche] = useState<number | string>(0);
   const [caracteristicas, setCaracteristicas] = useState<string>('');
   const [observaciones, setObservaciones] = useState<string>('');
   const [totalAbonos, setTotalAbonos] = useState<number>(0);
@@ -257,6 +258,7 @@ export const ModalHabitacion = ({
         setFechaReserva(toDatetimeLocal(data.fechaReserva) || getCurrentDatetimeLocal(0));
         setFechaSalida(toDatetimeLocal(data.fechaSalida) || getCurrentDatetimeLocal(24));
         setPrecioNoche(data.precioNoche || 0);
+        setDescuentoNoche(data.descuento || 0);
         if (data.liprCod) {
           setRoomLiprCod(data.liprCod);
         }
@@ -494,7 +496,7 @@ export const ModalHabitacion = ({
       setShowNewClientForm(false);
       setActionFeedback({
         type: 'success',
-        message: `✅ Cliente "${calculatedName}" registrado exitosamente en Firebird`,
+        message: `✅ Cliente "${calculatedName}" registrado exitosamente.`,
       });
     } catch (err: any) {
       setClientError(err.message || 'Error al conectar con el servidor');
@@ -837,6 +839,7 @@ export const ModalHabitacion = ({
           fechaReserva,
           fechaSalida,
           precioNoche: Number(precioNoche),
+          descuento: Number(descuentoNoche) || 0,
           liprCod: roomLiprCod,
           dias: diasCalculados,
           cantidad: diasCalculados,
@@ -1226,7 +1229,7 @@ export const ModalHabitacion = ({
                   </div>
                 </div>
 
-                {/* 4. Lista de Precios, Precio por noche & Características */}
+                {/* 4. Lista de Precios, Precio por noche, Descuento ($) & Características */}
                 <div className="modal-form-row">
                   <div className="modal-form-group flex-1">
                     <label className="modal-form-label">Lista de Precios:</label>
@@ -1256,6 +1259,27 @@ export const ModalHabitacion = ({
                       onChange={(e) => {
                         const raw = e.target.value.replace(/\D/g, '');
                         setPrecioNoche(raw ? parseInt(raw, 10) : 0);
+                      }}
+                      placeholder="0"
+                    />
+                  </div>
+
+                  <div className="modal-form-group flex-1">
+                    <label className="modal-form-label">
+                      Descuento ($):
+                      {Number(precioNoche || 0) > 0 && Number(descuentoNoche || 0) > 0 && (
+                        <span style={{ fontSize: '0.82rem', color: '#16a34a', fontWeight: 'bold', marginLeft: '6px' }}>
+                          ({Math.round(((Number(descuentoNoche) / Number(precioNoche)) * 100) * 100) / 100}%)
+                        </span>
+                      )}
+                    </label>
+                    <input
+                      type="text"
+                      className="modal-form-input"
+                      value={Number(descuentoNoche || 0).toLocaleString('es-CO')}
+                      onChange={(e) => {
+                        const raw = e.target.value.replace(/\D/g, '');
+                        setDescuentoNoche(raw ? parseInt(raw, 10) : 0);
                       }}
                       placeholder="0"
                     />

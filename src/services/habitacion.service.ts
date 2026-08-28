@@ -233,6 +233,12 @@ export class HabitacionService {
         const precioNoche = (roomDetail?.DIWD_COSTO !== undefined && roomDetail?.DIWD_COSTO !== null)
             ? parseFloat(String(roomDetail.DIWD_COSTO))
             : (roomDetail?.DIWD_PRUNIT ? parseFloat(String(roomDetail.DIWD_PRUNIT)) : parseFloat(hab.PRECIO_CALCULADO || '0'));
+        const descuento = (roomDetail?.DIWD_DTOMONTO !== undefined && roomDetail?.DIWD_DTOMONTO !== null)
+            ? parseFloat(String(roomDetail.DIWD_DTOMONTO))
+            : 0;
+        const dtoPorc = (roomDetail?.DIWD_DTOPORC !== undefined && roomDetail?.DIWD_DTOPORC !== null)
+            ? parseFloat(String(roomDetail.DIWD_DTOPORC))
+            : 0;
 
         return {
             id: habId,
@@ -246,6 +252,8 @@ export class HabitacionService {
             fechaReserva,
             fechaSalida,
             precioNoche,
+            descuento,
+            dtoPorc,
             liprCod,
             caracteristicas: (hab.CARACTERISTICAS || hab.caracteristicas) ? String(hab.CARACTERISTICAS || hab.caracteristicas).trim() : '',
             observaciones: (hab.NOTAS || hab.observaciones) ? String(hab.NOTAS || hab.observaciones).trim() : '',
@@ -429,12 +437,16 @@ export class HabitacionService {
 
             // Consultar tarifa de IVA del artículo vinculado
             const { taivCod, ivaPorc } = await ArticuloService.getTarifaIvaArticulo(artiCod);
-            // El precio de la habitación es el valor total pactado (con IVA incluido)
-            const nuevoItemTotal = precioFinal * cantidadDias;
+            
+            // Cálculo de Descuento por noche y porcentaje DIWD_DTOPORC
+            const dtoMonto = parseFloat(String(data.descuento || data.dtoMonto || data.descuentoMonto || 0)) || 0;
+            const dtoPorc = precioFinal > 0 && dtoMonto > 0 ? Math.round(((dtoMonto / precioFinal) * 100) * 10000) / 10000 : 0;
+            const precioConDescuento = Math.max(0, precioFinal - dtoMonto);
+            const nuevoItemTotal = precioConDescuento * cantidadDias;
             const ivaItemMonto = ivaPorc > 0 ? Math.round(((nuevoItemTotal / (100 + ivaPorc)) * ivaPorc) * 100) / 100 : 0;
 
             if (existingRoomItem) {
-                // Actualizar ítem existente de la habitación con los nuevos días, precio e IVA
+                // Actualizar ítem existente de la habitación con los nuevos días, precio, descuento e IVA
                 await db(tables.DOC_INVENTARIO_DET_WEB)
                     .where('DINW_ID', dinwId)
                     .andWhere('DIWD_ITEM', existingRoomItem.DIWD_ITEM)
@@ -442,6 +454,8 @@ export class HabitacionService {
                         DIWD_CANT: cantidadDias,
                         DIWD_COSTO: precioFinal,
                         DIWD_PRUNIT: precioFinal,
+                        DIWD_DTOPORC: dtoPorc,
+                        DIWD_DTOMONTO: dtoMonto,
                         DIWD_IVAPORC: ivaPorc,
                         DIWD_IVAMONTO: ivaItemMonto,
                         DIWD_TOTAL: nuevoItemTotal,
@@ -471,7 +485,8 @@ export class HabitacionService {
                     DIWD_REF: `HAB-${habNumero}`,
                     DIWD_ANULADO: 'N',
                     DIWD_OBS: '',
-                    DIWD_DTOPORC: 0,
+                    DIWD_DTOPORC: dtoPorc,
+                    DIWD_DTOMONTO: dtoMonto,
                     DIWD_BODEGA: '01',
                     DIWD_TIVA: taivCod,
                     DIWD_CONSUMO: 0,
