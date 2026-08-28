@@ -889,18 +889,15 @@ export const ModalHabitacion = ({
   })();
 
   // Validaciones obligatorias para habilitar el botón de Guardar
-  const isEstadoReserva = estado === 'Reservada' || estado === 'Ocupada';
   const hasHuesped = Boolean((documento && documento.trim() !== '') || (huesped && huesped.trim() !== ''));
   const hasFechaEntrada = Boolean(fechaReserva && fechaReserva.trim() !== '');
   const hasFechaSalida = Boolean(fechaSalida && fechaSalida.trim() !== '');
   const hasPrecioNoche = Number(precioNoche || 0) > 0;
 
-  const isFormValid = isEstadoReserva && hasHuesped && hasFechaEntrada && hasFechaSalida && hasPrecioNoche;
+  const isFormValid = hasHuesped && hasFechaEntrada && hasFechaSalida && hasPrecioNoche;
 
   let validationReason = '';
-  if (!isEstadoReserva) {
-    validationReason = 'El estado debe estar en "Reservada" u "Ocupada" para guardar';
-  } else if (!hasHuesped) {
+  if (!hasHuesped) {
     validationReason = 'Debes seleccionar un Huésped / Cliente';
   } else if (!hasFechaEntrada) {
     validationReason = 'Debes registrar la Fecha y hora de entrada';
@@ -1224,10 +1221,16 @@ export const ModalHabitacion = ({
                       value={fechaReserva}
                       onChange={(e) => setFechaReserva(e.target.value)}
                     />
-                    {isReservaParaHoy && (
-                      <span style={{ display: 'block', marginTop: '4px', fontSize: '11px', color: '#dc2626', fontWeight: 700 }}>
-                        ⚡ Inicia hoy: Al guardar quedará en estado <strong>OCUPADA</strong>.
-                      </span>
+                    {fechaReserva && (
+                      isReservaParaHoy ? (
+                        <span style={{ display: 'block', marginTop: '4px', fontSize: '11px', color: '#dc2626', fontWeight: 700 }}>
+                          ⚡ Inicia hoy: Al guardar quedará en estado <strong>OCUPADA</strong>.
+                        </span>
+                      ) : (
+                        <span style={{ display: 'block', marginTop: '4px', fontSize: '11px', color: '#059669', fontWeight: 700 }}>
+                          📅 Reserva futura: La habitación permanecerá <strong>DISPONIBLE</strong> hoy y pasará a <strong>OCUPADA</strong> automáticamente el día de su inicio.
+                        </span>
+                      )
                     )}
                   </div>
 
