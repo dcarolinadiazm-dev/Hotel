@@ -551,6 +551,20 @@ export class PedidoService {
         const clienteNit = dinwHeader?.DINW_NIT || nit;
         const clienteNom = nombreCliente;
 
+        // Asegurar que el cliente exista en TERCEROS y CLIENTES para evitar exception CLIENTE_NO_EXISTE
+        const existingTercero = await db(tables.TERCEROS).where('TERC_NIT', clienteNit).first();
+        if (!existingTercero) {
+            try {
+                await db(tables.TERCEROS).insert({
+                    TERC_NIT: clienteNit,
+                    TERC_NOM: clienteNom || 'Huésped General',
+                    TERC_CLIE: 'S',
+                    TERC_ESTADO: 'A'
+                });
+            } catch (e) {}
+        }
+        await TerceroService.ensureCliente(clienteNit);
+
         // Tipo de documento exclusivo: 31 = Factura de Venta
         const tipoCodigo = 31;
         const docNombre = 'Factura de Venta';
@@ -1533,17 +1547,55 @@ export class PedidoService {
             }
         }
 
-        // Obtener cliente del primer registro
-        const primerHab = habs[0];
-        const nit = primerHab?.DOCUMENTO ? String(primerHab.DOCUMENTO).trim() : '800003122';
-        const nombreCliente = primerHab?.HUESPED ? String(primerHab.HUESPED).trim() : 'Huésped General';
+        // Obtener cliente del primer registro o de sus movimientos activos
+        let nit = '800003122';
+        let nombreCliente = 'Huésped General';
+
+        for (const h of habs) {
+            if (h.DOCUMENTO && String(h.DOCUMENTO).trim()) {
+                nit = String(h.DOCUMENTO).trim();
+                nombreCliente = String(h.HUESPED || '').trim() || nombreCliente;
+                break;
+            }
+        }
+
+        if (nit === '800003122') {
+            for (const h of habs) {
+                const mov = await db(tables.HABITACION_MOVIM)
+                    .where('ID_HABITACION', String(h.ID_HABITACION))
+                    .andWhere(function () {
+                        this.where('ESTADO', 'Activo').orWhereNull('ESTADO');
+                    })
+                    .orderBy('ID_MOVIM', 'desc')
+                    .first();
+                if (mov?.DOCUMENTO && String(mov.DOCUMENTO).trim()) {
+                    nit = String(mov.DOCUMENTO).trim();
+                    nombreCliente = String(mov.HUESPED || '').trim() || nombreCliente;
+                    break;
+                }
+            }
+        }
+
+        // Asegurar que el cliente exista en TERCEROS y CLIENTES para evitar exception CLIENTE_NO_EXISTE en Firebird
+        const existingTercero = await db(tables.TERCEROS).where('TERC_NIT', nit).first();
+        if (!existingTercero) {
+            try {
+                await db(tables.TERCEROS).insert({
+                    TERC_NIT: nit,
+                    TERC_NOM: nombreCliente || 'Huésped General',
+                    TERC_CLIE: 'S',
+                    TERC_ESTADO: 'A'
+                });
+            } catch (e) {}
+        }
+        await TerceroService.ensureCliente(nit);
 
         const habsNumeros = habs.map(h => String(h.NUMERO || h.ID_HABITACION).trim()).join(', ');
         const conceptoConsolidado = truncateToBytes(`Factura Consolidada Habs ${habsNumeros} - ${nombreCliente}`, 55);
         const obsGeneral = observacionesParam?.trim() || `Factura Consolidada Habs: ${habsNumeros} - ${nombreCliente}`;
 
-        // Obtener punto de venta, sucursal, etc.
-        let sucursal = '01';
+        // Obtener punto de venta, canal, vendedor, etc.
+        const sucursal = '01'; // Sucursal estándar del cliente en SYSPLUS
         let canal = 1;
         let vend = 1;
         let cobrador = 1;
@@ -1552,7 +1604,6 @@ export class PedidoService {
         try {
             const ptvt = await db('PUNTO_VENTA').first();
             if (ptvt) {
-                if (ptvt.SUCU_COD) sucursal = String(ptvt.SUCU_COD).trim();
                 if (ptvt.CANAL_COD) canal = parseInt(String(ptvt.CANAL_COD), 10) || 1;
                 if (ptvt.EMPL_COD) vend = parseInt(String(ptvt.EMPL_COD), 10) || 1;
                 if (ptvt.PTVT_COBRADOR) cobrador = parseInt(String(ptvt.PTVT_COBRADOR), 10) || 1;

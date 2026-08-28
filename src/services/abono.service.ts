@@ -185,6 +185,24 @@ export class AbonoService {
         };
     }
 
+    // Obtener la suma de abonos no anulados para un movimiento o reserva
+    static async getTotalAbonos(idMovimOrDinw: number): Promise<number> {
+        try {
+            const row: any = await db(tables.HABITACION_MOVIM_ANTICIPOS)
+                .join(tables.ANTICIPOS_CLIENTE, `${tables.HABITACION_MOVIM_ANTICIPOS}.ANCL_ID`, `${tables.ANTICIPOS_CLIENTE}.ANCL_ID`)
+                .where(`${tables.HABITACION_MOVIM_ANTICIPOS}.ID_MOVIM`, idMovimOrDinw)
+                .andWhere(function () {
+                    this.where(`${tables.ANTICIPOS_CLIENTE}.ANCL_ANULADO`, '!=', 'S')
+                        .orWhereNull(`${tables.ANTICIPOS_CLIENTE}.ANCL_ANULADO`);
+                })
+                .select(db.raw(`SUM(COALESCE(${tables.ANTICIPOS_CLIENTE}.ANCL_BASE, 0)) as "TOTAL"`))
+                .first();
+            return parseFloat(String(row?.TOTAL || '0'));
+        } catch (e) {
+            return 0;
+        }
+    }
+
     // 3. Registrar Abono en las 4 Tablas de Firebird + HABITACION_MOVIM_ANTICIPOS
     static async registrarAbono(payload: RegistrarAbonoPayload) {
         const { idHabitacion, tercNit, monto, fopaId, concepto, nombreCliente, usuario } = payload;

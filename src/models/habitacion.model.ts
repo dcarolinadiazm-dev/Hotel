@@ -35,6 +35,7 @@ export interface IHabitacionDTO {
     peweId?: number;
     productos: number;
     total: number;
+    totalReservasFuturas?: number;
 }
 
 export interface IHabitacionMovim {
