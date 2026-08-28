@@ -439,7 +439,8 @@ export class PedidoService {
         tipoDoc: 'FACTURA' | 'REMISION' = 'FACTURA',
         formaPagoId?: number,
         prefijoParam?: string,
-        pagosParam?: Array<{ formaPagoId: number; monto: number }>
+        pagosParam?: Array<{ formaPagoId: number; monto: number }>,
+        observacionesParam?: string
     ) {
         const hab = await db(tables.HABITACION).where('ID_HABITACION', habitacionId).first();
         const habNumero = hab?.NUMERO ? String(hab.NUMERO).trim() : habitacionId;
@@ -503,7 +504,19 @@ export class PedidoService {
         }
         if (!prefijo) prefijo = 'SETT';
 
-        const obsString = sanitizeText(`Hospedaje Habitacion ${habNumero} - ${clienteNom}`);
+        // Determinar observación para el encabezado y la factura
+        let obsTexto = '';
+        if (observacionesParam && observacionesParam.trim()) {
+            obsTexto = observacionesParam.trim();
+        } else if (hab?.NOTAS && String(hab.NOTAS).trim()) {
+            obsTexto = String(hab.NOTAS).trim();
+        } else if (dinwHeader?.DINW_OBS && String(dinwHeader.DINW_OBS).trim()) {
+            obsTexto = String(dinwHeader.DINW_OBS).trim();
+        }
+
+        const obsString = obsTexto
+            ? sanitizeText(obsTexto)
+            : sanitizeText(`Hospedaje Habitacion ${habNumero} - ${clienteNom}`);
 
         // Calcular totales exactos
         let totalBase = 0;
@@ -579,7 +592,8 @@ export class PedidoService {
                     .update({
                         FACT_TOTAL: totalDoc,
                         FACT_IVAMONTO: totalIva,
-                        FACT_FORMAP: primaryFopaId
+                        FACT_FORMAP: primaryFopaId,
+                        FACT_OBS: obsString
                     });
 
                 // Sincronizar FADE_DTOPORC, FADE_DTOMONTO, FADE_TOTAL y FADE_IVAMONTO en FACTURAS_DETALLE

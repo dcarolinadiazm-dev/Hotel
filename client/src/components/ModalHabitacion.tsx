@@ -709,6 +709,7 @@ export const ModalHabitacion = ({
           tipoDoc: 'FACTURA',
           prefijo: prefijoToSend,
           pagos: pagosToSend.map((l) => ({ formaPagoId: l.formaPagoId, monto: Number(l.monto) || 0 })),
+          observaciones: observaciones ? observaciones.trim() : undefined,
         }),
       });
 

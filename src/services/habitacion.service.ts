@@ -353,9 +353,12 @@ export class HabitacionService {
             // 1. Obtener o crear DOC_INVENTARIO_WEB
             dinwId = await PedidoService.getActiveDinw(id, habNumero, documento, huesped);
 
-            // Actualizar datos del huésped en DOC_INVENTARIO_WEB
-            if (dinwId && (documento || huesped)) {
-                const obsString = sanitizeText(`Hospedaje Habitacion ${habNumero} - ${huesped || 'Huesped General'}`);
+            // Actualizar datos del huésped y observaciones en DOC_INVENTARIO_WEB
+            if (dinwId) {
+                const customObs = (data.observaciones && String(data.observaciones).trim()) || '';
+                const obsString = customObs
+                    ? sanitizeText(customObs)
+                    : sanitizeText(`Hospedaje Habitacion ${habNumero} - ${huesped || 'Huesped General'}`);
                 const updateDinw: any = {
                     DINW_OBS: obsString,
                     DINW_CONCEPTO: truncateToBytes(obsString, 55)

@@ -31,7 +31,7 @@ export class PedidoController {
 
     // POST /api/pedidos/enviar-facturar
     static async enviarAFacturar(req: Request, res: Response) {
-        const { habitacionId, peweId, formaPagoId, prefijo, pagos } = req.body;
+        const { habitacionId, peweId, formaPagoId, prefijo, pagos, observaciones } = req.body;
         if (!habitacionId) {
             return res.status(400).json({ error: 'habitacionId es requerido' });
         }
@@ -43,7 +43,8 @@ export class PedidoController {
                 'FACTURA',
                 formaPagoId ? parseInt(String(formaPagoId), 10) : undefined,
                 prefijo ? String(prefijo).trim() : undefined,
-                pagos
+                pagos,
+                observaciones ? String(observaciones).trim() : undefined
             );
             res.json(resultado);
         } catch (error: any) {
