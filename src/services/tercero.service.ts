@@ -24,7 +24,6 @@ export function cleanSpecialCharacters(text: string): string {
     if (!text) return '';
     return text
         .normalize('NFC')
-        .replace(/\uFFFD/g, '')
         .replace(/\s+/g, ' ')
         .trim();
 }
