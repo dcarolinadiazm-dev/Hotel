@@ -370,18 +370,20 @@ export const ModalHabitacion = ({
       return;
     }
 
-    if (newTipoDoc === 'J') {
+    const isJuridica = newTipoDoc?.trim().toUpperCase() === 'J';
+
+    if (isJuridica) {
       if (!newNombre || !newNombre.trim()) {
         setClientError('La razón social / nombre de la empresa es obligatorio (*)');
         return;
       }
     } else {
       if (!newApellido1 || !newApellido1.trim()) {
-        setClientError('El primer apellido es obligatorio (*)');
+        setClientError('El 1er. Apellido es obligatorio (*)');
         return;
       }
       if (!newNombre1 || !newNombre1.trim()) {
-        setClientError('El primer nombre es obligatorio (*)');
+        setClientError('El 1er. Nombre es obligatorio (*)');
         return;
       }
     }
@@ -403,7 +405,7 @@ export const ModalHabitacion = ({
     setClientError(null);
     const token = localStorage.getItem('hotel_token');
 
-    const calculatedName = newTipoDoc === 'J'
+    const calculatedName = isJuridica
       ? newNombre.trim()
       : [newApellido1.trim(), newApellido2.trim(), newNombre1.trim(), newNombre2.trim()].filter(Boolean).join(' ').trim();
 
@@ -419,11 +421,11 @@ export const ModalHabitacion = ({
             tipoId: newTipoDoc.trim(),
             nit: newNit.trim(),
             dv: newDv || calculaDigitoVerificacion(newNit),
-            nombre: newTipoDoc === 'J' ? newNombre.trim() : calculatedName,
-            apellido1: newTipoDoc !== 'J' ? newApellido1.trim() : undefined,
-            apellido2: newTipoDoc !== 'J' ? newApellido2.trim() : undefined,
-            nombre1: newTipoDoc !== 'J' ? newNombre1.trim() : undefined,
-            nombre2: newTipoDoc !== 'J' ? newNombre2.trim() : undefined,
+            nombre: isJuridica ? newNombre.trim() : calculatedName,
+            apellido1: !isJuridica ? newApellido1.trim() : undefined,
+            apellido2: !isJuridica ? newApellido2.trim() : undefined,
+            nombre1: !isJuridica ? newNombre1.trim() : undefined,
+            nombre2: !isJuridica ? newNombre2.trim() : undefined,
             cel: newCelular.trim(),
             email: newEmail.trim(),
             dir: newDireccion.trim(),
@@ -1001,7 +1003,7 @@ export const ModalHabitacion = ({
                       </div>
 
                       {/* Si es Persona Jurídica (J - NIT PERSONA JURIDICA) pide Razón Social */}
-                      {newTipoDoc === 'J' ? (
+                      {newTipoDoc?.trim().toUpperCase() === 'J' ? (
                         <div className="modal-form-group">
                           <label className="modal-form-label">Razón Social / Nombre de la Empresa *:</label>
                           <input
