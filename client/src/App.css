@@ -4998,3 +4998,46 @@
   margin: 0;
   padding-left: 16px;
 }
+
+/* ========================================================
+   BUSCADOR DE ARTÍCULOS Y LECTOR DE CÓDIGO DE BARRAS
+   ======================================================== */
+.barcode-search-box-row {
+  display: flex;
+  align-items: center;
+  position: relative;
+  width: 100%;
+}
+
+.barcode-search-input {
+  width: 100%;
+  padding: 8px 32px 8px 12px !important;
+  border-radius: 8px;
+  border: 1.5px solid #3b82f6 !important;
+  background-color: #eff6ff !important;
+  color: #1e3a8a !important;
+  font-weight: 600;
+}
+
+.barcode-search-input:focus {
+  background-color: #ffffff !important;
+  border-color: #1d4ed8 !important;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.2) !important;
+}
+
+.btn-clear-search-text {
+  position: absolute;
+  right: 8px;
+  background: transparent;
+  border: none;
+  color: #64748b;
+  font-size: 14px;
+  font-weight: bold;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+}
+
+.btn-clear-search-text:hover {
+  color: #dc2626;
+}

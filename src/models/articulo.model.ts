@@ -19,6 +19,7 @@ export interface IArticuloDTO {
     grinCod?: string;
     taivCod?: number;
     ivaPorc?: number;
+    codigosBarra?: string[];
     precios?: IArticuloPrecioDTO[];
 }
 

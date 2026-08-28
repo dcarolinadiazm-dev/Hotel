@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { ModalImpresionPOS } from './ModalImpresionPOS';
 
 interface ModalFacturacionDirectaProps {
@@ -43,6 +43,7 @@ interface ArticuloItem {
   grinCod?: string;
   taivCod?: number;
   ivaPorc?: number;
+  codigosBarra?: string[];
   precios?: ArticuloPrecioItem[];
 }
 
@@ -276,24 +277,73 @@ export const ModalFacturacionDirecta: React.FC<ModalFacturacionDirectaProps> = (
     }
   };
 
+  const [searchArticuloText, setSearchArticuloText] = useState<string>('');
+
+  const filteredArticulos = useMemo(() => {
+    if (!searchArticuloText.trim()) return articulos;
+    const q = searchArticuloText.trim().toLowerCase();
+    return articulos.filter((a) => {
+      const matchDesc = a.descripcion.toLowerCase().includes(q);
+      const matchCod = a.codigo.toLowerCase().includes(q);
+      const matchBar = a.codigosBarra && a.codigosBarra.some((b) => b.toLowerCase().includes(q));
+      return matchDesc || matchCod || matchBar;
+    });
+  }, [articulos, searchArticuloText]);
+
+  const seleccionarArticulo = (found: ArticuloItem) => {
+    setSelectedArticuloCod(found.codigo);
+    setCustomDescripcion(found.descripcion);
+    setCustomUnidad(found.unidad || 'UNIDAD');
+    setCustomIvaPorc(found.ivaPorc !== undefined && found.ivaPorc !== null ? found.ivaPorc : 0);
+    setCustomTaivCod(found.taivCod || 0);
+
+    let precioFinal = found.precio;
+    if (found.precios && found.precios.length > 0) {
+      const precioEnLista = found.precios.find((p) => p.liprCod === selectedLiprCod);
+      if (precioEnLista) precioFinal = precioEnLista.precio;
+    }
+    setCustomPrecio(precioFinal);
+    setCustomDescuento(0);
+    setCustomCantidad(1);
+  };
+
+  const handleBarcodeScanOrSearch = (query: string) => {
+    const term = query.trim().toLowerCase();
+    if (!term) return;
+
+    // 1. Coincidencia exacta por código de barras o código de artículo
+    const exactMatch = articulos.find(
+      (a) =>
+        a.codigo.toLowerCase() === term ||
+        (a.codigosBarra && a.codigosBarra.some((b) => b.toLowerCase() === term))
+    );
+
+    // 2. Si no es exacto, buscar si hay una única coincidencia
+    const match = exactMatch || (filteredArticulos.length === 1 ? filteredArticulos[0] : null);
+
+    if (match) {
+      seleccionarArticulo(match);
+      setFeedback({
+        type: 'success',
+        message: `🔍 Producto seleccionado: ${match.descripcion} (${formatMoney(match.precio)})`,
+      });
+      setSearchArticuloText('');
+    } else if (filteredArticulos.length > 1) {
+      setFeedback({
+        type: 'success',
+        message: `📋 Se encontraron ${filteredArticulos.length} coincidencias. Selecciona en el catálogo.`,
+      });
+    } else {
+      alert(`⚠️ No se encontró ningún producto con el código de barras o nombre: "${query}"`);
+    }
+  };
+
   const handleArticuloSelect = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const cod = e.target.value;
     setSelectedArticuloCod(cod);
     const found = articulos.find((a) => a.codigo === cod);
     if (found) {
-      setCustomDescripcion(found.descripcion);
-      setCustomUnidad(found.unidad || 'UNIDAD');
-      setCustomIvaPorc(found.ivaPorc !== undefined && found.ivaPorc !== null ? found.ivaPorc : 0);
-      setCustomTaivCod(found.taivCod || 0);
-
-      let precioFinal = found.precio;
-      if (found.precios && found.precios.length > 0) {
-        const precioEnLista = found.precios.find((p) => p.liprCod === selectedLiprCod);
-        if (precioEnLista) precioFinal = precioEnLista.precio;
-      }
-      setCustomPrecio(precioFinal);
-      setCustomDescuento(0);
-      setCustomCantidad(1);
+      seleccionarArticulo(found);
     } else {
       setCustomDescripcion('');
       setCustomPrecio(0);
@@ -856,16 +906,51 @@ export const ModalFacturacionDirecta: React.FC<ModalFacturacionDirectaProps> = (
                   </h3>
 
                   <div className="modal-add-item-box">
+                    {/* Buscador por nombre y código de barras */}
+                    <div className="modal-form-group" style={{ marginBottom: '10px' }}>
+                      <label className="modal-form-label">
+                        🔍 Buscar producto o 📷 Escanear código de barras:
+                      </label>
+                      <div className="barcode-search-box-row">
+                        <input
+                          type="text"
+                          className="modal-form-input barcode-search-input"
+                          placeholder="Escriba nombre, código o escanee con lector de código de barras..."
+                          value={searchArticuloText}
+                          onChange={(e) => setSearchArticuloText(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              handleBarcodeScanOrSearch(searchArticuloText);
+                            }
+                          }}
+                          autoComplete="off"
+                        />
+                        {searchArticuloText && (
+                          <button
+                            type="button"
+                            className="btn-clear-search-text"
+                            onClick={() => setSearchArticuloText('')}
+                            title="Limpiar búsqueda"
+                          >
+                            ✕
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
                     <div className="modal-form-row">
                       <div className="modal-form-group flex-2">
-                        <label className="modal-form-label">Catálogo de Artículos:</label>
+                        <label className="modal-form-label">
+                          Catálogo de Artículos {searchArticuloText ? `(${filteredArticulos.length} encontrados)` : ''}:
+                        </label>
                         <select
                           className="modal-form-select"
                           value={selectedArticuloCod}
                           onChange={handleArticuloSelect}
                         >
                           <option value="">-- Seleccione un artículo o ingrese manual --</option>
-                          {articulos.map((a) => (
+                          {filteredArticulos.map((a) => (
                             <option key={a.codigo} value={a.codigo}>
                               {a.descripcion} ({formatMoney(a.precio)}) - {a.unidad} {a.ivaPorc ? `[IVA ${a.ivaPorc}%]` : ''}
                             </option>

@@ -146,6 +146,18 @@ export class ArticuloService {
             console.warn('Aviso consultando PRECIOS_ARTICULO generales:', e.message);
         }
 
+        // Consultar códigos de barra adicionales desde BARRAS_ARTICULO
+        let allBarrasRows: any[] = [];
+        try {
+            const rawBarras = await db.raw(`
+                SELECT TRIM(ARTI_COD) AS ARTICOD, TRIM(COBA_COD) AS CODBAR 
+                FROM BARRAS_ARTICULO
+            `);
+            allBarrasRows = rawBarras.rows ? rawBarras.rows : (Array.isArray(rawBarras) ? rawBarras : [rawBarras]);
+        } catch (e: any) {
+            console.warn('Aviso consultando BARRAS_ARTICULO:', e.message);
+        }
+
         return rows.map((r: any) => {
             const cod = String(r.codigo || r.ARTI_COD || '').trim();
             const preciosArticulo = allPreciosRows
@@ -163,6 +175,13 @@ export class ArticuloService {
                     };
                 });
 
+            const barras = allBarrasRows
+                .filter((b: any) => String(b.ARTICOD || b.artiCod || '').trim() === cod)
+                .map((b: any) => String(b.CODBAR || b.codBar || '').trim())
+                .filter(Boolean);
+
+            const codigosBarra = Array.from(new Set([cod, ...barras]));
+
             const taivVal = r.taivCod ?? r.TAIVCOD ?? r.TAIV_COD ?? 0;
             const ivaPorcVal = r.ivaPorc ?? r.IVAPORC ?? r.TAIV_PORC ?? 0;
 
@@ -174,6 +193,7 @@ export class ArticuloService {
                 grinCod: String(r.grinCod || r.GRIN_COD || '').trim(),
                 taivCod: parseInt(String(taivVal || '0'), 10) || 0,
                 ivaPorc: parseFloat(String(ivaPorcVal || '0')) || 0,
+                codigosBarra,
                 precios: preciosArticulo.length > 0 ? preciosArticulo : [
                     { liprCod: defaultLipr, listaNombre: 'DETAL', precio: parseFloat(r.precio || '0'), esPredeterminada: true }
                 ]
