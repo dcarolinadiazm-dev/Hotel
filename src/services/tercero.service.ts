@@ -87,29 +87,43 @@ export class TerceroService {
         try {
             const rows = await db(tables.TIPO_ID)
                 .select(
-                    db.raw('TRIM(TIID_COD) as "cod"'),
-                    db.raw('TRIM(COALESCE(TIID_NOM, TIID_NOMFE)) as "nombre"'),
-                    db.raw('TRIM(TIID_NOMFE) as "nomFE"')
+                    'TIID_COD as COD',
+                    'TIID_NOM as NOM',
+                    'TIID_CODSHD as CODSHD'
                 )
                 .orderBy('TIID_COD', 'asc');
 
             if (rows && rows.length > 0) {
                 return rows.map((r: any) => ({
-                    cod: String(r.cod || r.COD || '').trim(),
-                    nombre: String(r.nombre || r.NOMBRE || r.nomFE || '').trim()
-                }));
+                    cod: String(r.COD || r.cod || '').trim(),
+                    nombre: String(r.NOM || r.nom || '').trim(),
+                    codShd: r.CODSHD || r.codshd ? String(r.CODSHD || r.codshd).trim() : ''
+                })).filter((item: any) => item.cod && item.nombre);
             }
         } catch (e: any) {
-            console.warn('Aviso consultando TIPO_ID:', e.message);
+            console.error('Error consultando TIPO_ID en Firebird:', e.message);
         }
 
-        // Tipos de documento estándar por defecto
+        // Catálogo completo de 18 tipos de SYSplus
         return [
-            { cod: 'C', nombre: 'CÉDULA DE CIUDADANÍA' },
-            { cod: 'N', nombre: 'NIT' },
-            { cod: 'E', nombre: 'CÉDULA DE EXTRANJERÍA' },
-            { cod: 'P', nombre: 'PASAPORTE' },
-            { cod: 'T', nombre: 'TARJETA DE IDENTIDAD' }
+            { cod: 'C', nombre: 'CEDULA CIUDADANIA', codShd: 'CC' },
+            { cod: 'D', nombre: 'DOCUMENTO EXTRANJERO', codShd: '' },
+            { cod: 'E', nombre: 'CEDULA EXTRANJERIA', codShd: 'CE' },
+            { cod: 'F', nombre: 'EXTRANJERO DIFERENTE NIT DIAN', codShd: '' },
+            { cod: 'I', nombre: 'CARNE DIPLOMATICO', codShd: '' },
+            { cod: 'J', nombre: 'NIT PERSONA JURIDICA', codShd: 'NIT' },
+            { cod: 'L', nombre: 'SUCESION ILIQUIDA SIN DOCUMENT', codShd: '' },
+            { cod: 'N', nombre: 'NIT PERSONA NATURAL', codShd: 'NIT' },
+            { cod: 'O', nombre: 'EXTRANJERO PERSONA JURICA', codShd: '' },
+            { cod: 'P', nombre: 'PASAPORTE', codShd: 'PA' },
+            { cod: 'Q', nombre: 'SUCESION ILIQUIDA NOTARIA/JUZG', codShd: '' },
+            { cod: 'R', nombre: 'REGISTRO CIVIL', codShd: 'RC' },
+            { cod: 'S', nombre: 'EXTRANJERO SIN DOCUMENTO', codShd: '' },
+            { cod: 'T', nombre: 'TARJETA IDENTIDAD', codShd: 'TI' },
+            { cod: 'U', nombre: 'NIUP', codShd: '' },
+            { cod: 'V', nombre: 'PERMISO PROTECCION TEMPORAL', codShd: 'PT' },
+            { cod: 'X', nombre: 'TARJETA EXTRANJERIA', codShd: '' },
+            { cod: 'Z', nombre: 'PERMISO ESPECIAL PERMANENCIA', codShd: 'PE' }
         ];
     }
 

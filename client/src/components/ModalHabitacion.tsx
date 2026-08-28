@@ -100,12 +100,25 @@ export const ModalHabitacion = ({
 
   // Formulario rápido de nuevo cliente
   const [showNewClientForm, setShowNewClientForm] = useState(false);
-  const [tiposDocumento, setTiposDocumento] = useState<Array<{ cod: string; nombre: string }>>([
-    { cod: 'C', nombre: 'CÉDULA DE CIUDADANÍA' },
-    { cod: 'N', nombre: 'NIT' },
-    { cod: 'E', nombre: 'CÉDULA DE EXTRANJERÍA' },
-    { cod: 'P', nombre: 'PASAPORTE' },
-    { cod: 'T', nombre: 'TARJETA DE IDENTIDAD' }
+  const [tiposDocumento, setTiposDocumento] = useState<Array<{ cod: string; nombre: string; codShd?: string }>>([
+    { cod: 'C', nombre: 'CEDULA CIUDADANIA', codShd: 'CC' },
+    { cod: 'D', nombre: 'DOCUMENTO EXTRANJERO', codShd: '' },
+    { cod: 'E', nombre: 'CEDULA EXTRANJERIA', codShd: 'CE' },
+    { cod: 'F', nombre: 'EXTRANJERO DIFERENTE NIT DIAN', codShd: '' },
+    { cod: 'I', nombre: 'CARNE DIPLOMATICO', codShd: '' },
+    { cod: 'J', nombre: 'NIT PERSONA JURIDICA', codShd: 'NIT' },
+    { cod: 'L', nombre: 'SUCESION ILIQUIDA SIN DOCUMENT', codShd: '' },
+    { cod: 'N', nombre: 'NIT PERSONA NATURAL', codShd: 'NIT' },
+    { cod: 'O', nombre: 'EXTRANJERO PERSONA JURICA', codShd: '' },
+    { cod: 'P', nombre: 'PASAPORTE', codShd: 'PA' },
+    { cod: 'Q', nombre: 'SUCESION ILIQUIDA NOTARIA/JUZG', codShd: '' },
+    { cod: 'R', nombre: 'REGISTRO CIVIL', codShd: 'RC' },
+    { cod: 'S', nombre: 'EXTRANJERO SIN DOCUMENTO', codShd: '' },
+    { cod: 'T', nombre: 'TARJETA IDENTIDAD', codShd: 'TI' },
+    { cod: 'U', nombre: 'NIUP', codShd: '' },
+    { cod: 'V', nombre: 'PERMISO PROTECCION TEMPORAL', codShd: 'PT' },
+    { cod: 'X', nombre: 'TARJETA EXTRANJERIA', codShd: '' },
+    { cod: 'Z', nombre: 'PERMISO ESPECIAL PERMANENCIA', codShd: 'PE' }
   ]);
   const [newTipoDoc, setNewTipoDoc] = useState('C');
   const [newNit, setNewNit] = useState('');
@@ -893,7 +906,7 @@ export const ModalHabitacion = ({
                           >
                             {tiposDocumento.map((td) => (
                               <option key={td.cod} value={td.cod}>
-                                {td.cod} - {td.nombre}
+                                {td.cod} - {td.nombre} {td.codShd ? `(${td.codShd})` : ''}
                               </option>
                             ))}
                           </select>
