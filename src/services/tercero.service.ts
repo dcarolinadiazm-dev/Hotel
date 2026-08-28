@@ -2,6 +2,24 @@ import { db } from '../config/knex.config';
 import { tables } from '../utils/tables';
 import { ITerceroDTO, IGrabeTercero } from '../models/tercero.model';
 
+export function calculaDigitoVerificacion(nit: string): string {
+    const cleanNit = nit.trim();
+    if (cleanNit && !isNaN(Number(cleanNit))) {
+        const pesos = [3, 7, 13, 17, 19, 23, 29, 37, 41, 43, 47, 53, 59, 67, 71];
+        let suma = 0;
+        const nitString = cleanNit.toString();
+
+        for (let i = 0; i < nitString.length; i++) {
+            suma += parseInt(nitString.charAt(nitString.length - 1 - i), 10) * pesos[i];
+        }
+
+        const residuo = suma % 11;
+        const dv = residuo > 1 ? 11 - residuo : residuo;
+        return String(dv);
+    }
+    return '';
+}
+
 export class TerceroService {
     // Listar los terceros que sean clientes (TERC_CLIE = 'S') ordenados por nombre
     static async getTerceros(): Promise<ITerceroDTO[]> {
@@ -126,24 +144,6 @@ export class TerceroService {
             { cod: 'Z', nombre: 'PERMISO ESPECIAL PERMANENCIA', codShd: 'PE' }
         ];
     }
-
-export function calculaDigitoVerificacion(nit: string): string {
-    const cleanNit = nit.trim();
-    if (cleanNit && !isNaN(Number(cleanNit))) {
-        const pesos = [3, 7, 13, 17, 19, 23, 29, 37, 41, 43, 47, 53, 59, 67, 71];
-        let suma = 0;
-        const nitString = cleanNit.toString();
-
-        for (let i = 0; i < nitString.length; i++) {
-            suma += parseInt(nitString.charAt(nitString.length - 1 - i), 10) * pesos[i];
-        }
-
-        const residuo = suma % 11;
-        const dv = residuo > 1 ? 11 - residuo : residuo;
-        return String(dv);
-    }
-    return '';
-}
 
     // Grabar o actualizar tercero (cliente / huésped) similar a SYSplusCloudBE
     static async grabeTercero(data: IGrabeTercero): Promise<any> {
