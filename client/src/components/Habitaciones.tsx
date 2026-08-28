@@ -130,25 +130,30 @@ export const Habitaciones = ({
   };
 
   const habitacionesFiltradas = habitaciones.filter((h) => {
-    // Si hay búsqueda por huésped: mostrar solo habitaciones en estado OCUPADA que coincidan
+    // 1. Filtro por estado (si no es TODOS)
+    if (filtroEstado !== 'TODOS') {
+      const e = h.estado.toLowerCase().trim();
+      if (filtroEstado === 'DISPONIBLE' && e !== 'disponible') return false;
+      if (filtroEstado === 'RESERVADA' && e !== 'reservada') return false;
+      if (filtroEstado === 'OCUPADA' && e !== 'ocupada') return false;
+      if (filtroEstado === 'INHABILITADA' && e !== 'inhabilitada' && e !== 'inhabilitado' && e !== 'mantenimiento') return false;
+    }
+
+    // 2. Filtro por texto de búsqueda (Huésped, Documento o Número de Habitación)
     if (busquedaHuesped.trim()) {
       const q = busquedaHuesped.trim().toLowerCase();
-      const isOcupada = h.estado.toLowerCase().trim() === 'ocupada';
-      if (!isOcupada) return false;
       const matchHuesped = h.huesped ? h.huesped.toLowerCase().includes(q) : false;
       const matchDoc = h.documento ? h.documento.toLowerCase().includes(q) : false;
       const matchNum = h.numero ? h.numero.toLowerCase().includes(q) : false;
       return matchHuesped || matchDoc || matchNum;
     }
 
-    if (filtroEstado === 'TODOS') return true;
-    const e = h.estado.toLowerCase().trim();
-    if (filtroEstado === 'DISPONIBLE') return e === 'disponible';
-    if (filtroEstado === 'RESERVADA') return e === 'reservada';
-    if (filtroEstado === 'OCUPADA') return e === 'ocupada';
-    if (filtroEstado === 'INHABILITADA') return e === 'inhabilitada' || e === 'inhabilitado' || e === 'mantenimiento';
     return true;
   });
+
+  const occupiedFiltered = habitacionesFiltradas.filter(
+    (h) => h.estado.toLowerCase().trim() === 'ocupada'
+  );
 
   const getStatusClass = (estado: string) => {
     const norm = estado.toLowerCase().trim();
@@ -167,13 +172,11 @@ export const Habitaciones = ({
   };
 
   const handleSelectAllFilteredOccupied = () => {
-    const occupied = habitacionesFiltradas
-      .filter((h) => h.estado.toLowerCase().trim() === 'ocupada')
-      .map((h) => h.id);
-    if (selectedHabIds.length === occupied.length) {
+    const occupiedIds = occupiedFiltered.map((h) => h.id);
+    if (selectedHabIds.length === occupiedIds.length && occupiedIds.length > 0) {
       setSelectedHabIds([]);
     } else {
-      setSelectedHabIds(occupied);
+      setSelectedHabIds(occupiedIds);
     }
   };
 
@@ -387,14 +390,14 @@ export const Habitaciones = ({
             </div>
             <p className="rooms-subtitle">Gestión en tiempo real de habitaciones</p>
 
-            {/* Buscador de habitaciones ocupadas por huésped */}
+            {/* Buscador de habitaciones / huéspedes en todos los estados */}
             <div className="rooms-guest-search-box">
               <div className="guest-search-input-wrapper">
                 <span className="search-icon">🔍</span>
                 <input
                   type="text"
                   className="guest-search-input"
-                  placeholder="Buscar huésped en habitaciones ocupadas (nombre o documento)..."
+                  placeholder="Buscar huésped, documento o habitación (en todos los estados)..."
                   value={busquedaHuesped}
                   onChange={(e) => setBusquedaHuesped(e.target.value)}
                 />
@@ -412,17 +415,18 @@ export const Habitaciones = ({
               {busquedaHuesped && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <span className="guest-search-count-badge">
-                    Filtrando {habitacionesFiltradas.length} {habitacionesFiltradas.length === 1 ? 'habitación ocupada' : 'habitaciones ocupadas'}
+                    Filtrando {habitacionesFiltradas.length} {habitacionesFiltradas.length === 1 ? 'habitación' : 'habitaciones'}
                   </span>
-                  {habitacionesFiltradas.length > 1 && (
+                  {occupiedFiltered.length > 1 && (
                     <button
                       type="button"
                       className="btn-select-all-filtered"
                       onClick={handleSelectAllFilteredOccupied}
+                      title="Seleccionar todas las habitaciones ocupadas filtradas para facturación consolidada"
                     >
-                      {selectedHabIds.length === habitacionesFiltradas.length
+                      {selectedHabIds.length === occupiedFiltered.length && occupiedFiltered.length > 0
                         ? 'Deseleccionar todas'
-                        : `☑️ Seleccionar las ${habitacionesFiltradas.length}`}
+                        : `☑️ Seleccionar las ${occupiedFiltered.length} ocupadas`}
                     </button>
                   )}
                 </div>
