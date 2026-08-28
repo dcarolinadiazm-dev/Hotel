@@ -114,7 +114,6 @@ export const ModalFacturacionDirecta: React.FC<ModalFacturacionDirectaProps> = (
   const [terceros, setTerceros] = useState<TerceroItem[]>([]);
   const [selectedNit, setSelectedNit] = useState<string>('');
   const [selectedNombre, setSelectedNombre] = useState<string>('');
-  const [searchTercero, setSearchTercero] = useState<string>('');
 
   // Formulario rápido nuevo cliente
   const [showNewClientForm, setShowNewClientForm] = useState(false);
@@ -248,15 +247,6 @@ export const ModalFacturacionDirecta: React.FC<ModalFacturacionDirectaProps> = (
   }, [isOpen]);
 
   if (!isOpen) return null;
-
-  // Filtrado de Terceros para el selector
-  const filteredTerceros = searchTercero
-    ? terceros.filter(
-      (t) =>
-        t.nombre.toLowerCase().includes(searchTercero.toLowerCase()) ||
-        t.nit.toLowerCase().includes(searchTercero.toLowerCase())
-    )
-    : terceros;
 
   const handleTerceroSelect = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const nit = e.target.value;
@@ -839,14 +829,6 @@ export const ModalFacturacionDirecta: React.FC<ModalFacturacionDirectaProps> = (
                     )}
 
                     {/* Selector de Cliente */}
-                    <input
-                      type="text"
-                      className="modal-form-input"
-                      style={{ marginBottom: '6px' }}
-                      placeholder="🔍 Buscar cliente por nombre o documento..."
-                      value={searchTercero}
-                      onChange={(e) => setSearchTercero(e.target.value)}
-                    />
                     <select
                       className="modal-form-select"
                       value={selectedNit}
@@ -854,7 +836,7 @@ export const ModalFacturacionDirecta: React.FC<ModalFacturacionDirectaProps> = (
                       style={{ fontWeight: selectedNit ? 700 : 'normal' }}
                     >
                       <option value="">-- Seleccione un cliente --</option>
-                      {filteredTerceros.map((t) => (
+                      {terceros.map((t) => (
                         <option key={t.nit} value={t.nit}>
                           {t.nombre} ({t.nit})
                         </option>
