@@ -584,6 +584,9 @@ export class PedidoService {
             throw new Error(`Error en GRABE_DOCUMENTO_INV_WEB de Firebird (Código de error: ${nError})`);
         }
 
+        // Registrar múltiples formas de pago en FACTURAS_CONTADO_PAGO y sincronizar FACTURAS
+        if (idGenerado) {
+            try {
                 const subtotalFactura = Math.round((totalDoc - totalIva) * 100) / 100;
                 await db('FACTURAS')
                     .where('FACT_ID', idGenerado)
