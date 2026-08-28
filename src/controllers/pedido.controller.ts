@@ -53,6 +53,28 @@ export class PedidoController {
         }
     }
 
+    // POST /api/pedidos/enviar-facturar-multiples
+    static async enviarAFacturarMultiples(req: Request, res: Response) {
+        const { habitacionesIds, formaPagoId, prefijo, pagos, observaciones } = req.body;
+        if (!habitacionesIds || !Array.isArray(habitacionesIds) || habitacionesIds.length === 0) {
+            return res.status(400).json({ error: 'Debe proporcionar una lista de IDs de habitaciones' });
+        }
+
+        try {
+            const resultado = await PedidoService.enviarAFacturarMultiples(
+                habitacionesIds.map(String),
+                formaPagoId ? parseInt(String(formaPagoId), 10) : undefined,
+                prefijo ? String(prefijo).trim() : undefined,
+                pagos,
+                observaciones ? String(observaciones).trim() : undefined
+            );
+            res.json(resultado);
+        } catch (error: any) {
+            console.error('Error en PedidoController.enviarAFacturarMultiples:', error.message);
+            res.status(500).json({ error: error.message || 'Error al procesar factura consolidada de habitaciones' });
+        }
+    }
+
     // POST /api/pedidos/facturar-directo
     static async facturarDirecto(req: Request, res: Response) {
         const { clienteNit, clienteNom, items, formaPagoId, prefijo, pagos, observaciones } = req.body;

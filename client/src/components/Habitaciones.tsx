@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { ModalCrearHabitacion } from './ModalCrearHabitacion';
 import { ModalFacturacionDirecta } from './ModalFacturacionDirecta';
+import { ModalFacturacionMultiHabitacion } from './ModalFacturacionMultiHabitacion';
 
 export interface Habitacion {
   id: string;
@@ -50,6 +51,8 @@ export const Habitaciones = ({
   const [error, setError] = useState<string | null>(null);
   const [filtroEstado, setFiltroEstado] = useState<FiltroEstado>('DISPONIBLE');
   const [busquedaHuesped, setBusquedaHuesped] = useState<string>('');
+  const [selectedHabIds, setSelectedHabIds] = useState<string[]>([]);
+  const [showMultiFacturarModal, setShowMultiFacturarModal] = useState<boolean>(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showFacturarDirectoModal, setShowFacturarDirectoModal] = useState(false);
   const [habitacionAEditar, setHabitacionAEditar] = useState<Habitacion | null>(null);
@@ -154,6 +157,24 @@ export const Habitaciones = ({
     if (norm === 'ocupada') return 'status-ocupada';
     if (norm === 'inhabilitada' || norm === 'inhabilitado' || norm === 'mantenimiento') return 'status-inhabilitada';
     return 'status-disponible';
+  };
+
+  const toggleSelectHab = (e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
+    setSelectedHabIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    );
+  };
+
+  const handleSelectAllFilteredOccupied = () => {
+    const occupied = habitacionesFiltradas
+      .filter((h) => h.estado.toLowerCase().trim() === 'ocupada')
+      .map((h) => h.id);
+    if (selectedHabIds.length === occupied.length) {
+      setSelectedHabIds([]);
+    } else {
+      setSelectedHabIds(occupied);
+    }
   };
 
   const handleOpenCreateModal = () => {
@@ -389,9 +410,22 @@ export const Habitaciones = ({
                 )}
               </div>
               {busquedaHuesped && (
-                <span className="guest-search-count-badge">
-                  Filtrando {habitacionesFiltradas.length} {habitacionesFiltradas.length === 1 ? 'habitación ocupada' : 'habitaciones ocupadas'}
-                </span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span className="guest-search-count-badge">
+                    Filtrando {habitacionesFiltradas.length} {habitacionesFiltradas.length === 1 ? 'habitación ocupada' : 'habitaciones ocupadas'}
+                  </span>
+                  {habitacionesFiltradas.length > 1 && (
+                    <button
+                      type="button"
+                      className="btn-select-all-filtered"
+                      onClick={handleSelectAllFilteredOccupied}
+                    >
+                      {selectedHabIds.length === habitacionesFiltradas.length
+                        ? 'Deseleccionar todas'
+                        : `☑️ Seleccionar las ${habitacionesFiltradas.length}`}
+                    </button>
+                  )}
+                </div>
               )}
             </div>
           </div>
@@ -462,16 +496,35 @@ export const Habitaciones = ({
             {habitacionesFiltradas.map((hab) => {
               const statusClass = getStatusClass(hab.estado);
               const isReservada = hab.estado === 'Reservada';
-              const isLocked = isReservada || hab.estado === 'Ocupada';
+              const isOcupada = hab.estado === 'Ocupada';
+              const isLocked = isReservada || isOcupada;
+              const isSelected = selectedHabIds.includes(hab.id);
 
               return (
                 <div
                   key={hab.id}
-                  className={`room-card ${statusClass}-card`}
+                  className={`room-card ${statusClass}-card ${isSelected ? 'room-card-selected' : ''}`}
                   onClick={() => onOpenModal(hab)}
                 >
                   <div className="room-card-top-bar">
-                    <span className="room-badge-type">{hab.tipo || 'SENCILLA'} · P{hab.piso || 1}</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      {isOcupada && (
+                        <div
+                          className={`room-checkbox-selector ${isSelected ? 'checked' : ''}`}
+                          onClick={(e) => toggleSelectHab(e, hab.id)}
+                          title={isSelected ? 'Deseleccionar habitación' : 'Seleccionar habitación para facturación conjunta'}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => {}}
+                            className="room-card-checkbox-input"
+                          />
+                        </div>
+                      )}
+                      <span className="room-badge-type">{hab.tipo || 'SENCILLA'} · P{hab.piso || 1}</span>
+                    </div>
+
                     <div className="room-card-quick-actions">
                       <button
                         className={`btn-room-edit-quick ${isReservada ? 'btn-action-disabled' : ''}`}
@@ -570,6 +623,36 @@ export const Habitaciones = ({
           </div>
         )}
 
+        {/* Barra Flotante de Facturación Múltiple */}
+        {selectedHabIds.length > 0 && (
+          <div className="multi-room-floating-bar">
+            <div className="floating-bar-info">
+              <span className="floating-bar-badge">
+                ☑️ {selectedHabIds.length} {selectedHabIds.length === 1 ? 'habitación seleccionada' : 'habitaciones seleccionadas'}
+              </span>
+              <span className="floating-bar-habs">
+                (Habs: {habitaciones.filter((h) => selectedHabIds.includes(h.id)).map((h) => `#${h.numero}`).join(', ')})
+              </span>
+            </div>
+            <div className="floating-bar-actions">
+              <button
+                type="button"
+                className="btn-floating-clear"
+                onClick={() => setSelectedHabIds([])}
+              >
+                ✕ Desmarcar
+              </button>
+              <button
+                type="button"
+                className="btn-floating-facturar"
+                onClick={() => setShowMultiFacturarModal(true)}
+              >
+                🧾 Facturar {selectedHabIds.length} Habitaciones Juntas
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Nota Informativa del Pie */}
         <div className="rooms-footer-hint">
           <svg className="hint-info-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -599,6 +682,20 @@ export const Habitaciones = ({
             isOpen={showFacturarDirectoModal}
             onClose={() => setShowFacturarDirectoModal(false)}
             onFacturaGenerada={() => fetchHabitaciones()}
+          />
+        )}
+
+        {/* Modal de Facturación Consolidada de Múltiples Habitaciones */}
+        {showMultiFacturarModal && (
+          <ModalFacturacionMultiHabitacion
+            isOpen={showMultiFacturarModal}
+            habitaciones={habitaciones.filter((h) => selectedHabIds.includes(h.id))}
+            onClose={() => setShowMultiFacturarModal(false)}
+            onFacturaCompletada={() => {
+              setShowMultiFacturarModal(false);
+              setSelectedHabIds([]);
+              fetchHabitaciones();
+            }}
           />
         )}
       </div>

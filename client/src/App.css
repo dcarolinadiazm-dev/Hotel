@@ -5115,3 +5115,418 @@
   border-radius: 8px;
   white-space: nowrap;
 }
+
+.btn-select-all-filtered {
+  padding: 5px 12px;
+  background: #2563eb;
+  color: #ffffff;
+  border: none;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s ease;
+  box-shadow: 0 1px 3px rgba(37, 99, 235, 0.2);
+}
+
+.btn-select-all-filtered:hover {
+  background: #1d4ed8;
+  transform: translateY(-1px);
+}
+
+/* ========================================================
+   SELECCIÓN MÚLTIPLE DE HABITACIONES
+   ======================================================== */
+.room-checkbox-selector {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.9);
+  border: 1.5px solid #cbd5e1;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.room-checkbox-selector:hover {
+  border-color: #2563eb;
+  background: #eff6ff;
+}
+
+.room-checkbox-selector.checked {
+  background: #2563eb;
+  border-color: #1d4ed8;
+}
+
+.room-card-checkbox-input {
+  cursor: pointer;
+  width: 14px;
+  height: 14px;
+  accent-color: #2563eb;
+}
+
+.room-card.room-card-selected {
+  border-color: #2563eb !important;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.3) !important;
+  transform: translateY(-3px);
+}
+
+/* ========================================================
+   BARRA FLOTANTE DE FACTURACIÓN MÚLTIPLE
+   ======================================================== */
+.multi-room-floating-bar {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #0f172a;
+  color: #ffffff;
+  padding: 12px 24px;
+  border-radius: 50px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.4), 0 8px 10px -6px rgba(0, 0, 0, 0.3);
+  z-index: 999;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  animation: slideUpFloatingBar 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  max-width: 90%;
+}
+
+@keyframes slideUpFloatingBar {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 20px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+
+.floating-bar-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.floating-bar-badge {
+  background: #2563eb;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.floating-bar-habs {
+  font-size: 13px;
+  color: #cbd5e1;
+  font-weight: 500;
+}
+
+.floating-bar-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.btn-floating-clear {
+  background: transparent;
+  color: #94a3b8;
+  border: 1px solid #475569;
+  padding: 8px 16px;
+  border-radius: 25px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-floating-clear:hover {
+  background: #334155;
+  color: #ffffff;
+}
+
+.btn-floating-facturar {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: #ffffff;
+  border: none;
+  padding: 9px 20px;
+  border-radius: 25px;
+  font-size: 13.5px;
+  font-weight: 700;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.35);
+  transition: all 0.2s ease;
+}
+
+.btn-floating-facturar:hover {
+  background: linear-gradient(135deg, #059669 0%, #047857 100%);
+  transform: scale(1.02);
+  box-shadow: 0 6px 16px rgba(16, 185, 129, 0.45);
+}
+
+/* ========================================================
+   MODAL DE FACTURACIÓN CONSOLIDADA (MULTI-HABITACIÓN)
+   ======================================================== */
+.modal-multi-hab-container {
+  max-width: 960px !important;
+  width: 95%;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.modal-header-multi {
+  padding: 18px 24px;
+  background: linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%);
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.modal-title-multi {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 800;
+  color: #ffffff;
+}
+
+.modal-subtitle-multi {
+  font-size: 13px;
+  color: #bfdbfe;
+  display: block;
+  margin-top: 4px;
+}
+
+.modal-multi-content-body {
+  padding: 20px 24px;
+  overflow-y: auto;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.multi-guest-header-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  padding: 14px 20px;
+  border-radius: 12px;
+  gap: 16px;
+}
+
+.multi-guest-header-card .guest-col {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.multi-guest-header-card .guest-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #64748b;
+}
+
+.multi-guest-header-card .guest-val {
+  font-size: 14px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.multi-items-table-wrapper {
+  max-height: 220px;
+  overflow-y: auto;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+}
+
+.multi-items-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.multi-items-table th {
+  position: sticky;
+  top: 0;
+  background: #f1f5f9;
+  padding: 10px 14px;
+  font-weight: 700;
+  color: #334155;
+  border-bottom: 1.5px solid #cbd5e1;
+  text-align: left;
+  z-index: 10;
+}
+
+.multi-items-table td {
+  padding: 9px 14px;
+  border-bottom: 1px solid #f1f5f9;
+  color: #334155;
+}
+
+.multi-items-table tr:hover {
+  background: #f8fafc;
+}
+
+.badge-hab-tag {
+  background: #eff6ff;
+  color: #1e40af;
+  border: 1px solid #bfdbfe;
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-size: 11.5px;
+  font-weight: 700;
+}
+
+.multi-billing-options-grid {
+  display: grid;
+  grid-template-columns: 1fr 1.2fr;
+  gap: 20px;
+  margin-top: 6px;
+}
+
+.billing-config-card,
+.billing-payments-card {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 16px;
+}
+
+.multi-totals-summary-box {
+  background: #ffffff;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.multi-totals-summary-box .totals-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13.5px;
+  color: #475569;
+}
+
+.multi-totals-summary-box .discount-row {
+  color: #dc2626;
+}
+
+.multi-totals-summary-box .grand-total-row {
+  border-top: 1.5px dashed #cbd5e1;
+  padding-top: 8px;
+  margin-top: 4px;
+  font-size: 15px;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.grand-total-amount {
+  color: #16a34a;
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.payment-line-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.payment-select {
+  flex: 1.2;
+}
+
+.payment-amount-input {
+  flex: 1;
+}
+
+.btn-remove-payment-line {
+  background: #fee2e2;
+  color: #dc2626;
+  border: 1px solid #fca5a5;
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: bold;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.payment-actions-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 10px;
+  gap: 10px;
+}
+
+.btn-add-payment-line {
+  background: #eff6ff;
+  color: #2563eb;
+  border: 1px dashed #3b82f6;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.btn-add-payment-line:hover:not(:disabled) {
+  background: #dbeafe;
+}
+
+.payment-balance-badge {
+  font-size: 12.5px;
+  font-weight: 700;
+}
+
+.modal-footer-multi {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  padding-top: 14px;
+  border-top: 1px solid #e2e8f0;
+}
+
+.btn-modal-confirm-multi {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: #ffffff;
+  border: none;
+  padding: 10px 24px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 4px 10px rgba(16, 185, 129, 0.3);
+  transition: all 0.2s ease;
+}
+
+.btn-modal-confirm-multi:hover:not(:disabled) {
+  background: linear-gradient(135deg, #059669 0%, #047857 100%);
+  box-shadow: 0 6px 14px rgba(16, 185, 129, 0.4);
+}
+
+.btn-modal-confirm-multi:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}

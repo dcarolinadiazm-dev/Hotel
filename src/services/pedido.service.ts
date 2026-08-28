@@ -1504,4 +1504,403 @@ export class PedidoService {
             totalPagar
         };
     }
+
+    static async enviarAFacturarMultiples(
+        habitacionesIds: string[],
+        formaPagoId?: number,
+        prefijoParam?: string,
+        pagosParam?: Array<{ formaPagoId: number; monto: number }>,
+        observacionesParam?: string
+    ) {
+        if (!habitacionesIds || !Array.isArray(habitacionesIds) || habitacionesIds.length === 0) {
+            throw new Error('Debe seleccionar al menos una habitación para facturar');
+        }
+
+        // Consultar datos de todas las habitaciones seleccionadas
+        const habs = await db(tables.HABITACION)
+            .whereIn('ID_HABITACION', habitacionesIds);
+
+        if (habs.length !== habitacionesIds.length) {
+            throw new Error('Una o más habitaciones seleccionadas no existen en el sistema');
+        }
+
+        // Validar que todas estén en estado 'Ocupada'
+        for (const h of habs) {
+            const num = h.NUMERO ? String(h.NUMERO).trim() : h.ID_HABITACION;
+            const estado = String(h.ESTADO || '').trim();
+            if (estado !== 'Ocupada') {
+                throw new Error(`La habitación #${num} se encuentra en estado "${estado || 'Disponible'}". Solo es posible facturar habitaciones en estado "Ocupada".`);
+            }
+        }
+
+        // Obtener cliente del primer registro
+        const primerHab = habs[0];
+        const nit = primerHab?.DOCUMENTO ? String(primerHab.DOCUMENTO).trim() : '800003122';
+        const nombreCliente = primerHab?.HUESPED ? String(primerHab.HUESPED).trim() : 'Huésped General';
+
+        const habsNumeros = habs.map(h => String(h.NUMERO || h.ID_HABITACION).trim()).join(', ');
+        const conceptoConsolidado = truncateToBytes(`Factura Consolidada Habs ${habsNumeros} - ${nombreCliente}`, 55);
+        const obsGeneral = observacionesParam?.trim() || `Factura Consolidada Habs: ${habsNumeros} - ${nombreCliente}`;
+
+        // Obtener punto de venta, sucursal, etc.
+        let sucursal = '01';
+        let canal = 1;
+        let vend = 1;
+        let cobrador = 1;
+        let ptVta = 1;
+        let bodega = '1';
+        try {
+            const ptvt = await db('PUNTO_VENTA').first();
+            if (ptvt) {
+                if (ptvt.SUCU_COD) sucursal = String(ptvt.SUCU_COD).trim();
+                if (ptvt.CANAL_COD) canal = parseInt(String(ptvt.CANAL_COD), 10) || 1;
+                if (ptvt.EMPL_COD) vend = parseInt(String(ptvt.EMPL_COD), 10) || 1;
+                if (ptvt.PTVT_COBRADOR) cobrador = parseInt(String(ptvt.PTVT_COBRADOR), 10) || 1;
+                if (ptvt.PTVT_NUM) ptVta = parseInt(String(ptvt.PTVT_NUM), 10) || 1;
+                if (ptvt.BODE_COD) bodega = String(ptvt.BODE_COD).trim() || '1';
+            }
+        } catch (e) {}
+
+        const maxDinw = await db(tables.DOC_INVENTARIO_WEB).max('DINW_ID as MAXID').first();
+        const masterDinwId = (parseInt(String(maxDinw?.MAXID || '0'), 10) || 0) + 1;
+
+        // Prefijo
+        let prefijo = prefijoParam ? String(prefijoParam).trim() : '';
+        if (!prefijo) {
+            try {
+                const prefRow = await db(tables.PREFIJOS)
+                    .where('TIDO_COD', 31)
+                    .andWhere(function () {
+                        this.where('PREF_ACTIVO', 'S').orWhereNull('PREF_ACTIVO');
+                    })
+                    .first();
+                if (prefRow?.PREF_PRE) prefijo = String(prefRow.PREF_PRE).trim();
+            } catch (e) {}
+        }
+        if (!prefijo) prefijo = 'SETT';
+
+        // Formas de pago
+        let listaPagos: Array<{ formaPagoId: number; monto: number }> = [];
+        if (pagosParam && Array.isArray(pagosParam) && pagosParam.length > 0) {
+            listaPagos = pagosParam.map(p => ({
+                formaPagoId: parseInt(String(p.formaPagoId), 10) || 1,
+                monto: parseFloat(String(p.monto)) || 0
+            }));
+        } else if (formaPagoId) {
+            listaPagos = [{
+                formaPagoId: parseInt(String(formaPagoId), 10) || 1,
+                monto: 0
+            }];
+        } else {
+            listaPagos = [{ formaPagoId: 1, monto: 0 }];
+        }
+        const primaryFopaId = listaPagos[0]?.formaPagoId || 1;
+
+        // Recolectar todos los ítems de las habitaciones seleccionadas
+        const consolidatedItems: any[] = [];
+        const individualDinwIds: number[] = [];
+
+        for (const h of habs) {
+            const hId = String(h.ID_HABITACION).trim();
+            const hNum = String(h.NUMERO || hId).trim();
+
+            const activeMov = await db(tables.HABITACION_MOVIM)
+                .where('ID_HABITACION', hId)
+                .andWhere(function () {
+                    this.where('ESTADO', 'Activo').orWhereNull('ESTADO');
+                })
+                .orderBy('ID_MOVIM', 'desc')
+                .first();
+
+            let hDinwId = activeMov?.DINW_ID ? parseInt(String(activeMov.DINW_ID), 10) : undefined;
+            if (!hDinwId) {
+                hDinwId = await this.getActiveDinw(hId, hNum, nit, nombreCliente);
+            }
+
+            if (hDinwId) {
+                individualDinwIds.push(hDinwId);
+                const dets = await db(tables.DOC_INVENTARIO_DET_WEB)
+                    .where({ DINW_ID: hDinwId, DIWD_ANULADO: 'N' })
+                    .orderBy('DIWD_ITEM', 'asc');
+
+                for (const d of dets) {
+                    const descOriginal = String(d.DIWD_DESCART || d.DIWD_ARTICULO || '').trim();
+                    const descConHab = descOriginal.toLowerCase().includes(`hab. ${hNum}`) || descOriginal.toLowerCase().includes(`hab ${hNum}`)
+                        ? descOriginal
+                        : `${descOriginal} (Hab. ${hNum})`;
+
+                    consolidatedItems.push({
+                        ...d,
+                        DIWD_DESCART: descConHab,
+                        _habNumero: hNum,
+                        _habId: hId
+                    });
+                }
+            }
+        }
+
+        if (consolidatedItems.length === 0) {
+            throw new Error('Ninguna de las habitaciones seleccionadas tiene consumos o productos pendientes por facturar');
+        }
+
+        // Calcular totales acumulados
+        let totalBase = 0;
+        let totalIva = 0;
+        let totalDoc = 0;
+
+        for (const it of consolidatedItems) {
+            const cant = parseFloat(String(it.DIWD_CANT || '1'));
+            const prunit = parseFloat(String(it.DIWD_COSTO || it.DIWD_PRUNIT || '0'));
+            const itemTotal = it.DIWD_TOTAL ? parseFloat(String(it.DIWD_TOTAL)) : (cant * prunit);
+            const ivaMonto = parseFloat(String(it.DIWD_IVAMONTO || '0'));
+            const subtotalBase = itemTotal - ivaMonto;
+
+            totalBase += subtotalBase;
+            totalIva += ivaMonto;
+            totalDoc += itemTotal;
+        }
+
+        if (listaPagos.length === 1 && (!listaPagos[0].monto || listaPagos[0].monto === 0)) {
+            listaPagos[0].monto = totalDoc;
+        }
+
+        // Insertar encabezado maestro consolidado en DOC_INVENTARIO_WEB
+        const nowFecha = new Date();
+        await db(tables.DOC_INVENTARIO_WEB).insert({
+            DINW_ID: masterDinwId,
+            DINW_TIPO: 31,
+            DINW_NUMERO: '00000001',
+            DINW_NIT: nit,
+            DINW_PREF: prefijo,
+            DINW_SUCURSAL: sucursal,
+            DINW_CANAL: canal,
+            DINW_VEND: vend,
+            DINW_COBRADOR: cobrador,
+            DINW_PTVTA: ptVta,
+            DINW_FECHA: nowFecha,
+            DINW_VENCE: nowFecha,
+            DINW_CONCEPTO: conceptoConsolidado,
+            DINW_OBS: obsGeneral,
+            DINW_BASE: totalBase,
+            DINW_IVAMONTO: totalIva,
+            DINW_MONTO: totalDoc,
+            DINW_FORMAP: primaryFopaId,
+            DINW_ANULADO: 'N',
+            DINW_IMPINC: 'S',
+            DINW_IVAINC: 'S',
+            DINW_BODEGA: bodega,
+            DINW_BODDES: bodega,
+            DINW_TRANSMIT: 'N'
+        });
+
+        // Insertar detalles en DOC_INVENTARIO_DET_WEB
+        for (let idx = 0; idx < consolidatedItems.length; idx++) {
+            const it = consolidatedItems[idx];
+            const itemIdx = idx + 1;
+            const cant = parseFloat(String(it.DIWD_CANT || '1'));
+            const prunit = parseFloat(String(it.DIWD_COSTO || it.DIWD_PRUNIT || '0'));
+            const itemTotal = it.DIWD_TOTAL ? parseFloat(String(it.DIWD_TOTAL)) : (cant * prunit);
+            const ivaMonto = parseFloat(String(it.DIWD_IVAMONTO || '0'));
+            const ivaPorc = parseFloat(String(it.DIWD_IVAPORC || '0'));
+            const tiva = parseInt(String(it.DIWD_TIVA || '0'), 10) || 0;
+            const dtoPorc = parseFloat(String(it.DIWD_DTOPORC || '0')) || 0;
+            const dtoMonto = parseFloat(String(it.DIWD_DTOMONTO || '0')) || 0;
+
+            await db(tables.DOC_INVENTARIO_DET_WEB).insert({
+                DINW_ID: masterDinwId,
+                DIWD_ITEM: itemIdx,
+                DIWD_ARTICULO: String(it.DIWD_ARTICULO || '001').trim(),
+                DIWD_DESCART: truncateToBytes(String(it.DIWD_DESCART || '').trim(), 60),
+                DIWD_CODBAR: it.DIWD_CODBAR ? String(it.DIWD_CODBAR).trim() : null,
+                DIWD_CANT: cant,
+                DIWD_UNIDAD: String(it.DIWD_UNIDAD || 'UNIDAD').trim(),
+                DIWD_COSTO: prunit,
+                DIWD_PRUNIT: prunit,
+                DIWD_TOTAL: itemTotal,
+                DIWD_IVAPORC: ivaPorc,
+                DIWD_IVAMONTO: ivaMonto,
+                DIWD_TIVA: tiva,
+                DIWD_DTOPORC: dtoPorc,
+                DIWD_DTOMONTO: dtoMonto,
+                DIWD_BODEGA: String(it.DIWD_BODEGA || bodega).trim(),
+                DIWD_LISTA: parseInt(String(it.DIWD_LISTA || '1'), 10) || 1,
+                DIWD_REF: it._habNumero ? `HAB-${it._habNumero}` : 'MULTI-HAB',
+                DIWD_ANULADO: 'N',
+                DIWD_TRANSMIT: 'N',
+                DIWD_FACTOR: 1
+            });
+        }
+
+        // Consecutivo Recibos de Caja
+        try {
+            const maxReca = await db('RECIBOS_CAJA').max('RECA_NUMERO as MAXR').first();
+            const maxVal = parseInt(String(maxReca?.MAXR || '0'), 10) || 0;
+            const prefReca = await db(tables.PREFIJOS).where('TIDO_COD', 61).first();
+            const curVal = parseInt(String(prefReca?.PREF_ACTUAL || '0'), 10) || 0;
+            if (curVal <= maxVal) {
+                await db(tables.PREFIJOS).where('TIDO_COD', 61).update({
+                    PREF_ACTUAL: String(maxVal + 1).padStart(6, '0')
+                });
+            }
+        } catch (syncPrefErr) {}
+
+        // Ejecutar procedimiento almacenado GRABE_DOCUMENTO_INV_WEB(31, masterDinwId)
+        const spResult = await db.raw('SELECT * FROM GRABE_DOCUMENTO_INV_WEB(?, ?)', [31, masterDinwId]);
+        const resultRow = spResult.rows ? spResult.rows[0] : (Array.isArray(spResult) ? spResult[0] : spResult);
+
+        const idGenerado = resultRow?.IDDOC || resultRow?.iddoc;
+        const numDocGenerado = String(resultRow?.NUMDOC || resultRow?.numdoc || `${prefijo}-${masterDinwId}`).trim();
+        const nError = resultRow?.NERROR ?? resultRow?.nerror ?? 0;
+
+        if (nError !== 0 && nError !== null && !idGenerado) {
+            throw new Error(`Error en GRABE_DOCUMENTO_INV_WEB de Firebird (Código de error: ${nError})`);
+        }
+
+        // Registrar formas de pago y sincronizar FACTURAS
+        if (idGenerado) {
+            try {
+                const subtotalFactura = Math.round((totalDoc - totalIva) * 100) / 100;
+                await db('FACTURAS')
+                    .where('FACT_ID', idGenerado)
+                    .update({
+                        FACT_TOTAL: totalDoc,
+                        FACT_IVAMONTO: totalIva,
+                        FACT_SUBTOTAL: subtotalFactura,
+                        FACT_FORMAP: primaryFopaId,
+                        FACT_OBS: Buffer.from(obsGeneral, 'utf-8')
+                    });
+
+                // Sincronizar FADE_DTOPORC, FADE_DTOMONTO, FADE_TOTAL en FACTURAS_DETALLE
+                try {
+                    const sourceDets = await db(tables.DOC_INVENTARIO_DET_WEB)
+                        .where({ DINW_ID: masterDinwId, DIWD_ANULADO: 'N' })
+                        .select('DIWD_ITEM', 'DIWD_DTOPORC', 'DIWD_DTOMONTO', 'DIWD_TOTAL', 'DIWD_IVAMONTO', 'DIWD_IVAPORC', 'DIWD_TIVA', 'DIWD_DESCART');
+                    for (const sd of sourceDets) {
+                        const dtoporc = Number(sd.DIWD_DTOPORC || 0);
+                        const dtomonto = Number(sd.DIWD_DTOMONTO || 0);
+                        const totalItem = Number(sd.DIWD_TOTAL || 0);
+                        const ivaMonto = Number(sd.DIWD_IVAMONTO || 0);
+                        const ivaPorc = Number(sd.DIWD_IVAPORC || 0);
+                        const tiva = Number(sd.DIWD_TIVA || 0);
+                        const baseItem = Math.round((totalItem - ivaMonto) * 100) / 100;
+
+                        await db('FACTURAS_DETALLE')
+                            .where({ FACT_ID: idGenerado, FADE_ITEM: sd.DIWD_ITEM })
+                            .update({
+                                FADE_DESC: sd.DIWD_DESCART ? String(sd.DIWD_DESCART).trim() : undefined,
+                                FADE_DTOPORC: dtoporc,
+                                FADE_DTOMONTO: dtomonto,
+                                FADE_IVAPORC: ivaPorc,
+                                FADE_TIVA: tiva,
+                                FADE_TOTAL: totalItem,
+                                FADE_IVAMONTO: ivaMonto,
+                                FADE_BASE: baseItem
+                            });
+                    }
+                } catch (dtoErr: any) {}
+
+                // Formas de pago múltiples
+                let cajaId = 1;
+                let codbco = '';
+                try {
+                    const ptvt = await db('PUNTO_VENTA').first();
+                    if (ptvt?.CAJA_ID) cajaId = parseInt(String(ptvt.CAJA_ID), 10);
+                    const cajaRow = await db('CAJAS').where('CAJA_ID', cajaId).first();
+                    if (cajaRow?.CAJA_FPBCO) codbco = String(cajaRow.CAJA_FPBCO).trim();
+                } catch (e) {}
+
+                await db('FACTURAS_CONTADO_PAGO').where('FCNT_ID', idGenerado).del();
+
+                for (let i = 0; i < listaPagos.length; i++) {
+                    const p = listaPagos[i];
+                    const isEfectivo = p.formaPagoId === 1;
+                    let numBco = '';
+                    if (!isEfectivo && codbco) {
+                        try {
+                            const maxRcpa = await db('RECIBOS_CAJA_PAGO')
+                                .where({ RCPA_BANCO: codbco, RCPA_CUENTA: '9999' })
+                                .max('RCPA_NUMERO as MAXN')
+                                .first();
+                            const maxDpca = await db('DOCUMENTOS_PAGO_CAJA')
+                                .where({ FOPA_ID: p.formaPagoId })
+                                .max('DPCA_NUMERO as MAXD')
+                                .first();
+                            const maxVal = Math.max(
+                                parseInt(String(maxRcpa?.MAXN || '0'), 10) || 0,
+                                parseInt(String(maxDpca?.MAXD || '0'), 10) || 0
+                            );
+                            numBco = String(maxVal + 1 + i).padStart(6, '0');
+                        } catch (e) {
+                            numBco = '000001';
+                        }
+                    }
+
+                    await db('FACTURAS_CONTADO_PAGO').insert({
+                        FCNT_ID: idGenerado,
+                        FCNP_ITEM: i + 1,
+                        FOPA_ID: p.formaPagoId,
+                        FCNP_BANCO: isEfectivo ? '' : codbco,
+                        FCNP_CUENTA: isEfectivo ? '' : '9999',
+                        FCNP_NUMERO: isEfectivo ? '' : numBco,
+                        FCNP_FECHA: new Date(),
+                        FCNP_MONTO: p.monto,
+                        FCNP_ANULADO: 'N',
+                        FCNP_CERRADO: 'N'
+                    });
+                }
+            } catch (e: any) {}
+        }
+
+        // Liberar todas las habitaciones seleccionadas y marcar sus movimientos como Facturados
+        for (const hId of habitacionesIds) {
+            await db(tables.HABITACION)
+                .where('ID_HABITACION', hId)
+                .update({
+                    ESTADO: 'Disponible',
+                    NOTAS: ''
+                });
+
+            try {
+                const activeMov = await db(tables.HABITACION_MOVIM)
+                    .where('ID_HABITACION', String(hId))
+                    .andWhere(function () {
+                        this.where('ESTADO', 'Activo').orWhereNull('ESTADO');
+                    })
+                    .orderBy('ID_MOVIM', 'desc')
+                    .first();
+
+                if (activeMov) {
+                    await db(tables.HABITACION_MOVIM)
+                        .where('ID_MOVIM', activeMov.ID_MOVIM)
+                        .update({
+                            ID_DOC: idGenerado || masterDinwId,
+                            DINW_ID: masterDinwId,
+                            TIPO: 31,
+                            ESTADO: 'Facturado'
+                        });
+                }
+            } catch (e: any) {}
+        }
+
+        // Anular los borradores individuales previos para evitar duplicidades
+        for (const oldDinw of individualDinwIds) {
+            try {
+                await db(tables.DOC_INVENTARIO_WEB)
+                    .where('DINW_ID', oldDinw)
+                    .update({
+                        DINW_ANULADO: 'S',
+                        DINW_OBS: `Consolidado en Factura Master #${masterDinwId}`
+                    });
+            } catch (e) {}
+        }
+
+        return {
+            idDoc: idGenerado || masterDinwId,
+            prefijo,
+            numero: numDocGenerado,
+            total: totalDoc,
+            mensaje: `Factura de Venta consolidada generada con éxito con número ${numDocGenerado}`,
+            habitacionesProcesadas: habsNumeros
+        };
+    }
 }
