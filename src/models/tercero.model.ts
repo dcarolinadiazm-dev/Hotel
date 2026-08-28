@@ -30,6 +30,7 @@ export interface IGrabeTercero {
     cel?: string;
     email?: string;
     codCiu?: string;
+    nomCiu?: string;
     codPais?: string;
     zona?: string;
     observaciones?: string;

@@ -14,6 +14,17 @@ export class TerceroController {
         }
     }
 
+    // GET /api/terceros/ciudades
+    static async getCiudades(req: Request, res: Response) {
+        try {
+            const ciudades = await TerceroService.getCiudades();
+            res.json(ciudades);
+        } catch (error: any) {
+            console.error('Error en TerceroController.getCiudades:', error.message);
+            res.status(500).json({ error: 'Error al consultar ciudades en Firebird' });
+        }
+    }
+
     // GET /api/terceros
     static async getAll(req: Request, res: Response) {
         try {

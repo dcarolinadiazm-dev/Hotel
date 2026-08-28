@@ -7,6 +7,9 @@ const router = Router();
 // Listar tipos de documento
 router.get('/tipos-documento', verifyToken, TerceroController.getTiposDocumento);
 
+// Listar ciudades
+router.get('/ciudades', verifyToken, TerceroController.getCiudades);
+
 // Listar terceros
 router.get('/', verifyToken, TerceroController.getAll);
 

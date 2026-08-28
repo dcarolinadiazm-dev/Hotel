@@ -131,6 +131,27 @@ export const ModalHabitacion = ({
   const [newCelular, setNewCelular] = useState('');
   const [newEmail, setNewEmail] = useState('');
   const [newDireccion, setNewDireccion] = useState('');
+  const [ciudades, setCiudades] = useState<Array<{ cod: string; nom: string; dpto?: string }>>([
+    { cod: '05001', nom: 'MEDELLIN', dpto: 'ANTIOQUIA' },
+    { cod: '11001', nom: 'BOGOTA D.C.', dpto: 'CUNDINAMARCA' },
+    { cod: '76001', nom: 'CALI', dpto: 'VALLE DEL CAUCA' },
+    { cod: '08001', nom: 'BARRANQUILLA', dpto: 'ATLANTICO' },
+    { cod: '13001', nom: 'CARTAGENA', dpto: 'BOLIVAR' },
+    { cod: '68001', nom: 'BUCARAMANGA', dpto: 'SANTANDER' },
+    { cod: '66001', nom: 'PEREIRA', dpto: 'RISARALDA' },
+    { cod: '17001', nom: 'MANIZALES', dpto: 'CALDAS' },
+    { cod: '63001', nom: 'ARMENIA', dpto: 'QUINDIO' },
+    { cod: '54001', nom: 'CUCUTA', dpto: 'NORTE DE SANTANDER' },
+    { cod: '41001', nom: 'NEIVA', dpto: 'HUILA' },
+    { cod: '73001', nom: 'IBAGUE', dpto: 'TOLIMA' },
+    { cod: '50001', nom: 'VILLAVICENCIO', dpto: 'META' },
+    { cod: '20001', nom: 'VALLEDUPAR', dpto: 'CESAR' },
+    { cod: '23001', nom: 'MONTERIA', dpto: 'CORDOBA' },
+    { cod: '47001', nom: 'SANTA MARTA', dpto: 'MAGDALENA' },
+    { cod: '52001', nom: 'PASTO', dpto: 'NARINO' },
+    { cod: '19001', nom: 'POPAYAN', dpto: 'CAUCA' }
+  ]);
+  const [newCodCiu, setNewCodCiu] = useState('05001');
   const [savingClient, setSavingClient] = useState(false);
   const [clientError, setClientError] = useState<string | null>(null);
 
@@ -273,6 +294,18 @@ export const ModalHabitacion = ({
       })
       .catch((err) => console.error('Error al cargar tipos de documento:', err));
 
+    fetch('/api/terceros/ciudades', {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        if (Array.isArray(data) && data.length > 0) {
+          setCiudades(data);
+          setNewCodCiu((prev) => prev || data[0].cod);
+        }
+      })
+      .catch((err) => console.error('Error al cargar ciudades:', err));
+
     return fetch('/api/terceros', {
       headers: { Authorization: `Bearer ${token}` },
     })
@@ -400,6 +433,10 @@ export const ModalHabitacion = ({
       setClientError('La dirección es obligatoria (*)');
       return;
     }
+    if (!newCodCiu || !newCodCiu.trim()) {
+      setClientError('La ciudad es obligatoria (*)');
+      return;
+    }
 
     setSavingClient(true);
     setClientError(null);
@@ -408,6 +445,8 @@ export const ModalHabitacion = ({
     const calculatedName = isJuridica
       ? newNombre.trim()
       : [newApellido1.trim(), newApellido2.trim(), newNombre1.trim(), newNombre2.trim()].filter(Boolean).join(' ').trim();
+
+    const selectedCity = ciudades.find((c) => c.cod === newCodCiu);
 
     try {
       const res = await fetch('/api/terceros/grabeTercero', {
@@ -429,6 +468,8 @@ export const ModalHabitacion = ({
             cel: newCelular.trim(),
             email: newEmail.trim(),
             dir: newDireccion.trim(),
+            codCiu: newCodCiu.trim(),
+            nomCiu: selectedCity ? selectedCity.nom : 'MEDELLIN',
           },
         }),
       });
@@ -1093,16 +1134,33 @@ export const ModalHabitacion = ({
                         </div>
                       </div>
 
-                      <div className="modal-form-group">
-                        <label className="modal-form-label">Dirección *:</label>
-                        <input
-                          type="text"
-                          className="modal-form-input"
-                          value={newDireccion}
-                          onChange={(e) => setNewDireccion(e.target.value)}
-                          placeholder="Carrera 15 #23-45"
-                          required
-                        />
+                      <div className="modal-form-row">
+                        <div className="modal-form-group flex-1">
+                          <label className="modal-form-label">Dirección *:</label>
+                          <input
+                            type="text"
+                            className="modal-form-input"
+                            value={newDireccion}
+                            onChange={(e) => setNewDireccion(e.target.value)}
+                            placeholder="Carrera 15 #23-45"
+                            required
+                          />
+                        </div>
+                        <div className="modal-form-group flex-1">
+                          <label className="modal-form-label">Ciudad *:</label>
+                          <select
+                            className="modal-form-select"
+                            value={newCodCiu}
+                            onChange={(e) => setNewCodCiu(e.target.value)}
+                            required
+                          >
+                            {ciudades.map((c) => (
+                              <option key={c.cod} value={c.cod}>
+                                {c.nom} {c.dpto ? `(${c.dpto})` : ''}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
                       </div>
 
                       <button

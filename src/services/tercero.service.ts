@@ -145,6 +145,65 @@ export class TerceroService {
         ];
     }
 
+    // Obtener catálogo de ciudades desde la tabla CIUDADES
+    static async getCiudades(): Promise<any[]> {
+        try {
+            const rows = await db(tables.CIUDADES)
+                .select(
+                    'CIUD_COD as cod',
+                    'CIUD_NOM as nom',
+                    'CIUD_DPTO as dpto'
+                )
+                .whereRaw("UPPER(TRIM(COALESCE(CIUD_ACTIVA, 'S'))) = 'S'")
+                .orderBy('CIUD_NOM', 'asc');
+
+            if (rows && rows.length > 0) {
+                return rows.map((r: any) => ({
+                    cod: String(r.cod || r.COD || '').trim(),
+                    nom: String(r.nom || r.NOM || '').trim(),
+                    dpto: r.dpto || r.DPTO ? String(r.dpto || r.DPTO).trim() : ''
+                })).filter((c: any) => c.cod && c.nom);
+            }
+        } catch (e: any) {
+            console.error('Error consultando CIUDADES en Firebird:', e.message);
+        }
+
+        // Fallback de ciudades principales de Colombia
+        return [
+            { cod: '05001', nom: 'MEDELLIN', dpto: 'ANTIOQUIA' },
+            { cod: '11001', nom: 'BOGOTA D.C.', dpto: 'CUNDINAMARCA' },
+            { cod: '76001', nom: 'CALI', dpto: 'VALLE DEL CAUCA' },
+            { cod: '08001', nom: 'BARRANQUILLA', dpto: 'ATLANTICO' },
+            { cod: '13001', nom: 'CARTAGENA', dpto: 'BOLIVAR' },
+            { cod: '68001', nom: 'BUCARAMANGA', dpto: 'SANTANDER' },
+            { cod: '66001', nom: 'PEREIRA', dpto: 'RISARALDA' },
+            { cod: '17001', nom: 'MANIZALES', dpto: 'CALDAS' },
+            { cod: '63001', nom: 'ARMENIA', dpto: 'QUINDIO' },
+            { cod: '54001', nom: 'CUCUTA', dpto: 'NORTE DE SANTANDER' },
+            { cod: '41001', nom: 'NEIVA', dpto: 'HUILA' },
+            { cod: '73001', nom: 'IBAGUE', dpto: 'TOLIMA' },
+            { cod: '50001', nom: 'VILLAVICENCIO', dpto: 'META' },
+            { cod: '20001', nom: 'VALLEDUPAR', dpto: 'CESAR' },
+            { cod: '23001', nom: 'MONTERIA', dpto: 'CORDOBA' },
+            { cod: '47001', nom: 'SANTA MARTA', dpto: 'MAGDALENA' },
+            { cod: '52001', nom: 'PASTO', dpto: 'NARINO' },
+            { cod: '19001', nom: 'POPAYAN', dpto: 'CAUCA' },
+            { cod: '27001', nom: 'QUIBDO', dpto: 'CHOCO' },
+            { cod: '70001', nom: 'SINCELEJO', dpto: 'SUCRE' },
+            { cod: '15001', nom: 'TUNJA', dpto: 'BOYACA' },
+            { cod: '44001', nom: 'RIOHACHA', dpto: 'LA GUAJIRA' },
+            { cod: '81001', nom: 'ARAUCA', dpto: 'ARAUCA' },
+            { cod: '85001', nom: 'YOPAL', dpto: 'CASANARE' },
+            { cod: '86001', nom: 'MOCOA', dpto: 'PUTUMAYO' },
+            { cod: '88001', nom: 'SAN ANDRES', dpto: 'SAN ANDRES' },
+            { cod: '91001', nom: 'LETICIA', dpto: 'AMAZONAS' },
+            { cod: '94001', nom: 'INIRIDA', dpto: 'GUAINIA' },
+            { cod: '95001', nom: 'SAN JOSE DEL GUAVIARE', dpto: 'GUAVIARE' },
+            { cod: '97001', nom: 'MITU', dpto: 'VAUPES' },
+            { cod: '99001', nom: 'PUERTO CARRENO', dpto: 'VICHADA' }
+        ];
+    }
+
     // Grabar o actualizar tercero (cliente / huésped) similar a SYSplusCloudBE
     static async grabeTercero(data: IGrabeTercero): Promise<any> {
         if (!data.tipoId || data.tipoId.trim() === '') {
@@ -179,10 +238,10 @@ export class TerceroService {
             nom2 = data.nombre2 ? data.nombre2.trim() : null;
 
             if (!ape1 && (!data.nombre || data.nombre.trim() === '')) {
-                throw new Error('El primer apellido es obligatorio');
+                throw new Error('El 1er. Apellido es obligatorio');
             }
             if (!nom1 && (!data.nombre || data.nombre.trim() === '')) {
-                throw new Error('El primer nombre es obligatorio');
+                throw new Error('El 1er. Nombre es obligatorio');
             }
 
             if (ape1 || nom1) {
@@ -208,6 +267,18 @@ export class TerceroService {
             throw new Error('La dirección es obligatoria');
         }
 
+        const codCiu = (data.codCiu || '05001').trim();
+        let nomCiu = data.nomCiu ? data.nomCiu.trim() : '';
+        if (!nomCiu && codCiu) {
+            try {
+                const ciudRow = await db(tables.CIUDADES).where('CIUD_COD', codCiu).first();
+                if (ciudRow) nomCiu = String(ciudRow.CIUD_NOM || '').trim();
+            } catch (err) {
+                // ignore
+            }
+        }
+        if (!nomCiu) nomCiu = 'MEDELLIN';
+
         const telefono = (data.cel || data.tel || '').trim();
 
         // 1. Verificar si el tercero ya existe en la tabla TERCEROS
@@ -228,7 +299,8 @@ export class TerceroService {
             TERC_TEL: telefono,
             TERC_CEL: telefono,
             TERC_EMAIL: data.email ? data.email.trim() : null,
-            CIUD_COD: data.codCiu || '05001',
+            CIUD_COD: codCiu.substring(0, 5),
+            TERC_CIU: nomCiu.substring(0, 60),
             PAIS_ID: data.codPais || '169',
             TERC_CLIE: 'S',
             TERC_ESTADO: 'S',
