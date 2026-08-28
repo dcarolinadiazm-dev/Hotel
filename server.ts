@@ -51,6 +51,8 @@ app.use((err: any, req: Request, res: Response, next: NextFunction) => {
     });
 });
 
+import { HabitacionService } from './src/services/habitacion.service';
+
 // Iniciar Servidor
 app.listen(PORT, () => {
     console.log(`====================================================`);
@@ -60,4 +62,10 @@ app.listen(PORT, () => {
     console.log(`📁 Archivo FDB: ${dbOptions.database}`);
     console.log(`🏗️ Arquitectura: Knex + Controllers + Services + Routes`);
     console.log(`====================================================`);
+
+    // Sincronización automática de estado 'Ocupada' para reservas de hoy
+    HabitacionService.syncHabitacionesEstadoAutomatico().catch(() => {});
+    setInterval(() => {
+        HabitacionService.syncHabitacionesEstadoAutomatico().catch(() => {});
+    }, 5 * 60 * 1000);
 });

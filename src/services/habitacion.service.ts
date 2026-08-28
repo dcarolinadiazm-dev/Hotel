@@ -9,8 +9,46 @@ import { sanitizeText, truncateToBytes } from '../utils/text.utils';
 
 export class HabitacionService {
 
+    // Validación automática diaria: Cambiar a 'Ocupada' las habitaciones reservadas cuya fecha de reserva ya llegó (<= hoy)
+    static async syncHabitacionesEstadoAutomatico(): Promise<void> {
+        try {
+            const now = new Date();
+            const year = now.getFullYear();
+            const month = String(now.getMonth() + 1).padStart(2, '0');
+            const day = String(now.getDate()).padStart(2, '0');
+            const todayStr = `${year}-${month}-${day}`;
+
+            const reservadas = await db(tables.HABITACION)
+                .where('ESTADO', 'Reservada')
+                .select('ID_HABITACION', 'NUMERO');
+
+            for (const hab of reservadas) {
+                const habId = String(hab.ID_HABITACION).trim();
+                const activeMov = await db(tables.HABITACION_MOVIM)
+                    .where('ID_HABITACION', habId)
+                    .andWhere(function () {
+                        this.where('ESTADO', 'Activo').orWhereNull('ESTADO');
+                    })
+                    .orderBy('ID_MOVIM', 'desc')
+                    .first();
+
+                if (activeMov && activeMov.FECHA_RESERVA) {
+                    const fReservaDate = String(activeMov.FECHA_RESERVA).split('T')[0];
+                    if (fReservaDate <= todayStr) {
+                        await db(tables.HABITACION)
+                            .where('ID_HABITACION', habId)
+                            .update({ ESTADO: 'Ocupada' });
+                    }
+                }
+            }
+        } catch (e: any) {
+            console.warn('Aviso en syncHabitacionesEstadoAutomatico:', e.message);
+        }
+    }
+
     // Listar todas las habitaciones con precio desde PRECIOS_ARTICULO (LISTA_PRECIOS LIPR_PREDET)
     static async getAllHabitaciones(): Promise<IHabitacionDTO[]> {
+        await this.syncHabitacionesEstadoAutomatico();
         const defaultLipr = await ArticuloService.getDefaultLiprCod();
 
         const habitaciones = await db(tables.HABITACION)
@@ -130,6 +168,7 @@ export class HabitacionService {
 
     // Obtener detalle de una habitación con sus consumos activos desde DOC_INVENTARIO_DET_WEB
     static async getHabitacionById(id: string) {
+        await this.syncHabitacionesEstadoAutomatico();
         const defaultLipr = await ArticuloService.getDefaultLiprCod();
 
         const hab = await db(tables.HABITACION)
@@ -333,12 +372,77 @@ export class HabitacionService {
         }
 
         const habNumero = hab.NUMERO ? String(hab.NUMERO).trim() : id;
-        const estadoActual = data.estado || hab.ESTADO || 'Disponible';
+        const estadoEntrante = data.estado || hab.ESTADO || 'Disponible';
         const huesped = data.huesped ? String(data.huesped).trim() : '';
         const documento = data.documento ? String(data.documento).trim() : '';
         const fechaReserva = data.fechaReserva || null;
         const fechaSalida = data.fechaSalida || null;
         const artiCod = data.artiCod ? String(data.artiCod).trim() : (hab.ARTI_COD ? String(hab.ARTI_COD).trim() : '001');
+
+        // 1. Obtener fecha de hoy en formato YYYY-MM-DD
+        const now = new Date();
+        const year = now.getFullYear();
+        const month = String(now.getMonth() + 1).padStart(2, '0');
+        const day = String(now.getDate()).padStart(2, '0');
+        const todayStr = `${year}-${month}-${day}`;
+
+        // 2. Determinar si es una reserva formal
+        const isReservaFormal = (estadoEntrante === 'Reservada' || estadoEntrante === 'Ocupada') && Boolean(huesped || documento) && Boolean(fechaReserva);
+
+        // 3. Consultar movimiento activo actual para esta habitación
+        const existingActiveMov = await db(tables.HABITACION_MOVIM)
+            .where('ID_HABITACION', id)
+            .andWhere(function () {
+                this.where('ESTADO', 'Activo').orWhereNull('ESTADO');
+            })
+            .orderBy('ID_MOVIM', 'desc')
+            .first();
+
+        // 4. Validación 2: Si hay reserva en fecha futura/actual, validar traslape de fechas
+        if (fechaReserva && fechaSalida && isReservaFormal) {
+            const newStart = new Date(fechaReserva).getTime();
+            const newEnd = new Date(fechaSalida).getTime();
+
+            if (newEnd <= newStart) {
+                throw new Error('La fecha y hora de salida debe ser posterior a la fecha y hora de reserva.');
+            }
+
+            const otherActiveMovs = await db(tables.HABITACION_MOVIM)
+                .where('ID_HABITACION', id)
+                .andWhere(function () {
+                    this.where('ESTADO', 'Activo').orWhereNull('ESTADO');
+                })
+                .select('*');
+
+            for (const mov of otherActiveMovs) {
+                // Excluir el movimiento actual que se está actualizando
+                if (existingActiveMov && mov.ID_MOVIM === existingActiveMov.ID_MOVIM) {
+                    continue;
+                }
+
+                if (mov.FECHA_RESERVA && mov.FECHA_SALIDA) {
+                    const existStart = new Date(mov.FECHA_RESERVA).getTime();
+                    const existEnd = new Date(mov.FECHA_SALIDA).getTime();
+
+                    if (newStart < existEnd && newEnd > existStart) {
+                        const fIniStr = String(mov.FECHA_RESERVA).replace('T', ' ');
+                        const fFinStr = String(mov.FECHA_SALIDA).replace('T', ' ');
+                        throw new Error(`La habitación #${habNumero} ya tiene una reserva activa entre el ${fIniStr} y el ${fFinStr}. No es posible registrar otra reserva para esa misma fecha.`);
+                    }
+                }
+            }
+        }
+
+        // 5. Validación 1: Si la reserva inicia hoy (o en el pasado), cambiar automáticamente a 'Ocupada'
+        let estadoActual = estadoEntrante;
+        if (isReservaFormal || (estadoEntrante === 'Reservada' && fechaReserva)) {
+            const fReservaDateStr = String(fechaReserva).split('T')[0];
+            if (fReservaDateStr <= todayStr) {
+                estadoActual = 'Ocupada';
+            } else {
+                estadoActual = 'Reservada';
+            }
+        }
 
         // Obtener el precio desde PRECIOS_ARTICULO para la lista seleccionada o predeterminada
         const defaultLipr = data.liprCod ? parseInt(String(data.liprCod), 10) : await ArticuloService.getDefaultLiprCod();
@@ -348,9 +452,6 @@ export class HabitacionService {
             : precioArticulo;
 
         let dinwId: number | undefined = undefined;
-
-        // Crear/sincronizar documento web y movimiento ÚNICAMENTE si es una reserva formal (Reservada + Huésped + Fecha)
-        const isReservaFormal = estadoActual === 'Reservada' && Boolean(huesped || documento) && Boolean(fechaReserva);
 
         if (isReservaFormal) {
             // 1. Obtener o crear DOC_INVENTARIO_WEB
@@ -369,15 +470,6 @@ export class HabitacionService {
                 if (documento) updateDinw.DINW_NIT = documento;
                 await db(tables.DOC_INVENTARIO_WEB).where('DINW_ID', dinwId).update(updateDinw);
             }
-
-            // 2. Verificar si YA EXISTE un movimiento activo para esta reserva
-            const existingActiveMov = await db(tables.HABITACION_MOVIM)
-                .where('ID_HABITACION', id)
-                .andWhere(function () {
-                    this.where('ESTADO', 'Activo').orWhereNull('ESTADO');
-                })
-                .orderBy('ID_MOVIM', 'desc')
-                .first();
 
             if (existingActiveMov) {
                 // Actualizar el movimiento de la reserva existente (sin duplicar ID_MOVIM)

@@ -881,18 +881,25 @@ export const ModalHabitacion = ({
   };
 
 
+  const isReservaParaHoy = (() => {
+    if (!fechaReserva) return false;
+    const now = new Date();
+    const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    return String(fechaReserva).split('T')[0] <= todayStr;
+  })();
+
   // Validaciones obligatorias para habilitar el botón de Guardar
-  const isEstadoReservada = estado === 'Reservada';
+  const isEstadoReserva = estado === 'Reservada' || estado === 'Ocupada';
   const hasHuesped = Boolean((documento && documento.trim() !== '') || (huesped && huesped.trim() !== ''));
   const hasFechaEntrada = Boolean(fechaReserva && fechaReserva.trim() !== '');
   const hasFechaSalida = Boolean(fechaSalida && fechaSalida.trim() !== '');
   const hasPrecioNoche = Number(precioNoche || 0) > 0;
 
-  const isFormValid = isEstadoReservada && hasHuesped && hasFechaEntrada && hasFechaSalida && hasPrecioNoche;
+  const isFormValid = isEstadoReserva && hasHuesped && hasFechaEntrada && hasFechaSalida && hasPrecioNoche;
 
   let validationReason = '';
-  if (!isEstadoReservada) {
-    validationReason = 'El estado debe estar en "Reservada" para guardar';
+  if (!isEstadoReserva) {
+    validationReason = 'El estado debe estar en "Reservada" u "Ocupada" para guardar';
   } else if (!hasHuesped) {
     validationReason = 'Debes seleccionar un Huésped / Cliente';
   } else if (!hasFechaEntrada) {
@@ -1217,6 +1224,11 @@ export const ModalHabitacion = ({
                       value={fechaReserva}
                       onChange={(e) => setFechaReserva(e.target.value)}
                     />
+                    {isReservaParaHoy && (
+                      <span style={{ display: 'block', marginTop: '4px', fontSize: '11px', color: '#dc2626', fontWeight: 700 }}>
+                        ⚡ Inicia hoy: Al guardar quedará en estado <strong>OCUPADA</strong>.
+                      </span>
+                    )}
                   </div>
 
                   <div className="modal-form-group flex-1">
