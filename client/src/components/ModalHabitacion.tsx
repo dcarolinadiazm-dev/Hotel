@@ -1018,48 +1018,48 @@ export const ModalHabitacion = ({
                         <>
                           <div className="modal-form-row">
                             <div className="modal-form-group flex-1">
-                              <label className="modal-form-label">Primer Apellido *:</label>
+                              <label className="modal-form-label">1er. Apellido *:</label>
                               <input
                                 type="text"
                                 className="modal-form-input"
                                 value={newApellido1}
                                 onChange={(e) => setNewApellido1(e.target.value)}
-                                placeholder="Ej: Gómez"
+                                placeholder="Ej: Sierra"
                                 required
                               />
                             </div>
                             <div className="modal-form-group flex-1">
-                              <label className="modal-form-label">Segundo Apellido:</label>
+                              <label className="modal-form-label">2do. Apellido:</label>
                               <input
                                 type="text"
                                 className="modal-form-input"
                                 value={newApellido2}
                                 onChange={(e) => setNewApellido2(e.target.value)}
-                                placeholder="Ej: Pérez"
+                                placeholder="Opcional"
                               />
                             </div>
                           </div>
 
                           <div className="modal-form-row">
                             <div className="modal-form-group flex-1">
-                              <label className="modal-form-label">Primer Nombre *:</label>
+                              <label className="modal-form-label">1er. Nombre *:</label>
                               <input
                                 type="text"
                                 className="modal-form-input"
                                 value={newNombre1}
                                 onChange={(e) => setNewNombre1(e.target.value)}
-                                placeholder="Ej: Carlos"
+                                placeholder="Ej: Kevin"
                                 required
                               />
                             </div>
                             <div className="modal-form-group flex-1">
-                              <label className="modal-form-label">Segundo Nombre:</label>
+                              <label className="modal-form-label">2do. Nombre:</label>
                               <input
                                 type="text"
                                 className="modal-form-input"
                                 value={newNombre2}
                                 onChange={(e) => setNewNombre2(e.target.value)}
-                                placeholder="Ej: Alberto"
+                                placeholder="Opcional"
                               />
                             </div>
                           </div>
