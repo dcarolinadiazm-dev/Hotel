@@ -8,9 +8,10 @@ import { CerrarPedido } from './components/CerrarPedido';
 import { ReportePedidos } from './components/ReportePedidos';
 import { ReporteCartera } from './components/ReporteCartera';
 import { ReporteCierresZ } from './components/ReporteCierresZ';
+import { ReporteReservasFuturas } from './components/ReporteReservasFuturas';
 import './App.css';
 
-type ActiveView = 'HABITACIONES' | 'CARRITO' | 'CERRAR_PEDIDO' | 'REPORTES' | 'CARTERA' | 'CIERRES';
+type ActiveView = 'HABITACIONES' | 'CARRITO' | 'CERRAR_PEDIDO' | 'REPORTES' | 'CARTERA' | 'CIERRES' | 'RESERVAS_FUTURAS';
 
 function App() {
   const [currentUser, setCurrentUser] = useState<{ username: string } | null>(null);
@@ -113,6 +114,7 @@ function App() {
           onGoToReports={() => setCurrentView('REPORTES')}
           onGoToCartera={() => setCurrentView('CARTERA')}
           onGoToCierres={() => setCurrentView('CIERRES')}
+          onGoToReservasFuturas={() => setCurrentView('RESERVAS_FUTURAS')}
           onLogout={handleLogout}
         />
       )}
@@ -158,6 +160,7 @@ function App() {
           onBackToRooms={() => setCurrentView('HABITACIONES')}
           onGoToCartera={() => setCurrentView('CARTERA')}
           onGoToCierres={() => setCurrentView('CIERRES')}
+          onGoToReservasFuturas={() => setCurrentView('RESERVAS_FUTURAS')}
           onLogout={handleLogout}
         />
       )}
@@ -171,6 +174,7 @@ function App() {
           onBackToRooms={() => setCurrentView('HABITACIONES')}
           onGoToPedidosReport={() => setCurrentView('REPORTES')}
           onGoToCierres={() => setCurrentView('CIERRES')}
+          onGoToReservasFuturas={() => setCurrentView('RESERVAS_FUTURAS')}
           onLogout={handleLogout}
         />
       )}
@@ -184,10 +188,24 @@ function App() {
           onBackToRooms={() => setCurrentView('HABITACIONES')}
           onGoToPedidosReport={() => setCurrentView('REPORTES')}
           onGoToCartera={() => setCurrentView('CARTERA')}
+          onGoToReservasFuturas={() => setCurrentView('RESERVAS_FUTURAS')}
           onLogout={handleLogout}
         />
       )}
 
+      {/* Vista 9: Reporte de Reservas Futuras y Agenda */}
+      {currentView === 'RESERVAS_FUTURAS' && (
+        <ReporteReservasFuturas
+          user={currentUser}
+          sidebarOpen={sidebarOpen}
+          onToggleSidebar={() => setSidebarOpen((prev) => !prev)}
+          onBackToRooms={() => setCurrentView('HABITACIONES')}
+          onGoToPedidosReport={() => setCurrentView('REPORTES')}
+          onGoToCartera={() => setCurrentView('CARTERA')}
+          onGoToCierres={() => setCurrentView('CIERRES')}
+          onLogout={handleLogout}
+        />
+      )}
 
       {/* Vista 5: Modal de Habitación (Overlay sobre la vista activa) */}
       {modalHabitacion && (

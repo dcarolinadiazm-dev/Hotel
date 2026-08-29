@@ -346,7 +346,7 @@ export const ModalImpresionCierreZ: React.FC<ModalImpresionCierreZProps> = ({
 
             <div className="pos-ticket-footer">
               <p style={{ fontSize: '9px', color: '#555', margin: '4px 0 0 0' }}>
-                SYSplus ERP · Control de Turnos Hotel
+                SYSplus Cel. 320 7376878 · Control de Turnos Hotel
               </p>
             </div>
           </div>

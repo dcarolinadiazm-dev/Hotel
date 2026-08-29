@@ -1073,11 +1073,72 @@ export const ModalHabitacion = ({
             )}
 
 
+            {/* Tira visual de Agenda de Reservas de la Habitación */}
+            {movimientos.length > 0 && (
+              <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '12px 14px', marginBottom: '16px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                  <span style={{ fontSize: '13px', fontWeight: 800, color: '#1e293b' }}>
+                    📅 Agenda de Reservas de esta Habitación ({movimientos.length})
+                  </span>
+                  <button
+                    type="button"
+                    className={`btn-nueva-reserva-compact ${selectedMovimId === 'NUEVA' ? 'active' : ''}`}
+                    onClick={iniciarNuevaReserva}
+                    style={{ padding: '4px 10px', fontSize: '11.5px' }}
+                    title="Programar una nueva reserva para otros días en esta habitación"
+                  >
+                    ➕ Programar Otra Fecha
+                  </button>
+                </div>
+                <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '4px' }}>
+                  {movimientos.map((m) => {
+                    const fIni = m.fechaReserva ? m.fechaReserva.split('T')[0] : 'Sin fecha';
+                    const fFin = m.fechaSalida ? m.fechaSalida.split('T')[0] : '';
+                    const guestName = m.huesped || 'Huésped Sin Nombre';
+                    const isSelected = selectedMovimId === m.idMovim;
+                    const now = new Date();
+                    const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+                    const isToday = fIni <= todayStr && (!fFin || fFin >= todayStr);
+
+                    return (
+                      <div
+                        key={m.idMovim}
+                        onClick={() => cargarMovimientoEnFormulario(m)}
+                        style={{
+                          background: isSelected ? '#eff6ff' : '#ffffff',
+                          border: `1.5px solid ${isSelected ? '#3b82f6' : '#cbd5e1'}`,
+                          borderRadius: '8px',
+                          padding: '8px 12px',
+                          cursor: 'pointer',
+                          minWidth: '210px',
+                          flexShrink: 0,
+                          transition: 'all 0.15s ease'
+                        }}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                          <span style={{ fontSize: '10.5px', fontWeight: 800, padding: '1px 6px', borderRadius: '4px', background: isToday ? '#dcfce7' : '#fef3c7', color: isToday ? '#15803d' : '#b45309' }}>
+                            {isToday ? '🟢 En curso' : '🟡 Futura'}
+                          </span>
+                          {isSelected && <span style={{ fontSize: '11px', color: '#2563eb', fontWeight: 700 }}>✓ Editando</span>}
+                        </div>
+                        <div style={{ fontSize: '12px', fontWeight: 700, color: '#1e293b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          👤 {guestName}
+                        </div>
+                        <div style={{ fontSize: '11px', color: '#64748b', marginTop: '2px' }}>
+                          📅 {fIni} ➔ {fFin}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
             {/* Barra con Selector de Reserva y Botón Nueva Reserva */}
             <div className="room-reservations-selector-bar">
               <div className="room-reservations-selector-group">
                 <label className="reservations-selector-label">
-                  🗓️ Reserva a gestionar:
+                  🗓️ Reserva activa a editar:
                 </label>
                 <select
                   className="reservations-dropdown-select"

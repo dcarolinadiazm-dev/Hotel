@@ -942,4 +942,136 @@ export class HabitacionService {
             });
         }
     }
+
+    // Consultar todas las reservas agendadas y futuras para el reporte
+    static async getReservasFuturas(filters?: {
+        fechaDesde?: string;
+        fechaHasta?: string;
+        habitacionId?: string;
+        busqueda?: string;
+    }): Promise<any[]> {
+        const today = new Date();
+        const year = today.getFullYear();
+        const month = String(today.getMonth() + 1).padStart(2, '0');
+        const day = String(today.getDate()).padStart(2, '0');
+        const todayStr = `${year}-${month}-${day}`;
+
+        let query = db(tables.HABITACION_MOVIM)
+            .join(tables.HABITACION, `${tables.HABITACION_MOVIM}.ID_HABITACION`, '=', `${tables.HABITACION}.ID_HABITACION`)
+            .leftJoin(tables.DOC_INVENTARIO_WEB, `${tables.HABITACION_MOVIM}.DINW_ID`, '=', `${tables.DOC_INVENTARIO_WEB}.DINW_ID`)
+            .leftJoin(tables.TERCEROS, `${tables.DOC_INVENTARIO_WEB}.DINW_NIT`, '=', `${tables.TERCEROS}.TERC_NIT`)
+            .where(function () {
+                this.where(`${tables.HABITACION_MOVIM}.ESTADO`, 'Activo').orWhereNull(`${tables.HABITACION_MOVIM}.ESTADO`);
+            })
+            .andWhere(function () {
+                this.whereNull(`${tables.DOC_INVENTARIO_WEB}.DINW_IDDOC`).orWhere(`${tables.DOC_INVENTARIO_WEB}.DINW_IDDOC`, 0);
+            })
+            .andWhere(function () {
+                this.whereNull(`${tables.DOC_INVENTARIO_WEB}.DINW_ANULADO`).orWhere(`${tables.DOC_INVENTARIO_WEB}.DINW_ANULADO`, '!=', 'S');
+            })
+            .select(
+                `${tables.HABITACION_MOVIM}.ID_MOVIM`,
+                `${tables.HABITACION_MOVIM}.ID_HABITACION`,
+                `${tables.HABITACION_MOVIM}.FECHA_RESERVA`,
+                `${tables.HABITACION_MOVIM}.FECHA_SALIDA`,
+                `${tables.HABITACION_MOVIM}.DINW_ID`,
+                `${tables.HABITACION_MOVIM}.ESTADO as MOV_ESTADO`,
+                `${tables.HABITACION}.NUMERO as HAB_NUMERO`,
+                `${tables.HABITACION}.TIPO as HAB_TIPO`,
+                `${tables.HABITACION}.PISO as HAB_PISO`,
+                `${tables.HABITACION}.PRECIO as HAB_PRECIO`,
+                `${tables.DOC_INVENTARIO_WEB}.DINW_NIT`,
+                `${tables.DOC_INVENTARIO_WEB}.DINW_TOTAL`,
+                `${tables.DOC_INVENTARIO_WEB}.DINW_OBS`,
+                `${tables.TERCEROS}.TERC_NOM`,
+                `${tables.TERCEROS}.TERC_TEL`,
+                `${tables.TERCEROS}.TERC_CEL`
+            )
+            .orderBy(`${tables.HABITACION_MOVIM}.FECHA_RESERVA`, 'asc');
+
+        if (filters?.habitacionId) {
+            query = query.where(`${tables.HABITACION_MOVIM}.ID_HABITACION`, filters.habitacionId);
+        }
+        if (filters?.fechaDesde) {
+            query = query.where(`${tables.HABITACION_MOVIM}.FECHA_RESERVA`, '>=', `${filters.fechaDesde} 00:00:00`);
+        }
+        if (filters?.fechaHasta) {
+            query = query.where(`${tables.HABITACION_MOVIM}.FECHA_RESERVA`, '<=', `${filters.fechaHasta} 23:59:59`);
+        }
+
+        const rows = await query;
+
+        const results = [];
+        for (const r of rows) {
+            let huesped = r.TERC_NOM ? String(r.TERC_NOM).trim() : '';
+            const documento = r.DINW_NIT ? String(r.DINW_NIT).trim() : '';
+            if (!huesped && r.DINW_OBS) {
+                const parts = String(r.DINW_OBS).split('-');
+                if (parts.length > 1) huesped = parts[1].trim();
+            }
+
+            const fReserva = r.FECHA_RESERVA ? String(r.FECHA_RESERVA).split('T')[0] : '';
+            const fSalida = r.FECHA_SALIDA ? String(r.FECHA_SALIDA).split('T')[0] : '';
+
+            // Calcular noches
+            let noches = 1;
+            if (fReserva && fSalida) {
+                const diffTime = new Date(fSalida).getTime() - new Date(fReserva).getTime();
+                noches = Math.max(1, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
+            }
+
+            const dinwId = r.DINW_ID ? parseInt(String(r.DINW_ID), 10) : undefined;
+            let abonos = 0;
+            if (dinwId) {
+                try {
+                    abonos = await AbonoService.getTotalAbonos(dinwId);
+                } catch {}
+            }
+            const precioNoche = parseFloat(String(r.HAB_PRECIO || '0'));
+            const totalEstadia = noches * precioNoche;
+            const saldoPendiente = Math.max(0, totalEstadia - abonos);
+
+            let estadoReserva = 'Futura';
+            if (fReserva === todayStr) {
+                estadoReserva = 'Llega Hoy';
+            } else if (fReserva < todayStr) {
+                estadoReserva = 'En Curso';
+            }
+
+            results.push({
+                idMovim: r.ID_MOVIM,
+                habitacionId: String(r.ID_HABITACION).trim(),
+                habitacionNumero: String(r.HAB_NUMERO || '').trim(),
+                habitacionTipo: String(r.HAB_TIPO || 'SENCILLA').trim(),
+                habitacionPiso: r.HAB_PISO || 1,
+                huesped: huesped || 'Huésped Sin Nombre',
+                documento,
+                telefono: r.TERC_CEL ? String(r.TERC_CEL).trim() : (r.TERC_TEL ? String(r.TERC_TEL).trim() : ''),
+                fechaReserva: r.FECHA_RESERVA,
+                fechaSalida: r.FECHA_SALIDA,
+                fechaReservaTexto: fReserva,
+                fechaSalidaTexto: fSalida,
+                noches,
+                precioNoche,
+                totalEstadia,
+                abonos,
+                saldoPendiente,
+                estadoReserva,
+                peweId: dinwId,
+                observaciones: r.DINW_OBS ? String(r.DINW_OBS).trim() : ''
+            });
+        }
+
+        if (filters?.busqueda && filters.busqueda.trim()) {
+            const q = filters.busqueda.trim().toLowerCase();
+            return results.filter(item =>
+                item.habitacionNumero.toLowerCase().includes(q) ||
+                item.huesped.toLowerCase().includes(q) ||
+                item.documento.toLowerCase().includes(q) ||
+                item.observaciones.toLowerCase().includes(q)
+            );
+        }
+
+        return results;
+    }
 }

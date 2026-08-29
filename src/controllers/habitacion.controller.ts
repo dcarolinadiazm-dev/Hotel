@@ -136,4 +136,21 @@ export class HabitacionController {
             res.status(500).json({ error: error.message });
         }
     }
+
+    // GET /api/reportes/reservas-futuras o /api/habitaciones/reservas-futuras
+    static async getReservasFuturas(req: Request, res: Response) {
+        try {
+            const { fechaDesde, fechaHasta, habitacionId, busqueda } = req.query;
+            const reservas = await HabitacionService.getReservasFuturas({
+                fechaDesde: fechaDesde ? String(fechaDesde) : undefined,
+                fechaHasta: fechaHasta ? String(fechaHasta) : undefined,
+                habitacionId: habitacionId ? String(habitacionId) : undefined,
+                busqueda: busqueda ? String(busqueda) : undefined
+            });
+            res.json({ reservas });
+        } catch (error: any) {
+            console.error('Error en HabitacionController.getReservasFuturas:', error.message);
+            res.status(500).json({ error: error.message || 'Error al consultar reservas futuras' });
+        }
+    }
 }

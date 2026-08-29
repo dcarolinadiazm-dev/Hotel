@@ -1,50 +1,58 @@
 import { useState, useEffect } from 'react';
 import * as XLSX from 'xlsx';
-import { ModalImpresionCierreZ, type ResumenCierreZData } from './ModalImpresionCierreZ';
 
-export interface TurnoReporteItem {
-  idTurno: number;
-  usuario: string;
-  fechaApertura: string;
-  fechaCierre?: string | null;
-  base: number;
-  estado: string;
-  totalVentas: number;
-  totalPagos: number;
+export interface ReservaFuturaItem {
+  idMovim: number;
+  habitacionId: string;
+  habitacionNumero: string;
+  habitacionTipo: string;
+  habitacionPiso: number;
+  huesped: string;
+  documento: string;
+  telefono: string;
+  fechaReserva: string;
+  fechaSalida: string;
+  fechaReservaTexto: string;
+  fechaSalidaTexto: string;
+  noches: number;
+  precioNoche: number;
+  totalEstadia: number;
+  abonos: number;
+  saldoPendiente: number;
+  estadoReserva: string;
+  peweId?: number;
   observaciones?: string;
 }
 
-interface ReporteCierresZProps {
+interface ReporteReservasFuturasProps {
   user: { username: string };
   sidebarOpen?: boolean;
   onToggleSidebar?: () => void;
   onBackToRooms: () => void;
   onGoToPedidosReport?: () => void;
   onGoToCartera?: () => void;
-  onGoToReservasFuturas?: () => void;
+  onGoToCierres?: () => void;
   onLogout: () => void;
 }
 
-export const ReporteCierresZ = ({
+export const ReporteReservasFuturas = ({
   user,
   sidebarOpen: controlledSidebarOpen,
   onToggleSidebar,
   onBackToRooms,
   onGoToPedidosReport,
   onGoToCartera,
-  onGoToReservasFuturas,
+  onGoToCierres,
   onLogout,
-}: ReporteCierresZProps) => {
-  const [turnos, setTurnos] = useState<TurnoReporteItem[]>([]);
+}: ReporteReservasFuturasProps) => {
+  const [reservas, setReservas] = useState<ReservaFuturaItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [localSidebarOpen, setLocalSidebarOpen] = useState(false);
-  const [selectedTicketData, setSelectedTicketData] = useState<ResumenCierreZData | null>(null);
-  const [cargandoTicket, setCargandoTicket] = useState<boolean>(false);
 
   const sidebarOpen = controlledSidebarOpen !== undefined ? controlledSidebarOpen : localSidebarOpen;
   const toggleSidebar = onToggleSidebar || (() => setLocalSidebarOpen((prev) => !prev));
 
-  // Filtros
+  // Fechas y Filtros
   const getLocalDateStr = (d: Date = new Date()) => {
     const y = d.getFullYear();
     const m = String(d.getMonth() + 1).padStart(2, '0');
@@ -53,112 +61,114 @@ export const ReporteCierresZ = ({
   };
 
   const todayStr = getLocalDateStr();
-  const [fechaDesde, setFechaDesde] = useState('');
+  const [fechaDesde, setFechaDesde] = useState(todayStr);
   const [fechaHasta, setFechaHasta] = useState('');
-  const [filtroEstado, setFiltroEstado] = useState<string>('TODOS');
+  const [selectedHabNumero, setSelectedHabNumero] = useState<string>('TODAS');
   const [busquedaTexto, setBusquedaTexto] = useState<string>('');
 
-  const fetchTurnos = async () => {
+  const fetchReservas = async () => {
     setLoading(true);
+    const token = localStorage.getItem('hotel_token');
     try {
       const params = new URLSearchParams();
       if (fechaDesde) params.append('fechaDesde', fechaDesde);
       if (fechaHasta) params.append('fechaHasta', fechaHasta);
-      if (filtroEstado !== 'TODOS') params.append('estado', filtroEstado);
+      if (busquedaTexto) params.append('busqueda', busquedaTexto);
 
-      const res = await fetch(`/api/turnos/historial?${params.toString()}`);
+      const res = await fetch(`/api/reportes/reservas-futuras?${params.toString()}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
       if (res.ok) {
         const data = await res.json();
-        setTurnos(data.turnos || []);
+        setReservas(data.reservas || []);
       }
     } catch (err) {
-      console.error('Error cargando historial de turnos:', err);
+      console.error('Error cargando reservas futuras:', err);
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchTurnos();
-  }, [fechaDesde, fechaHasta, filtroEstado]);
+    fetchReservas();
+  }, [fechaDesde, fechaHasta]);
 
-  const handleReimprimirTurno = async (idTurno: number) => {
-    setCargandoTicket(true);
-    try {
-      const res = await fetch(`/api/turnos/detalle/${idTurno}`);
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || 'Error al obtener detalle del turno');
-      }
+  // Lista única de números de habitación para el selector
+  const habitacionesDisponibles = Array.from(
+    new Set(reservas.map((r) => r.habitacionNumero).filter(Boolean))
+  ).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
 
-      const ticketData: ResumenCierreZData = {
-        ...data,
-        fechaCierre: data.fechaCierreEstimada || data.fechaCierre || new Date().toISOString(),
-        observaciones: data.turno?.observacionesApertura || data.observaciones,
-      };
-
-      setSelectedTicketData(ticketData);
-    } catch (err: any) {
-      alert(`⚠️ No se pudo cargar el reporte de Cierre Z: ${err.message}`);
-    } finally {
-      setCargandoTicket(false);
+  // Filtrado en memoria
+  const reservasFiltradas = reservas.filter((r) => {
+    if (selectedHabNumero !== 'TODAS' && r.habitacionNumero !== selectedHabNumero) {
+      return false;
     }
-  };
+    if (busquedaTexto.trim()) {
+      const q = busquedaTexto.trim().toLowerCase();
+      const matchHab = r.habitacionNumero.toLowerCase().includes(q);
+      const matchHuesped = r.huesped.toLowerCase().includes(q);
+      const matchDoc = r.documento.toLowerCase().includes(q);
+      const matchObs = (r.observaciones || '').toLowerCase().includes(q);
+      return matchHab || matchHuesped || matchDoc || matchObs;
+    }
+    return true;
+  });
 
   const handleExportExcel = () => {
-    if (turnosFiltrados.length === 0) {
+    if (reservasFiltradas.length === 0) {
       alert('No hay datos para exportar.');
       return;
     }
 
-    const dataExcel = turnosFiltrados.map((t) => ({
-      'Turno #': t.idTurno,
-      'Usuario / Cajero': t.usuario,
-      'Fecha Apertura': formatFecha(t.fechaApertura),
-      'Fecha Cierre': formatFecha(t.fechaCierre),
-      'Base Inicial': t.base,
-      'Total Facturado': t.totalVentas,
-      'Total Recaudado': t.totalPagos,
-      'Estado': t.estado,
-      'Observaciones': t.observaciones || '',
+    const dataExcel = reservasFiltradas.map((r) => ({
+      'Habitación': r.habitacionNumero,
+      'Tipo': r.habitacionTipo,
+      'Piso': r.habitacionPiso,
+      'Huésped': r.huesped,
+      'Documento/NIT': r.documento,
+      'Teléfono/Cel': r.telefono,
+      'Fecha Check-In': r.fechaReservaTexto,
+      'Fecha Check-Out': r.fechaSalidaTexto,
+      'Noches': r.noches,
+      'Precio x Noche': r.precioNoche,
+      'Total Estadía': r.totalEstadia,
+      'Abonos/Anticipos': r.abonos,
+      'Saldo Pendiente': r.saldoPendiente,
+      'Estado': r.estadoReserva,
+      'Borrador Web #': r.peweId || '',
+      'Observaciones': r.observaciones || '',
     }));
 
     const ws = XLSX.utils.json_to_sheet(dataExcel);
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Historial_Cierres_Z');
-    XLSX.writeFile(wb, `Reporte_Cierres_Z_${todayStr}.xlsx`);
+    XLSX.utils.book_append_sheet(wb, ws, 'Reservas_Futuras');
+    XLSX.writeFile(wb, `Reporte_Reservas_Futuras_${todayStr}.xlsx`);
   };
 
-  const formatFecha = (isoString?: string | null) => {
-    if (!isoString) return '---';
+  const formatFecha = (val?: string) => {
+    if (!val) return '---';
     try {
-      const d = new Date(isoString);
-      return d.toLocaleString('es-CO', {
+      const d = new Date(val);
+      if (isNaN(d.getTime())) return val;
+      return d.toLocaleDateString('es-CO', {
+        weekday: 'short',
         year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
+        month: 'short',
+        day: 'numeric',
       });
     } catch {
-      return String(isoString);
+      return val;
     }
   };
 
-  // Filtrado en memoria por texto
-  const turnosFiltrados = turnos.filter((t) => {
-    if (!busquedaTexto.trim()) return true;
-    const q = busquedaTexto.trim().toLowerCase();
-    const matchId = String(t.idTurno).includes(q);
-    const matchUser = t.usuario.toLowerCase().includes(q);
-    const matchObs = (t.observaciones || '').toLowerCase().includes(q);
-    return matchId || matchUser || matchObs;
-  });
-
   // Métricas acumuladas
-  const totalBaseAcumulada = turnosFiltrados.reduce((sum, t) => sum + (t.base || 0), 0);
-  const totalVentasAcumuladas = turnosFiltrados.reduce((sum, t) => sum + (t.totalVentas || 0), 0);
-  const totalPagosAcumulados = turnosFiltrados.reduce((sum, t) => sum + (t.totalPagos || 0), 0);
+  const totalEstadiasProyectadas = reservasFiltradas.reduce((sum, r) => sum + (r.totalEstadia || 0), 0);
+  const totalAbonosRegistrados = reservasFiltradas.reduce((sum, r) => sum + (r.abonos || 0), 0);
+  const totalSaldoPendiente = reservasFiltradas.reduce((sum, r) => sum + (r.saldoPendiente || 0), 0);
+  const totalHabitacionesReservadas = new Set(reservasFiltradas.map((r) => r.habitacionId)).size;
 
   return (
     <div className="hotel-app-layout">
@@ -220,39 +230,39 @@ export const ReporteCierresZ = ({
               </button>
             )}
 
+            {onGoToCierres && (
+              <button
+                type="button"
+                className="sidebar-nav-item"
+                onClick={onGoToCierres}
+                title="Historial de Cierres Z y Turnos"
+              >
+                <span className="nav-item-icon">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                    <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                  </svg>
+                </span>
+                <span className="nav-item-label">Cierres Z / Turnos</span>
+              </button>
+            )}
+
             <button
               type="button"
               className="sidebar-nav-item active"
               onClick={() => {}}
-              title="Historial de Cierres Z"
+              title="Reporte de Reservas Futuras"
             >
               <span className="nav-item-icon">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
-                  <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-                  <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                  <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                  <line x1="16" y1="2" x2="16" y2="6" />
+                  <line x1="8" y1="2" x2="8" y2="6" />
+                  <line x1="3" y1="10" x2="21" y2="10" />
                 </svg>
               </span>
-              <span className="nav-item-label">Cierres Z / Turnos</span>
+              <span className="nav-item-label">Reservas Futuras</span>
             </button>
-
-            {onGoToReservasFuturas && (
-              <button
-                type="button"
-                className="sidebar-nav-item"
-                onClick={onGoToReservasFuturas}
-                title="Reporte de Reservas Futuras y Agenda"
-              >
-                <span className="nav-item-icon">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
-                    <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-                    <line x1="16" y1="2" x2="16" y2="6" />
-                    <line x1="8" y1="2" x2="8" y2="6" />
-                    <line x1="3" y1="10" x2="21" y2="10" />
-                  </svg>
-                </span>
-                <span className="nav-item-label">Reservas Futuras</span>
-              </button>
-            )}
           </nav>
         </div>
 
@@ -325,15 +335,15 @@ export const ReporteCierresZ = ({
         <main className="rooms-main-content">
           <div className="report-header-box">
             <div>
-              <h1 className="rooms-main-title">Historial de Cierres Z y Turnos</h1>
-              <p className="rooms-subtitle">Auditoría de turnos, arqueo de caja y reimpresión de comprobantes</p>
+              <h1 className="rooms-main-title">Agenda y Reporte de Reservas Futuras</h1>
+              <p className="rooms-subtitle">Control y programación de huéspedes con reserva para fechas próximas</p>
             </div>
             <div style={{ display: 'flex', gap: '10px' }}>
               <button
                 type="button"
                 className="btn-excel-export"
                 onClick={handleExportExcel}
-                disabled={turnosFiltrados.length === 0}
+                disabled={reservasFiltradas.length === 0}
                 style={{ background: '#10b981', color: '#fff', border: 'none', padding: '9px 16px', borderRadius: '8px', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
               >
                 📥 Exportar Excel
@@ -341,41 +351,48 @@ export const ReporteCierresZ = ({
             </div>
           </div>
 
-          {/* Tarjetas de Resumen Acumulado */}
+          {/* Tarjetas de Métricas */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px', margin: '20px 0' }}>
             <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '16px', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
-              <span style={{ fontSize: '12px', fontWeight: 600, color: '#64748b' }}>🔢 Turnos Mostrados</span>
+              <span style={{ fontSize: '12px', fontWeight: 600, color: '#64748b' }}>📅 Reservas Agendadas</span>
               <div style={{ fontSize: '22px', fontWeight: 800, color: '#1e293b', marginTop: '4px' }}>
-                {turnosFiltrados.length}
+                {reservasFiltradas.length}
               </div>
             </div>
 
             <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '16px', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
-              <span style={{ fontSize: '12px', fontWeight: 600, color: '#1e40af' }}>💵 Total Bases de Caja</span>
+              <span style={{ fontSize: '12px', fontWeight: 600, color: '#1e40af' }}>🏨 Habs. con Reserva</span>
               <div style={{ fontSize: '22px', fontWeight: 800, color: '#1e3a8a', marginTop: '4px' }}>
-                ${totalBaseAcumulada.toLocaleString('es-CO')}
+                {totalHabitacionesReservadas}
               </div>
             </div>
 
             <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '16px', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
-              <span style={{ fontSize: '12px', fontWeight: 600, color: '#166534' }}>🧾 Total Facturado</span>
+              <span style={{ fontSize: '12px', fontWeight: 600, color: '#166534' }}>💰 Total Proyectado</span>
               <div style={{ fontSize: '22px', fontWeight: 800, color: '#14532d', marginTop: '4px' }}>
-                ${totalVentasAcumuladas.toLocaleString('es-CO')}
+                ${totalEstadiasProyectadas.toLocaleString('es-CO')}
               </div>
             </div>
 
             <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '16px', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
-              <span style={{ fontSize: '12px', fontWeight: 600, color: '#7c3aed' }}>💳 Total Recaudos</span>
-              <div style={{ fontSize: '22px', fontWeight: 800, color: '#5b21b6', marginTop: '4px' }}>
-                ${totalPagosAcumulados.toLocaleString('es-CO')}
+              <span style={{ fontSize: '12px', fontWeight: 600, color: '#047857' }}>💵 Anticipos Recibidos</span>
+              <div style={{ fontSize: '22px', fontWeight: 800, color: '#065f46', marginTop: '4px' }}>
+                ${totalAbonosRegistrados.toLocaleString('es-CO')}
+              </div>
+            </div>
+
+            <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '16px', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+              <span style={{ fontSize: '12px', fontWeight: 600, color: '#b45309' }}>⏳ Saldo Pendiente</span>
+              <div style={{ fontSize: '22px', fontWeight: 800, color: '#92400e', marginTop: '4px' }}>
+                ${totalSaldoPendiente.toLocaleString('es-CO')}
               </div>
             </div>
           </div>
 
-          {/* Filtros Bar */}
+          {/* Barra de Filtros */}
           <div className="report-filters-bar" style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', alignItems: 'center', background: '#ffffff', padding: '14px 18px', borderRadius: '12px', border: '1px solid #e2e8f0', marginBottom: '20px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <label style={{ fontSize: '12px', fontWeight: 700, color: '#475569' }}>Desde:</label>
+              <label style={{ fontSize: '12px', fontWeight: 700, color: '#475569' }}>Llegada Desde:</label>
               <input
                 type="date"
                 value={fechaDesde}
@@ -395,35 +412,38 @@ export const ReporteCierresZ = ({
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <label style={{ fontSize: '12px', fontWeight: 700, color: '#475569' }}>Estado:</label>
+              <label style={{ fontSize: '12px', fontWeight: 700, color: '#475569' }}>Habitación:</label>
               <select
-                value={filtroEstado}
-                onChange={(e) => setFiltroEstado(e.target.value)}
+                value={selectedHabNumero}
+                onChange={(e) => setSelectedHabNumero(e.target.value)}
                 style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '13px' }}
               >
-                <option value="TODOS">Todos los Estados</option>
-                <option value="Cerrado">Cerrados</option>
-                <option value="Abierto">Abiertos</option>
+                <option value="TODAS">Todas las Habitaciones</option>
+                {habitacionesDisponibles.map((hNum) => (
+                  <option key={hNum} value={hNum}>
+                    Habitación #{hNum}
+                  </option>
+                ))}
               </select>
             </div>
 
-            <div style={{ flex: 1, minWidth: '200px' }}>
+            <div style={{ flex: 1, minWidth: '220px' }}>
               <input
                 type="text"
                 value={busquedaTexto}
                 onChange={(e) => setBusquedaTexto(e.target.value)}
-                placeholder="Buscar por Turno #, cajero u observaciones..."
+                placeholder="Buscar por Huésped, NIT, Habitación u Observaciones..."
                 style={{ width: '100%', padding: '6px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '13px', boxSizing: 'border-box' }}
               />
             </div>
 
-            {(fechaDesde || fechaHasta || filtroEstado !== 'TODOS' || busquedaTexto) && (
+            {(fechaDesde !== todayStr || fechaHasta || selectedHabNumero !== 'TODAS' || busquedaTexto) && (
               <button
                 type="button"
                 onClick={() => {
-                  setFechaDesde('');
+                  setFechaDesde(todayStr);
                   setFechaHasta('');
-                  setFiltroEstado('TODOS');
+                  setSelectedHabNumero('TODAS');
                   setBusquedaTexto('');
                 }}
                 style={{ padding: '6px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', background: '#f8fafc', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}
@@ -433,101 +453,95 @@ export const ReporteCierresZ = ({
             )}
           </div>
 
-          {/* Tabla de Cierres Z */}
+          {/* Tabla de Reservas Futuras */}
           <div className="report-table-container" style={{ background: '#ffffff', borderRadius: '12px', border: '1px solid #e2e8f0', overflow: 'hidden' }}>
             {loading ? (
               <div style={{ padding: '40px', textAlign: 'center' }}>
                 <div className="spinner" style={{ margin: '0 auto 10px auto' }}></div>
-                <p style={{ color: '#64748b' }}>Cargando historial de Cierres Z...</p>
+                <p style={{ color: '#64748b' }}>Cargando agenda de reservas futuras...</p>
               </div>
-            ) : turnosFiltrados.length === 0 ? (
+            ) : reservasFiltradas.length === 0 ? (
               <div style={{ padding: '40px', textAlign: 'center', color: '#64748b' }}>
-                <span style={{ fontSize: '36px' }}>🔒</span>
-                <p style={{ margin: '10px 0 0 0', fontWeight: 600 }}>No se encontraron turnos con los filtros seleccionados.</p>
+                <span style={{ fontSize: '36px' }}>📅</span>
+                <p style={{ margin: '10px 0 0 0', fontWeight: 600 }}>No hay reservas agendadas con los filtros seleccionados.</p>
               </div>
             ) : (
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
                 <thead>
                   <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0', color: '#475569', textAlign: 'left', fontWeight: 700 }}>
-                    <th style={{ padding: '12px 14px' }}>Turno #</th>
-                    <th style={{ padding: '12px 14px' }}>Cajero / Usuario</th>
-                    <th style={{ padding: '12px 14px' }}>Apertura</th>
-                    <th style={{ padding: '12px 14px' }}>Cierre</th>
-                    <th style={{ padding: '12px 14px', textAlign: 'right' }}>Base Inicial</th>
-                    <th style={{ padding: '12px 14px', textAlign: 'right' }}>Total Facturado</th>
-                    <th style={{ padding: '12px 14px', textAlign: 'right' }}>Total Recaudos</th>
+                    <th style={{ padding: '12px 14px' }}>Habitación</th>
+                    <th style={{ padding: '12px 14px' }}>Huésped / Documento</th>
+                    <th style={{ padding: '12px 14px' }}>Check-In (Llegada)</th>
+                    <th style={{ padding: '12px 14px' }}>Check-Out (Salida)</th>
+                    <th style={{ padding: '12px 14px', textAlign: 'center' }}>Noches</th>
+                    <th style={{ padding: '12px 14px', textAlign: 'right' }}>Total Estadía</th>
+                    <th style={{ padding: '12px 14px', textAlign: 'right' }}>Abonos</th>
+                    <th style={{ padding: '12px 14px', textAlign: 'right' }}>Saldo Pendiente</th>
                     <th style={{ padding: '12px 14px', textAlign: 'center' }}>Estado</th>
-                    <th style={{ padding: '12px 14px', textAlign: 'center' }}>Acciones</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {turnosFiltrados.map((t) => {
-                    const isCerrado = t.estado.toLowerCase().trim() === 'cerrado';
+                  {reservasFiltradas.map((r) => {
+                    const isToday = r.estadoReserva === 'Llega Hoy';
 
                     return (
-                      <tr key={t.idTurno} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                      <tr key={r.idMovim} style={{ borderBottom: '1px solid #f1f5f9' }}>
                         <td style={{ padding: '12px 14px' }}>
-                          <span style={{ background: '#f3e8ff', color: '#7c3aed', padding: '2px 8px', borderRadius: '4px', fontWeight: 800 }}>
-                            #{t.idTurno}
+                          <span style={{ background: '#e0e7ff', color: '#3730a3', padding: '3px 8px', borderRadius: '6px', fontWeight: 800 }}>
+                            #{r.habitacionNumero}
+                          </span>
+                          <span style={{ display: 'block', fontSize: '11px', color: '#64748b', marginTop: '2px' }}>
+                            {r.habitacionTipo} · P{r.habitacionPiso}
                           </span>
                         </td>
-                        <td style={{ padding: '12px 14px', fontWeight: 600, color: '#1e293b' }}>
-                          👤 {t.usuario}
+                        <td style={{ padding: '12px 14px' }}>
+                          <div style={{ fontWeight: 700, color: '#1e293b' }}>
+                            👤 {r.huesped}
+                          </div>
+                          <div style={{ fontSize: '11.5px', color: '#64748b', marginTop: '2px' }}>
+                            NIT/CC: {r.documento || 'Sin doc.'} {r.telefono ? `· 📞 ${r.telefono}` : ''}
+                          </div>
+                          {r.observaciones && (
+                            <div style={{ fontSize: '11px', color: '#94a3b8', fontStyle: 'italic', marginTop: '2px' }}>
+                              📝 {r.observaciones}
+                            </div>
+                          )}
                         </td>
-                        <td style={{ padding: '12px 14px', color: '#334155' }}>
-                          {formatFecha(t.fechaApertura)}
+                        <td style={{ padding: '12px 14px', color: '#1e293b', fontWeight: 600 }}>
+                          {formatFecha(r.fechaReservaTexto)}
                         </td>
-                        <td style={{ padding: '12px 14px', color: '#334155' }}>
-                          {formatFecha(t.fechaCierre)}
+                        <td style={{ padding: '12px 14px', color: '#475569' }}>
+                          {formatFecha(r.fechaSalidaTexto)}
                         </td>
-                        <td style={{ padding: '12px 14px', textAlign: 'right', fontWeight: 600, color: '#1e40af' }}>
-                          ${t.base.toLocaleString('es-CO')}
+                        <td style={{ padding: '12px 14px', textAlign: 'center' }}>
+                          <span style={{ background: '#f1f5f9', color: '#334155', padding: '2px 8px', borderRadius: '4px', fontWeight: 700 }}>
+                            🌙 {r.noches}
+                          </span>
                         </td>
-                        <td style={{ padding: '12px 14px', textAlign: 'right', fontWeight: 600, color: '#166534' }}>
-                          ${t.totalVentas.toLocaleString('es-CO')}
+                        <td style={{ padding: '12px 14px', textAlign: 'right', fontWeight: 700, color: '#14532d' }}>
+                          ${r.totalEstadia.toLocaleString('es-CO')}
                         </td>
                         <td style={{ padding: '12px 14px', textAlign: 'right', fontWeight: 700, color: '#047857' }}>
-                          ${t.totalPagos.toLocaleString('es-CO')}
+                          ${r.abonos.toLocaleString('es-CO')}
+                        </td>
+                        <td style={{ padding: '12px 14px', textAlign: 'right', fontWeight: 700, color: r.saldoPendiente > 0 ? '#b45309' : '#64748b' }}>
+                          ${r.saldoPendiente.toLocaleString('es-CO')}
                         </td>
                         <td style={{ padding: '12px 14px', textAlign: 'center' }}>
                           <span
                             style={{
                               display: 'inline-block',
-                              padding: '2px 8px',
+                              padding: '3px 8px',
                               borderRadius: '4px',
                               fontSize: '11px',
                               fontWeight: 700,
-                              background: isCerrado ? '#f0fdf4' : '#fefce8',
-                              color: isCerrado ? '#166534' : '#854d0e',
-                              border: `1px solid ${isCerrado ? '#bbf7d0' : '#fef08a'}`,
+                              background: isToday ? '#dcfce7' : '#fef3c7',
+                              color: isToday ? '#15803d' : '#b45309',
+                              border: `1px solid ${isToday ? '#86efac' : '#fde68a'}`,
                             }}
                           >
-                            {t.estado}
+                            {isToday ? '🟢 Llega Hoy' : '🟡 Futura'}
                           </span>
-                        </td>
-                        <td style={{ padding: '12px 14px', textAlign: 'center' }}>
-                          <button
-                            type="button"
-                            onClick={() => handleReimprimirTurno(t.idTurno)}
-                            disabled={cargandoTicket}
-                            title="Reimprimir Tirilla de Cierre Z"
-                            style={{
-                              background: 'linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%)',
-                              color: '#ffffff',
-                              border: 'none',
-                              padding: '6px 12px',
-                              borderRadius: '6px',
-                              fontSize: '12px',
-                              fontWeight: 700,
-                              cursor: 'pointer',
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '4px',
-                              boxShadow: '0 2px 4px rgba(124, 58, 237, 0.2)',
-                            }}
-                          >
-                            🖨️ Reimprimir
-                          </button>
                         </td>
                       </tr>
                     );
@@ -538,14 +552,6 @@ export const ReporteCierresZ = ({
           </div>
         </main>
       </div>
-
-      {/* Modal de Impresión POS de Cierre Z */}
-      {selectedTicketData && (
-        <ModalImpresionCierreZ
-          data={selectedTicketData}
-          onClose={() => setSelectedTicketData(null)}
-        />
-      )}
     </div>
   );
 };
