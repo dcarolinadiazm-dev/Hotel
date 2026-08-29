@@ -149,7 +149,7 @@ export class TurnoService {
             })
             .select(
                 'FACTURAS_CONTADO_PAGO.FOPA_ID',
-                db.raw('SUM(COALESCE(FACTURAS_CONTADO_PAGO.FCNT_MONTO, 0)) as "TOTAL_MONTO"'),
+                db.raw('SUM(COALESCE(FACTURAS_CONTADO_PAGO.FCNP_MONTO, 0)) as "TOTAL_MONTO"'),
                 db.raw('COUNT(*) as "CANT_TRANS"')
             )
             .groupBy('FACTURAS_CONTADO_PAGO.FOPA_ID');
