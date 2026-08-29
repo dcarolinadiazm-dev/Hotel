@@ -373,4 +373,120 @@ export class TurnoService {
             resumen
         };
     }
+
+    // 5. Consultar Historial de Turnos / Cierres Z
+    static async getHistorialTurnos(filters?: { fechaDesde?: string; fechaHasta?: string; usuario?: string; estado?: string }) {
+        let query = db(tables.TURNO).select('*').orderBy('ID_TURNO', 'desc');
+
+        if (filters?.fechaDesde) {
+            query = query.where('FECHA_APERTURA', '>=', `${filters.fechaDesde} 00:00:00`);
+        }
+        if (filters?.fechaHasta) {
+            query = query.where('FECHA_APERTURA', '<=', `${filters.fechaHasta} 23:59:59`);
+        }
+        if (filters?.usuario && filters.usuario.trim()) {
+            query = query.where('USUARIO', 'like', `%${filters.usuario.trim()}%`);
+        }
+        if (filters?.estado && filters.estado !== 'TODOS') {
+            query = query.where('ESTADO', filters.estado);
+        }
+
+        const rows = await query;
+        return rows.map((t: any) => ({
+            idTurno: parseInt(String(t.ID_TURNO), 10),
+            usuario: String(t.USUARIO || '').trim(),
+            fechaApertura: t.FECHA_APERTURA,
+            fechaCierre: t.FECHA_CIERRE,
+            base: parseFloat(String(t.BASE || '0')),
+            estado: String(t.ESTADO || '').trim(),
+            totalVentas: parseFloat(String(t.TOTAL_VENTAS || '0')),
+            totalPagos: parseFloat(String(t.TOTAL_PAGOS || '0')),
+            observaciones: t.OBSERVACIONES ? String(t.OBSERVACIONES).trim() : ''
+        }));
+    }
+
+    // 6. Consultar Detalle Completo de un Turno para Reimpresión
+    static async getDetalleTurnoCerrado(idTurno: number): Promise<ITurnoResumenCierre> {
+        const turnoRow = await db(tables.TURNO).where('ID_TURNO', idTurno).first();
+        if (!turnoRow) {
+            throw new Error(`Turno #${idTurno} no encontrado.`);
+        }
+
+        // Si el turno está abierto, calcular en tiempo real
+        if (String(turnoRow.ESTADO || '').trim() === 'Abierto') {
+            return await this.getResumenCierre(idTurno);
+        }
+
+        // Si está cerrado, consultar sus tablas de detalle grabadas
+        const pagosRows = await db(tables.TURNO_DET_PAGOS).where('ID_TURNO', idTurno).orderBy('ID_ITEM', 'asc');
+        const facturasRows = await db(tables.TURNO_DET_FACTURAS).where('ID_TURNO', idTurno).orderBy('ID_ITEM', 'asc');
+        const habsRows = await db(tables.TURNO_DET_HABITACIONES).where('ID_TURNO', idTurno).orderBy('ID_ITEM', 'asc');
+
+        const pagosPorForma = pagosRows.map((p: any) => ({
+            formaPagoId: parseInt(String(p.FORMAP), 10),
+            nombreForma: String(p.NOMBRE_FORMA || '').trim(),
+            total: parseFloat(String(p.MONTO || '0')),
+            cantidadTransacciones: 0
+        }));
+
+        const facturasGeneradas = facturasRows.map((f: any) => ({
+            prefijo: String(f.PREF || '').trim(),
+            facturaInicial: parseInt(String(f.FACTINI || '0'), 10),
+            facturaFinal: parseInt(String(f.FACTFIN || '0'), 10),
+            cantidad: parseInt(String(f.CANTIDAD || '0'), 10),
+            total: parseFloat(String(f.TOTAL || '0'))
+        }));
+
+        let disponibles = 0;
+        let ocupadas = 0;
+        let reservadas = 0;
+        let inhabilitadas = 0;
+
+        const habitacionesEstado = habsRows.map((h: any) => {
+            const e = String(h.ESTADO || '').toLowerCase().trim();
+            if (e === 'disponible') disponibles++;
+            else if (e === 'ocupada') ocupadas++;
+            else if (e === 'reservada') reservadas++;
+            else inhabilitadas++;
+
+            return {
+                id: String(h.ID_HABITACION || '').trim(),
+                numero: String(h.NUMERO || '').trim(),
+                estado: String(h.ESTADO || '').trim(),
+                huesped: h.HUESPED ? String(h.HUESPED).trim() : undefined,
+                totalPendiente: parseFloat(String(h.TOTAL_PENDIENTE || '0'))
+            };
+        });
+
+        const totalVentasFacturadas = parseFloat(String(turnoRow.TOTAL_VENTAS || '0'));
+        const totalRecaudadoPagos = parseFloat(String(turnoRow.TOTAL_PAGOS || '0'));
+        const base = parseFloat(String(turnoRow.BASE || '0'));
+
+        const efectivoPago = pagosPorForma.find(p => p.formaPagoId === 1 || p.nombreForma.toUpperCase().includes('EFECTIVO'))?.total || 0;
+        const totalEfectivoEsperado = base + efectivoPago;
+
+        return {
+            turno: {
+                idTurno: parseInt(String(turnoRow.ID_TURNO), 10),
+                usuario: String(turnoRow.USUARIO || '').trim(),
+                fechaApertura: String(turnoRow.FECHA_APERTURA),
+                base,
+                estado: String(turnoRow.ESTADO || '').trim(),
+                observacionesApertura: turnoRow.OBSERVACIONES ? String(turnoRow.OBSERVACIONES).trim() : ''
+            },
+            fechaCierreEstimada: String(turnoRow.FECHA_CIERRE || new Date().toISOString()),
+            pagosPorForma,
+            totalVentasFacturadas,
+            totalRecaudadoPagos,
+            totalEfectivoEsperado,
+            facturasGeneradas,
+            habitacionesEstado,
+            totalesHabitaciones: {
+                disponibles,
+                ocupadas,
+                reservadas,
+                inhabilitadas
+            }
+        };
+    }
 }

@@ -58,4 +58,36 @@ export class TurnoController {
             res.status(500).json({ error: error.message || 'Error al realizar Cierre Z' });
         }
     }
+
+    // GET /api/turnos/historial
+    static async getHistorial(req: Request, res: Response) {
+        try {
+            const { fechaDesde, fechaHasta, usuario, estado } = req.query;
+            const turnos = await TurnoService.getHistorialTurnos({
+                fechaDesde: fechaDesde ? String(fechaDesde) : undefined,
+                fechaHasta: fechaHasta ? String(fechaHasta) : undefined,
+                usuario: usuario ? String(usuario) : undefined,
+                estado: estado ? String(estado) : undefined
+            });
+            res.json({ turnos });
+        } catch (error: any) {
+            console.error('Error en TurnoController.getHistorial:', error.message);
+            res.status(500).json({ error: error.message || 'Error al consultar historial de turnos' });
+        }
+    }
+
+    // GET /api/turnos/detalle/:id
+    static async getDetalle(req: Request, res: Response) {
+        try {
+            const idTurno = parseInt(String(req.params.id), 10);
+            if (isNaN(idTurno)) {
+                return res.status(400).json({ error: 'ID de turno no válido' });
+            }
+            const detalle = await TurnoService.getDetalleTurnoCerrado(idTurno);
+            res.json(detalle);
+        } catch (error: any) {
+            console.error('Error en TurnoController.getDetalle:', error.message);
+            res.status(500).json({ error: error.message || 'Error al consultar detalle del turno' });
+        }
+    }
 }

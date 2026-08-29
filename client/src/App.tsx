@@ -7,9 +7,10 @@ import { ModalHabitacion } from './components/ModalHabitacion';
 import { CerrarPedido } from './components/CerrarPedido';
 import { ReportePedidos } from './components/ReportePedidos';
 import { ReporteCartera } from './components/ReporteCartera';
+import { ReporteCierresZ } from './components/ReporteCierresZ';
 import './App.css';
 
-type ActiveView = 'HABITACIONES' | 'CARRITO' | 'CERRAR_PEDIDO' | 'REPORTES' | 'CARTERA';
+type ActiveView = 'HABITACIONES' | 'CARRITO' | 'CERRAR_PEDIDO' | 'REPORTES' | 'CARTERA' | 'CIERRES';
 
 function App() {
   const [currentUser, setCurrentUser] = useState<{ username: string } | null>(null);
@@ -25,6 +26,12 @@ function App() {
     totalItems: 0,
     totalPagar: 0,
   });
+
+  // Clave de Refresco para Forzar Recarga de Habitaciones
+  const [roomsRefreshKey, setRoomsRefreshKey] = useState<number>(0);
+
+  // Estado del Sidebar (Colapsado / Expandido)
+  const [sidebarOpen, setSidebarOpen] = useState(true);
 
   useEffect(() => {
     const savedToken = localStorage.getItem('hotel_token');
@@ -78,14 +85,13 @@ function App() {
     setModalHabitacion(null);
   };
 
-  const [roomsRefreshKey, setRoomsRefreshKey] = useState(0);
-  const [sidebarOpen, setSidebarOpen] = useState(false);
-
   if (isVerifying) {
     return (
-      <div className="loading-screen">
-        <div className="spinner-large"></div>
-        <p>Cargando Hotel Paraíso...</p>
+      <div className="login-container">
+        <div className="login-card">
+          <div className="spinner"></div>
+          <p style={{ marginTop: '16px', color: '#64748b' }}>Iniciando sistema...</p>
+        </div>
       </div>
     );
   }
@@ -106,6 +112,7 @@ function App() {
           onOpenModal={(hab) => setModalHabitacion(hab)}
           onGoToReports={() => setCurrentView('REPORTES')}
           onGoToCartera={() => setCurrentView('CARTERA')}
+          onGoToCierres={() => setCurrentView('CIERRES')}
           onLogout={handleLogout}
         />
       )}
@@ -150,6 +157,7 @@ function App() {
           onToggleSidebar={() => setSidebarOpen((prev) => !prev)}
           onBackToRooms={() => setCurrentView('HABITACIONES')}
           onGoToCartera={() => setCurrentView('CARTERA')}
+          onGoToCierres={() => setCurrentView('CIERRES')}
           onLogout={handleLogout}
         />
       )}
@@ -162,6 +170,20 @@ function App() {
           onToggleSidebar={() => setSidebarOpen((prev) => !prev)}
           onBackToRooms={() => setCurrentView('HABITACIONES')}
           onGoToPedidosReport={() => setCurrentView('REPORTES')}
+          onGoToCierres={() => setCurrentView('CIERRES')}
+          onLogout={handleLogout}
+        />
+      )}
+
+      {/* Vista 8: Reporte e Historial de Cierres Z / Turnos */}
+      {currentView === 'CIERRES' && (
+        <ReporteCierresZ
+          user={currentUser}
+          sidebarOpen={sidebarOpen}
+          onToggleSidebar={() => setSidebarOpen((prev) => !prev)}
+          onBackToRooms={() => setCurrentView('HABITACIONES')}
+          onGoToPedidosReport={() => setCurrentView('REPORTES')}
+          onGoToCartera={() => setCurrentView('CARTERA')}
           onLogout={handleLogout}
         />
       )}

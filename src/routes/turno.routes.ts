@@ -8,5 +8,7 @@ router.post('/apertura', TurnoController.aperturaTurno);
 router.get('/resumen-cierre', TurnoController.getResumenCierre);
 router.get('/resumen-cierre/:id', TurnoController.getResumenCierre);
 router.post('/cierre', TurnoController.cierreTurno);
+router.get('/historial', TurnoController.getHistorial);
+router.get('/detalle/:id', TurnoController.getDetalle);
 
 export default router;

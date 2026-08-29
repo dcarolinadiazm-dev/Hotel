@@ -47,17 +47,19 @@ interface HabitacionesProps {
   onOpenModal: (habitacion: Habitacion) => void;
   onGoToReports: () => void;
   onGoToCartera?: () => void;
+  onGoToCierres?: () => void;
   onLogout: () => void;
 }
 
 export const Habitaciones = ({
   user,
-  refreshKey,
+  refreshKey = 0,
   sidebarOpen: controlledSidebarOpen,
   onToggleSidebar,
   onOpenModal,
   onGoToReports,
   onGoToCartera,
+  onGoToCierres,
   onLogout,
 }: HabitacionesProps) => {
   const [habitaciones, setHabitaciones] = useState<Habitacion[]>([]);
@@ -352,20 +354,39 @@ export const Habitaciones = ({
               <span className="nav-item-label">Reporte Pedidos</span>
             </button>
 
-            <button
-              type="button"
-              className="sidebar-nav-item"
-              onClick={onGoToCartera}
-              title="Reporte de Cartera"
-            >
-              <span className="nav-item-icon">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
-                  <rect x="2" y="4" width="20" height="16" rx="2" />
-                  <line x1="2" y1="10" x2="22" y2="10" />
-                </svg>
-              </span>
-              <span className="nav-item-label">Cartera</span>
-            </button>
+            {onGoToCartera && (
+              <button
+                type="button"
+                className="sidebar-nav-item"
+                onClick={onGoToCartera}
+                title="Reporte de Cartera"
+              >
+                <span className="nav-item-icon">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                    <rect x="2" y="4" width="20" height="16" rx="2" />
+                    <line x1="2" y1="10" x2="22" y2="10" />
+                  </svg>
+                </span>
+                <span className="nav-item-label">Cartera</span>
+              </button>
+            )}
+
+            {onGoToCierres && (
+              <button
+                type="button"
+                className="sidebar-nav-item"
+                onClick={onGoToCierres}
+                title="Historial de Cierres Z y Turnos"
+              >
+                <span className="nav-item-icon">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                    <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                  </svg>
+                </span>
+                <span className="nav-item-label">Cierres Z / Turnos</span>
+              </button>
+            )}
           </nav>
         </div>
 
