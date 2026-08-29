@@ -1802,8 +1802,8 @@
 .modal-dialog-body {
   overflow-y: auto;
   overflow-x: hidden;
-  max-height: calc(94vh - 70px);
-  padding: 16px 24px 24px 24px;
+  max-height: calc(94vh - 135px);
+  padding: 16px 24px 20px 24px;
 }
 
 .modal-dialog-body::-webkit-scrollbar {
@@ -1822,6 +1822,43 @@
 
 .modal-dialog-body::-webkit-scrollbar-thumb:hover {
   background: #94a3b8;
+}
+
+.modal-dialog-footer {
+  padding: 12px 24px;
+  background: #ffffff;
+  border-top: 1.5px solid #e2e8f0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.04);
+  z-index: 10;
+  flex-shrink: 0;
+}
+
+.footer-validation-box {
+  flex: 1;
+  min-width: 0;
+}
+
+.footer-validation-warning {
+  color: #dc2626;
+  font-size: 12px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.footer-buttons-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
 }
 
 .modal-two-columns {

@@ -1604,64 +1604,6 @@ export const ModalHabitacion = ({
                   />
                 </div>
 
-                {/* Acciones de Reserva (Debajo de Observaciones) */}
-                <div className="reservation-form-actions">
-                  {!isFormValid && (
-                    <div className="modal-validation-warning" title={validationReason}>
-                      ⚠️ <span>{validationReason}</span>
-                    </div>
-                  )}
-                  <div className="reservation-buttons-row">
-                    {/* Botón Cancelar Reserva (activo si está Reservada o tiene pedido) */}
-                    {(estado === 'Reservada' || Boolean(peweId)) ? (
-                      <button
-                        type="button"
-                        className="btn-modal-cancel-reservation"
-                        onClick={requestCancelarReserva}
-                        disabled={saving || cancelling}
-                        title="Anular la reserva y dejar la habitación disponible"
-                      >
-                        {cancelling ? 'Cancelando...' : '🚫 Cancelar reserva'}
-                      </button>
-                    ) : (
-                      <button type="button" className="btn-modal-close-action" onClick={onClose} disabled={saving}>
-                        Cerrar
-                      </button>
-                    )}
-
-                    {/* Botón Abonos al lado de Cancelar Reserva (se activa cuando la reserva ya está guardada) */}
-                    {(() => {
-                      const isReservaGuardada = Boolean(peweId) && (estado === 'Reservada' || Boolean(documento));
-                      return (
-                        <button
-                          type="button"
-                          className={`btn-modal-abonos-action ${!isReservaGuardada ? 'btn-disabled-locked' : ''}`}
-                          onClick={() => setShowModalAbonos(true)}
-                          disabled={saving || cancelling || !isReservaGuardada}
-                          title={
-                            !isReservaGuardada
-                              ? 'Debe guardar los datos de la reserva antes de gestionar abonos'
-                              : 'Registrar y consultar abonos / anticipos'
-                          }
-                        >
-                          💳 Abonos
-                        </button>
-                      );
-                    })()}
-
-                    <button
-                      className={`btn-modal-save-action ${!isFormValid ? 'btn-disabled-locked' : ''}`}
-                      onClick={handleSaveChanges}
-                      disabled={saving || !isFormValid || cancelling}
-                      title={!isFormValid ? validationReason : 'Guardar datos de reserva'}
-                    >
-                      {saving ? 'Guardando...' : '💾 Guardar datos de reserva'}
-                    </button>
-                  </div>
-
-
-
-                </div>
               </div>
 
               {/* Columna Derecha: Carrito y Pedido de la Habitación */}
@@ -1903,6 +1845,68 @@ export const ModalHabitacion = ({
               </div>
 
 
+            </div>
+          </div>
+        )}
+
+        {/* Footer flotante / fijo al pie de la ventana */}
+        {!loading && (
+          <div className="modal-dialog-footer">
+            <div className="footer-validation-box">
+              {!isFormValid && (
+                <div className="footer-validation-warning" title={validationReason}>
+                  <span>⚠️ {validationReason}</span>
+                </div>
+              )}
+            </div>
+
+            <div className="footer-buttons-group">
+              {/* Botón Cancelar Reserva */}
+              {(estado === 'Reservada' || Boolean(peweId)) ? (
+                <button
+                  type="button"
+                  className="btn-modal-cancel-reservation"
+                  onClick={requestCancelarReserva}
+                  disabled={saving || cancelling}
+                  title="Anular la reserva y dejar la habitación disponible"
+                >
+                  {cancelling ? 'Cancelando...' : '🚫 Cancelar reserva'}
+                </button>
+              ) : (
+                <button type="button" className="btn-modal-close-action" onClick={onClose} disabled={saving}>
+                  Cerrar
+                </button>
+              )}
+
+              {/* Botón Abonos */}
+              {(() => {
+                const isReservaGuardada = Boolean(peweId) && (estado === 'Reservada' || Boolean(documento));
+                return (
+                  <button
+                    type="button"
+                    className={`btn-modal-abonos-action ${!isReservaGuardada ? 'btn-disabled-locked' : ''}`}
+                    onClick={() => setShowModalAbonos(true)}
+                    disabled={saving || cancelling || !isReservaGuardada}
+                    title={
+                      !isReservaGuardada
+                        ? 'Debe guardar los datos de la reserva antes de gestionar abonos'
+                        : 'Registrar y consultar abonos / anticipos'
+                    }
+                  >
+                    💳 Abonos
+                  </button>
+                );
+              })()}
+
+              {/* Botón Guardar datos de reserva */}
+              <button
+                className={`btn-modal-save-action ${!isFormValid ? 'btn-disabled-locked' : ''}`}
+                onClick={handleSaveChanges}
+                disabled={saving || !isFormValid || cancelling}
+                title={!isFormValid ? validationReason : 'Guardar datos de reserva'}
+              >
+                {saving ? 'Guardando...' : '💾 Guardar datos de reserva'}
+              </button>
             </div>
           </div>
         )}
