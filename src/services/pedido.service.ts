@@ -640,11 +640,15 @@ export class PedidoService {
             listaPagos[0].monto = totalDoc;
         }
 
-        // Actualizar encabezado antes de invocar el procedimiento
+        const nowFecha = new Date();
+
+        // Actualizar encabezado antes de invocar el procedimiento (fijando fecha de factura actual)
         const updateHeaderPayload: any = {
             DINW_TIPO: 31,
             DINW_PREF: prefijo,
             DINW_NIT: clienteNit,
+            DINW_FECHA: nowFecha,
+            DINW_VENCE: nowFecha,
             DINW_CONCEPTO: truncateToBytes(obsString, 55),
             DINW_OBS: obsString,
             DINW_BASE: totalBase,
@@ -691,6 +695,8 @@ export class PedidoService {
                 await db('FACTURAS')
                     .where('FACT_ID', idGenerado)
                     .update({
+                        FACT_FECHA: nowFecha,
+                        FACT_VENCE: nowFecha,
                         FACT_TOTAL: totalDoc,
                         FACT_IVAMONTO: totalIva,
                         FACT_SUBTOTAL: subtotalFactura,
@@ -1057,10 +1063,13 @@ export class PedidoService {
         // 4. Sincronizar FACTURAS, FACTURAS_DETALLE y FACTURAS_CONTADO_PAGO
         if (idGenerado) {
             try {
+                const nowFecha = new Date();
                 const subtotalFactura = Math.round((totalDoc - totalIva) * 100) / 100;
                 await db('FACTURAS')
                     .where('FACT_ID', idGenerado)
                     .update({
+                        FACT_FECHA: nowFecha,
+                        FACT_VENCE: nowFecha,
                         FACT_TOTAL: totalDoc,
                         FACT_IVAMONTO: totalIva,
                         FACT_SUBTOTAL: subtotalFactura,
@@ -1810,10 +1819,13 @@ export class PedidoService {
         // Registrar formas de pago y sincronizar FACTURAS
         if (idGenerado) {
             try {
+                const nowFecha = new Date();
                 const subtotalFactura = Math.round((totalDoc - totalIva) * 100) / 100;
                 await db('FACTURAS')
                     .where('FACT_ID', idGenerado)
                     .update({
+                        FACT_FECHA: nowFecha,
+                        FACT_VENCE: nowFecha,
                         FACT_TOTAL: totalDoc,
                         FACT_IVAMONTO: totalIva,
                         FACT_SUBTOTAL: subtotalFactura,
