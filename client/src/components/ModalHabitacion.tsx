@@ -1075,29 +1075,34 @@ export const ModalHabitacion = ({
 
             {/* Tira visual de Agenda de Reservas de la Habitación */}
             <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '12px 14px', marginBottom: '16px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: movimientos.length > 0 ? '10px' : '0' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span style={{ fontSize: '13px', fontWeight: 800, color: '#1e293b' }}>
-                    📅 Agenda de Reservas de esta Habitación ({movimientos.length})
-                  </span>
-                  {selectedMovimId === 'NUEVA' && (
-                    <span style={{ fontSize: '11px', fontWeight: 700, padding: '2px 8px', borderRadius: '4px', background: '#dbeafe', color: '#1d4ed8' }}>
-                      ➕ Creando Nueva Reserva
-                    </span>
-                  )}
-                </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: (movimientos.length > 0 || selectedMovimId === 'NUEVA') ? '10px' : '0' }}>
+                <span style={{ fontSize: '13px', fontWeight: 800, color: '#1e293b', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  📅 Agenda de Reservas de esta Habitación {movimientos.length > 0 ? `(${movimientos.length})` : ''}
+                </span>
                 <button
                   type="button"
                   className={`btn-nueva-reserva-compact ${selectedMovimId === 'NUEVA' ? 'active' : ''}`}
                   onClick={iniciarNuevaReserva}
-                  style={{ padding: '6px 14px', fontSize: '12px', fontWeight: 700 }}
+                  style={{
+                    padding: '6px 14px',
+                    fontSize: '12px',
+                    fontWeight: 700,
+                    borderRadius: '8px',
+                    background: selectedMovimId === 'NUEVA' ? '#2563eb' : '#10b981',
+                    color: '#ffffff',
+                    border: 'none',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px'
+                  }}
                   title="Programar una nueva reserva para otros días en esta habitación"
                 >
-                  ➕ Nueva Reserva
+                  {selectedMovimId === 'NUEVA' ? '✓ Programando Nueva Reserva' : '➕ Nueva Reserva'}
                 </button>
               </div>
 
-              {movimientos.length > 0 && (
+              {(movimientos.length > 0 || selectedMovimId === 'NUEVA') && (
                 <div style={{ display: 'flex', gap: '10px', overflowX: 'auto', paddingBottom: '4px' }}>
                   {movimientos.map((m) => {
                     const fIni = m.fechaReserva ? m.fechaReserva.split('T')[0] : 'Sin fecha';
@@ -1114,18 +1119,18 @@ export const ModalHabitacion = ({
                         onClick={() => cargarMovimientoEnFormulario(m)}
                         style={{
                           background: isSelected ? '#eff6ff' : '#ffffff',
-                          border: `1.5px solid ${isSelected ? '#3b82f6' : '#cbd5e1'}`,
+                          border: `2px solid ${isSelected ? '#3b82f6' : '#e2e8f0'}`,
+                          boxShadow: isSelected ? '0 2px 6px rgba(59, 130, 246, 0.18)' : '0 1px 2px rgba(0,0,0,0.03)',
                           borderRadius: '8px',
                           padding: '8px 12px',
                           cursor: 'pointer',
                           minWidth: '210px',
                           flexShrink: 0,
-                          transition: 'all 0.15s ease',
-                          boxShadow: isSelected ? '0 2px 6px rgba(59, 130, 246, 0.2)' : 'none'
+                          transition: 'all 0.15s ease'
                         }}
                       >
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-                          <span style={{ fontSize: '10.5px', fontWeight: 800, padding: '1px 6px', borderRadius: '4px', background: isToday ? '#dcfce7' : '#fef3c7', color: isToday ? '#15803d' : '#b45309' }}>
+                          <span style={{ fontSize: '10.5px', fontWeight: 800, padding: '2px 6px', borderRadius: '4px', background: isToday ? '#dcfce7' : '#fef3c7', color: isToday ? '#15803d' : '#b45309' }}>
                             {isToday ? '🟢 En curso' : '🟡 Futura'}
                           </span>
                           {isSelected && <span style={{ fontSize: '11px', color: '#2563eb', fontWeight: 700 }}>✓ Editando</span>}
@@ -1139,6 +1144,32 @@ export const ModalHabitacion = ({
                       </div>
                     );
                   })}
+
+                  {selectedMovimId === 'NUEVA' && (
+                    <div
+                      style={{
+                        background: '#f0fdf4',
+                        border: '2px dashed #22c55e',
+                        borderRadius: '8px',
+                        padding: '8px 12px',
+                        minWidth: '210px',
+                        flexShrink: 0,
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                        <span style={{ fontSize: '10.5px', fontWeight: 800, padding: '2px 6px', borderRadius: '4px', background: '#dcfce7', color: '#15803d' }}>
+                          ➕ Nueva Reserva
+                        </span>
+                        <span style={{ fontSize: '11px', color: '#15803d', fontWeight: 700 }}>✓ Editando</span>
+                      </div>
+                      <div style={{ fontSize: '12px', fontWeight: 700, color: '#166534', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        👤 {huesped || 'Nuevo Huésped'}
+                      </div>
+                      <div style={{ fontSize: '11px', color: '#15803d', marginTop: '2px' }}>
+                        📅 {fechaReserva ? fechaReserva.split('T')[0] : 'Hoy'} ➔ {fechaSalida ? fechaSalida.split('T')[0] : 'Mañana'}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
