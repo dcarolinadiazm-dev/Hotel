@@ -1074,23 +1074,31 @@ export const ModalHabitacion = ({
 
 
             {/* Tira visual de Agenda de Reservas de la Habitación */}
-            {movimientos.length > 0 && (
-              <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '12px 14px', marginBottom: '16px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+            <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '12px 14px', marginBottom: '16px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: movimientos.length > 0 ? '10px' : '0' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <span style={{ fontSize: '13px', fontWeight: 800, color: '#1e293b' }}>
                     📅 Agenda de Reservas de esta Habitación ({movimientos.length})
                   </span>
-                  <button
-                    type="button"
-                    className={`btn-nueva-reserva-compact ${selectedMovimId === 'NUEVA' ? 'active' : ''}`}
-                    onClick={iniciarNuevaReserva}
-                    style={{ padding: '4px 10px', fontSize: '11.5px' }}
-                    title="Programar una nueva reserva para otros días en esta habitación"
-                  >
-                    ➕ Programar Otra Fecha
-                  </button>
+                  {selectedMovimId === 'NUEVA' && (
+                    <span style={{ fontSize: '11px', fontWeight: 700, padding: '2px 8px', borderRadius: '4px', background: '#dbeafe', color: '#1d4ed8' }}>
+                      ➕ Creando Nueva Reserva
+                    </span>
+                  )}
                 </div>
-                <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '4px' }}>
+                <button
+                  type="button"
+                  className={`btn-nueva-reserva-compact ${selectedMovimId === 'NUEVA' ? 'active' : ''}`}
+                  onClick={iniciarNuevaReserva}
+                  style={{ padding: '6px 14px', fontSize: '12px', fontWeight: 700 }}
+                  title="Programar una nueva reserva para otros días en esta habitación"
+                >
+                  ➕ Nueva Reserva
+                </button>
+              </div>
+
+              {movimientos.length > 0 && (
+                <div style={{ display: 'flex', gap: '10px', overflowX: 'auto', paddingBottom: '4px' }}>
                   {movimientos.map((m) => {
                     const fIni = m.fechaReserva ? m.fechaReserva.split('T')[0] : 'Sin fecha';
                     const fFin = m.fechaSalida ? m.fechaSalida.split('T')[0] : '';
@@ -1112,7 +1120,8 @@ export const ModalHabitacion = ({
                           cursor: 'pointer',
                           minWidth: '210px',
                           flexShrink: 0,
-                          transition: 'all 0.15s ease'
+                          transition: 'all 0.15s ease',
+                          boxShadow: isSelected ? '0 2px 6px rgba(59, 130, 246, 0.2)' : 'none'
                         }}
                       >
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
@@ -1131,57 +1140,7 @@ export const ModalHabitacion = ({
                     );
                   })}
                 </div>
-              </div>
-            )}
-
-            {/* Barra con Selector de Reserva y Botón Nueva Reserva */}
-            <div className="room-reservations-selector-bar">
-              <div className="room-reservations-selector-group">
-                <label className="reservations-selector-label">
-                  🗓️ Reserva activa a editar:
-                </label>
-                <select
-                  className="reservations-dropdown-select"
-                  value={selectedMovimId ?? ''}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    if (val === 'NUEVA') {
-                      iniciarNuevaReserva();
-                    } else {
-                      const found = movimientos.find((m) => m.idMovim === Number(val));
-                      if (found) cargarMovimientoEnFormulario(found);
-                    }
-                  }}
-                >
-                  {movimientos.map((m) => {
-                    const fIni = m.fechaReserva ? m.fechaReserva.split('T')[0] : 'Sin fecha';
-                    const fFin = m.fechaSalida ? m.fechaSalida.split('T')[0] : '';
-                    const guestName = m.huesped || 'Huésped';
-
-                    const now = new Date();
-                    const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-                    const isToday = fIni <= todayStr && (!fFin || fFin >= todayStr);
-
-                    return (
-                      <option key={m.idMovim} value={m.idMovim}>
-                        {isToday ? '🟢 [Hoy] ' : '📅 '} {fIni} ➔ {fFin} · {guestName}
-                      </option>
-                    );
-                  })}
-                  {selectedMovimId === 'NUEVA' && (
-                    <option value="NUEVA">➕ [Creando Nueva Reserva...]</option>
-                  )}
-                </select>
-              </div>
-
-              <button
-                type="button"
-                className={`btn-nueva-reserva-compact ${selectedMovimId === 'NUEVA' ? 'active' : ''}`}
-                onClick={iniciarNuevaReserva}
-                title="Programar una nueva reserva para otros días en esta habitación"
-              >
-                ➕ Nueva Reserva
-              </button>
+              )}
             </div>
 
             <div className="modal-two-columns">

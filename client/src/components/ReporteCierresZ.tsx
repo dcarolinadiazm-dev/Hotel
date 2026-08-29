@@ -223,7 +223,7 @@ export const ReporteCierresZ = ({
             <button
               type="button"
               className="sidebar-nav-item active"
-              onClick={() => {}}
+              onClick={() => { }}
               title="Historial de Cierres Z"
             >
               <span className="nav-item-icon">
@@ -449,13 +449,13 @@ export const ReporteCierresZ = ({
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
                 <thead>
                   <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0', color: '#475569', textAlign: 'left', fontWeight: 700 }}>
-                    <th style={{ padding: '12px 14px' }}>Turno #</th>
-                    <th style={{ padding: '12px 14px' }}>Cajero / Usuario</th>
+                    <th style={{ padding: '12px 14px' }}>Turno</th>
+                    <th style={{ padding: '12px 14px' }}>Usuario</th>
                     <th style={{ padding: '12px 14px' }}>Apertura</th>
                     <th style={{ padding: '12px 14px' }}>Cierre</th>
-                    <th style={{ padding: '12px 14px', textAlign: 'right' }}>Base Inicial</th>
-                    <th style={{ padding: '12px 14px', textAlign: 'right' }}>Total Facturado</th>
-                    <th style={{ padding: '12px 14px', textAlign: 'right' }}>Total Recaudos</th>
+                    <th style={{ padding: '12px 14px', textAlign: 'right' }}>Base</th>
+                    <th style={{ padding: '12px 14px', textAlign: 'right' }}>Total</th>
+                    <th style={{ padding: '12px 14px', textAlign: 'right' }}>Pagos</th>
                     <th style={{ padding: '12px 14px', textAlign: 'center' }}>Estado</th>
                     <th style={{ padding: '12px 14px', textAlign: 'center' }}>Acciones</th>
                   </tr>

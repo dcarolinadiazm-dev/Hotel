@@ -249,7 +249,7 @@ export const ReporteReservasFuturas = ({
             <button
               type="button"
               className="sidebar-nav-item active"
-              onClick={() => {}}
+              onClick={() => { }}
               title="Reporte de Reservas Futuras"
             >
               <span className="nav-item-icon">
@@ -469,13 +469,13 @@ export const ReporteReservasFuturas = ({
                 <thead>
                   <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0', color: '#475569', textAlign: 'left', fontWeight: 700 }}>
                     <th style={{ padding: '12px 14px' }}>Habitación</th>
-                    <th style={{ padding: '12px 14px' }}>Huésped / Documento</th>
-                    <th style={{ padding: '12px 14px' }}>Check-In (Llegada)</th>
-                    <th style={{ padding: '12px 14px' }}>Check-Out (Salida)</th>
+                    <th style={{ padding: '12px 14px' }}>Huésped/Documento</th>
+                    <th style={{ padding: '12px 14px' }}>Check-In</th>
+                    <th style={{ padding: '12px 14px' }}>Check-Out</th>
                     <th style={{ padding: '12px 14px', textAlign: 'center' }}>Noches</th>
-                    <th style={{ padding: '12px 14px', textAlign: 'right' }}>Total Estadía</th>
+                    <th style={{ padding: '12px 14px', textAlign: 'right' }}>Total</th>
                     <th style={{ padding: '12px 14px', textAlign: 'right' }}>Abonos</th>
-                    <th style={{ padding: '12px 14px', textAlign: 'right' }}>Saldo Pendiente</th>
+                    <th style={{ padding: '12px 14px', textAlign: 'right' }}>Saldo</th>
                   </tr>
                 </thead>
                 <tbody>
