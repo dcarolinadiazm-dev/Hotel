@@ -135,8 +135,88 @@ async function runMigration() {
                 console.log('ℹ️ La tabla HABITACION_MOVIM_ANTICIPOS ya existe.');
             }
 
-            // 4. Generadores (Sequences)
-            const generators = ['ID_HABITACION', 'ID_HAB_MOVIM'];
+            // 4. Verificar y Crear Tablas de Turno y Cierre Z
+            const checkTurno = await execute(db, `SELECT RDB$RELATION_NAME FROM RDB$RELATIONS WHERE RDB$SYSTEM_FLAG = 0 AND RDB$RELATION_NAME = 'TURNO'`);
+            if (!checkTurno || checkTurno.length === 0) {
+                console.log('📌 Creando tabla TURNO...');
+                await execute(db, `
+                    CREATE TABLE TURNO (
+                        ID_TURNO        INTEGER NOT NULL PRIMARY KEY,
+                        USUARIO         VARCHAR(30) NOT NULL,
+                        FECHA_APERTURA  TIMESTAMP NOT NULL,
+                        BASE            NUMERIC(15,2) DEFAULT 0 NOT NULL,
+                        FECHA_CIERRE    TIMESTAMP,
+                        ESTADO          VARCHAR(20) DEFAULT 'Abierto' NOT NULL,
+                        TOTAL_VENTAS    NUMERIC(15,2) DEFAULT 0,
+                        TOTAL_PAGOS     NUMERIC(15,2) DEFAULT 0,
+                        OBSERVACIONES   VARCHAR(250)
+                    )
+                `);
+                console.log('✅ Tabla TURNO creada.');
+            } else {
+                console.log('ℹ️ La tabla TURNO ya existe.');
+            }
+
+            const checkTurnoPagos = await execute(db, `SELECT RDB$RELATION_NAME FROM RDB$RELATIONS WHERE RDB$SYSTEM_FLAG = 0 AND RDB$RELATION_NAME = 'TURNO_DET_PAGOS'`);
+            if (!checkTurnoPagos || checkTurnoPagos.length === 0) {
+                console.log('📌 Creando tabla TURNO_DET_PAGOS...');
+                await execute(db, `
+                    CREATE TABLE TURNO_DET_PAGOS (
+                        ID_TURNO        INTEGER NOT NULL,
+                        ID_ITEM         INTEGER NOT NULL,
+                        FORMAP          INTEGER NOT NULL,
+                        NOMBRE_FORMA    VARCHAR(50),
+                        MONTO           NUMERIC(15,2) DEFAULT 0,
+                        PRIMARY KEY (ID_TURNO, ID_ITEM)
+                    )
+                `);
+                console.log('✅ Tabla TURNO_DET_PAGOS creada.');
+            } else {
+                console.log('ℹ️ La tabla TURNO_DET_PAGOS ya existe.');
+            }
+
+            const checkTurnoHabs = await execute(db, `SELECT RDB$RELATION_NAME FROM RDB$RELATIONS WHERE RDB$SYSTEM_FLAG = 0 AND RDB$RELATION_NAME = 'TURNO_DET_HABITACIONES'`);
+            if (!checkTurnoHabs || checkTurnoHabs.length === 0) {
+                console.log('📌 Creando tabla TURNO_DET_HABITACIONES...');
+                await execute(db, `
+                    CREATE TABLE TURNO_DET_HABITACIONES (
+                        ID_TURNO        INTEGER NOT NULL,
+                        ID_ITEM         INTEGER NOT NULL,
+                        ID_HABITACION   VARCHAR(20) NOT NULL,
+                        NUMERO          VARCHAR(20),
+                        ESTADO          VARCHAR(30) NOT NULL,
+                        HUESPED         VARCHAR(100),
+                        TOTAL_PENDIENTE NUMERIC(15,2) DEFAULT 0,
+                        PRIMARY KEY (ID_TURNO, ID_ITEM)
+                    )
+                `);
+                console.log('✅ Tabla TURNO_DET_HABITACIONES creada.');
+            } else {
+                console.log('ℹ️ La tabla TURNO_DET_HABITACIONES ya existe.');
+            }
+
+            const checkTurnoFacts = await execute(db, `SELECT RDB$RELATION_NAME FROM RDB$RELATIONS WHERE RDB$SYSTEM_FLAG = 0 AND RDB$RELATION_NAME = 'TURNO_DET_FACTURAS'`);
+            if (!checkTurnoFacts || checkTurnoFacts.length === 0) {
+                console.log('📌 Creando tabla TURNO_DET_FACTURAS...');
+                await execute(db, `
+                    CREATE TABLE TURNO_DET_FACTURAS (
+                        ID_TURNO        INTEGER NOT NULL,
+                        ID_ITEM         INTEGER NOT NULL,
+                        PREF            VARCHAR(10),
+                        FACTINI         INTEGER NOT NULL,
+                        FACTFIN         INTEGER NOT NULL,
+                        CANTIDAD        INTEGER DEFAULT 0,
+                        TOTAL           NUMERIC(15,2) DEFAULT 0,
+                        PRIMARY KEY (ID_TURNO, ID_ITEM)
+                    )
+                `);
+                console.log('✅ Tabla TURNO_DET_FACTURAS creada.');
+            } else {
+                console.log('ℹ️ La tabla TURNO_DET_FACTURAS ya existe.');
+            }
+
+            // 5. Generadores (Sequences)
+            const generators = ['ID_HABITACION', 'ID_HAB_MOVIM', 'GEN_ID_TURNO'];
             for (const gen of generators) {
                 try {
                     await execute(db, `CREATE GENERATOR ${gen}`);
@@ -146,7 +226,7 @@ async function runMigration() {
                 }
             }
 
-            // 5. Compilar Procedimiento GRABE_DOCUMENTO_INV_WEB
+            // 6. Compilar Procedimiento GRABE_DOCUMENTO_INV_WEB
             const procPath = path.join(__dirname, '../src/procedimiento_nuevo.sql');
             if (fs.existsSync(procPath)) {
                 const procSql = fs.readFileSync(procPath, 'utf8');

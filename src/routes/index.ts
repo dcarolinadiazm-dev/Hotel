@@ -6,6 +6,7 @@ import reporteRoutes from './reporte.routes';
 import terceroRoutes from './tercero.routes';
 import articuloRoutes from './articulo.routes';
 import abonoRoutes from './abono.routes';
+import turnoRoutes from './turno.routes';
 import { AuthController } from '../controllers/auth.controller';
 import { TerceroController } from '../controllers/tercero.controller';
 import { verifyToken } from '../middlewares/auth.middleware';
@@ -26,6 +27,7 @@ router.use('/reportes', reporteRoutes);
 router.use('/terceros', terceroRoutes);
 router.use('/articulos', articuloRoutes);
 router.use('/abonos', abonoRoutes);
+router.use('/turnos', turnoRoutes);
 
 export default router;
 

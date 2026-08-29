@@ -2,6 +2,9 @@ import { useState, useEffect } from 'react';
 import { ModalCrearHabitacion } from './ModalCrearHabitacion';
 import { ModalFacturacionDirecta } from './ModalFacturacionDirecta';
 import { ModalFacturacionMultiHabitacion } from './ModalFacturacionMultiHabitacion';
+import { ModalAperturaTurno } from './ModalAperturaTurno';
+import { ModalCierreZ } from './ModalCierreZ';
+import { ModalImpresionCierreZ, type ResumenCierreZData } from './ModalImpresionCierreZ';
 
 export interface Habitacion {
   id: string;
@@ -23,6 +26,15 @@ export interface Habitacion {
   totalReservasFuturas?: number;
   todosHuespedes?: string;
   todosDocumentos?: string;
+}
+
+interface Turno {
+  ID_TURNO: number;
+  USUARIO: string;
+  FECHA_APERTURA: string | Date;
+  BASE: number;
+  ESTADO: string;
+  OBSERVACIONES?: string;
 }
 
 type FiltroEstado = 'TODOS' | 'DISPONIBLE' | 'RESERVADA' | 'OCUPADA' | 'INHABILITADA';
@@ -61,6 +73,13 @@ export const Habitaciones = ({
   const [localSidebarOpen, setLocalSidebarOpen] = useState(false);
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
 
+  // Estados de Turno y Cierre Z
+  const [turnoActivo, setTurnoActivo] = useState<Turno | null>(null);
+  const [checkingTurno, setCheckingTurno] = useState<boolean>(true);
+  const [showModalApertura, setShowModalApertura] = useState<boolean>(false);
+  const [showModalCierreZ, setShowModalCierreZ] = useState<boolean>(false);
+  const [cierreZTicketData, setCierreZTicketData] = useState<ResumenCierreZData | null>(null);
+
   const sidebarOpen = controlledSidebarOpen !== undefined ? controlledSidebarOpen : localSidebarOpen;
   const toggleSidebar = onToggleSidebar || (() => setLocalSidebarOpen((prev) => !prev));
 
@@ -92,6 +111,24 @@ export const Habitaciones = ({
 
 
 
+  const fetchTurnoActivo = async () => {
+    try {
+      setCheckingTurno(true);
+      const res = await fetch('/api/turnos/activo');
+      const data = await res.json();
+      if (res.ok && data.turno) {
+        setTurnoActivo(data.turno);
+      } else {
+        setTurnoActivo(null);
+      }
+    } catch (e) {
+      console.error('Error consultando turno activo:', e);
+      setTurnoActivo(null);
+    } finally {
+      setCheckingTurno(false);
+    }
+  };
+
   const fetchHabitaciones = async () => {
     const token = localStorage.getItem('hotel_token');
     try {
@@ -117,6 +154,7 @@ export const Habitaciones = ({
   };
 
   useEffect(() => {
+    fetchTurnoActivo();
     fetchHabitaciones();
   }, [refreshKey]);
 
@@ -394,6 +432,27 @@ export const Habitaciones = ({
               </button>
             )}
 
+            {/* Botón de Apertura de Turno o Cierre Z */}
+            {turnoActivo ? (
+              <button
+                type="button"
+                className="btn-cierre-z-topbar"
+                onClick={() => setShowModalCierreZ(true)}
+                title={`Realizar Cierre Z de Turno #${turnoActivo.ID_TURNO}`}
+              >
+                🔒 Cierre Z (Turno #{turnoActivo.ID_TURNO})
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="btn-apertura-topbar"
+                onClick={() => setShowModalApertura(true)}
+                title="Realizar Apertura de Turno"
+              >
+                🔑 Apertura de Turno
+              </button>
+            )}
+
             <div className="topbar-user">
               <svg className="user-icon-small" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
@@ -415,310 +474,331 @@ export const Habitaciones = ({
 
         {/* Contenido Principal de Habitaciones */}
         <main className="rooms-main-content">
-
-        {/* Encabezado de Sección */}
-        <div className="rooms-section-header">
-          <div>
-            <div className="title-with-badge">
-              <h1 className="rooms-main-title">Habitaciones</h1>
-              <button
-                className="btn-add-room-inline"
-                onClick={handleOpenCreateModal}
-                title="Crear Nueva Habitación"
-              >
-                + Crear Habitación
-              </button>
-              <button
-                className="btn-facturar-inline"
-                onClick={() => setShowFacturarDirectoModal(true)}
-                title="Facturar productos sin habitación (Venta directa / POS)"
-              >
-                🧾 Facturar
-              </button>
+          {checkingTurno ? (
+            <div className="rooms-loading-state" style={{ minHeight: '350px' }}>
+              <div className="spinner"></div>
+              <p>Verificando estado del turno...</p>
             </div>
-            <p className="rooms-subtitle">Gestión en tiempo real de habitaciones</p>
-
-            {/* Buscador de habitaciones / huéspedes en todos los estados */}
-            <div className="rooms-guest-search-box">
-              <div className="guest-search-input-wrapper">
-                <span className="search-icon">🔍</span>
-                <input
-                  type="text"
-                  className="guest-search-input"
-                  placeholder="Buscar huésped, documento o habitación (en todos los estados)..."
-                  value={busquedaHuesped}
-                  onChange={(e) => setBusquedaHuesped(e.target.value)}
-                />
-                {busquedaHuesped && (
-                  <button
-                    type="button"
-                    className="btn-clear-guest-search"
-                    onClick={() => {
-                      setBusquedaHuesped('');
-                      setSelectedHabIds([]);
-                    }}
-                    title="Limpiar búsqueda"
-                  >
-                    ✕
-                  </button>
-                )}
+          ) : !turnoActivo ? (
+            /* Pantalla de Bloqueo de Habitaciones si no se ha realizado la Apertura de Turno */
+            <div className="rooms-locked-shift-container">
+              <div className="rooms-locked-shift-card">
+                <div className="locked-shift-icon">🔑</div>
+                <h2 className="locked-shift-title">Turno No Iniciado</h2>
+                <p className="locked-shift-desc">
+                  Para comenzar a registrar reservas, pedidos y gestionar las habitaciones en tiempo real, debe realizar la <b>Apertura de Turno</b> ingresando la base inicial de caja.
+                </p>
+                <button
+                  type="button"
+                  className="btn-open-shift-large"
+                  onClick={() => setShowModalApertura(true)}
+                >
+                  🔑 Realizar Apertura de Turno
+                </button>
               </div>
-              {busquedaHuesped && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span className="guest-search-count-badge">
-                    Filtrando {habitacionesFiltradas.length} {habitacionesFiltradas.length === 1 ? 'habitación' : 'habitaciones'}
-                  </span>
-                  {occupiedFiltered.length > 1 && (
+            </div>
+          ) : (
+            /* Vista Normal de Gestión de Habitaciones (Con Turno Abierto) */
+            <>
+              {/* Encabezado de Sección */}
+              <div className="rooms-section-header">
+                <div>
+                  <div className="title-with-badge">
+                    <h1 className="rooms-main-title">Habitaciones</h1>
                     <button
-                      type="button"
-                      className="btn-select-all-filtered"
-                      onClick={handleSelectAllFilteredOccupied}
-                      title="Seleccionar todas las habitaciones ocupadas filtradas para facturación consolidada"
+                      className="btn-add-room-inline"
+                      onClick={handleOpenCreateModal}
+                      title="Crear Nueva Habitación"
                     >
-                      {selectedHabIds.length === occupiedFiltered.length && occupiedFiltered.length > 0
-                        ? 'Deseleccionar todas'
-                        : `☑️ Seleccionar las ${occupiedFiltered.length} ocupadas`}
+                      + Crear Habitación
                     </button>
-                  )}
+                    <button
+                      className="btn-facturar-inline"
+                      onClick={() => setShowFacturarDirectoModal(true)}
+                      title="Facturar productos sin habitación (Venta directa / POS)"
+                    >
+                      🧾 Facturar
+                    </button>
+                  </div>
+                  <p className="rooms-subtitle">Gestión en tiempo real de habitaciones</p>
+
+                  {/* Buscador de habitaciones / huéspedes en todos los estados */}
+                  <div className="rooms-guest-search-box">
+                    <div className="guest-search-input-wrapper">
+                      <span className="search-icon">🔍</span>
+                      <input
+                        type="text"
+                        className="guest-search-input"
+                        placeholder="Buscar huésped, documento o habitación (en todos los estados)..."
+                        value={busquedaHuesped}
+                        onChange={(e) => setBusquedaHuesped(e.target.value)}
+                      />
+                      {busquedaHuesped && (
+                        <button
+                          type="button"
+                          className="btn-clear-guest-search"
+                          onClick={() => {
+                            setBusquedaHuesped('');
+                            setSelectedHabIds([]);
+                          }}
+                          title="Limpiar búsqueda"
+                        >
+                          ✕
+                        </button>
+                      )}
+                    </div>
+                    {busquedaHuesped && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span className="guest-search-count-badge">
+                          Filtrando {habitacionesFiltradas.length} {habitacionesFiltradas.length === 1 ? 'habitación' : 'habitaciones'}
+                        </span>
+                        {occupiedFiltered.length > 1 && (
+                          <button
+                            type="button"
+                            className="btn-select-all-filtered"
+                            onClick={handleSelectAllFilteredOccupied}
+                            title="Seleccionar todas las habitaciones ocupadas filtradas para facturación consolidada"
+                          >
+                            {selectedHabIds.length === occupiedFiltered.length && occupiedFiltered.length > 0
+                              ? 'Deseleccionar todas'
+                              : `☑️ Seleccionar las ${occupiedFiltered.length} ocupadas`}
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="rooms-header-actions">
+                  {/* Filtros Interactivos por Estado */}
+                  <div className="status-filters-group">
+                    <button
+                      className={`filter-chip ${filtroEstado === 'TODOS' ? 'active' : ''}`}
+                      onClick={() => setFiltroEstado('TODOS')}
+                    >
+                      Todas ({counts.todos})
+                    </button>
+
+                    <button
+                      className={`filter-chip ${filtroEstado === 'DISPONIBLE' ? 'active' : ''}`}
+                      onClick={() => setFiltroEstado('DISPONIBLE')}
+                    >
+                      <span className="dot dot-disponible"></span> Disponibles ({counts.disponible})
+                    </button>
+
+                    <button
+                      className={`filter-chip ${filtroEstado === 'RESERVADA' ? 'active' : ''}`}
+                      onClick={() => setFiltroEstado('RESERVADA')}
+                    >
+                      <span className="dot dot-reservada"></span> Reservadas ({counts.reservada})
+                    </button>
+
+                    <button
+                      className={`filter-chip ${filtroEstado === 'OCUPADA' ? 'active' : ''}`}
+                      onClick={() => setFiltroEstado('OCUPADA')}
+                    >
+                      <span className="dot dot-ocupada"></span> Ocupadas ({counts.ocupada})
+                    </button>
+
+                    <button
+                      className={`filter-chip ${filtroEstado === 'INHABILITADA' ? 'active' : ''}`}
+                      onClick={() => setFiltroEstado('INHABILITADA')}
+                    >
+                      <span className="dot dot-inhabilitada"></span> Inhabilitadas ({counts.inhabilitada})
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Loading Spinner */}
+              {loading && (
+                <div className="rooms-loading-state">
+                  <div className="spinner"></div>
+                  <p>Cargando habitaciones...</p>
                 </div>
               )}
-            </div>
-          </div>
 
-          <div className="rooms-header-actions">
-            {/* Filtros Interactivos por Estado */}
-            <div className="status-filters-group">
-              <button
-                className={`filter-chip ${filtroEstado === 'TODOS' ? 'active' : ''}`}
-                onClick={() => setFiltroEstado('TODOS')}
-              >
-                Todas ({counts.todos})
-              </button>
-
-              <button
-                className={`filter-chip ${filtroEstado === 'DISPONIBLE' ? 'active' : ''}`}
-                onClick={() => setFiltroEstado('DISPONIBLE')}
-              >
-                <span className="dot dot-disponible"></span> Disponibles ({counts.disponible})
-              </button>
-
-              <button
-                className={`filter-chip ${filtroEstado === 'RESERVADA' ? 'active' : ''}`}
-                onClick={() => setFiltroEstado('RESERVADA')}
-              >
-                <span className="dot dot-reservada"></span> Reservadas ({counts.reservada})
-              </button>
-
-              <button
-                className={`filter-chip ${filtroEstado === 'OCUPADA' ? 'active' : ''}`}
-                onClick={() => setFiltroEstado('OCUPADA')}
-              >
-                <span className="dot dot-ocupada"></span> Ocupadas ({counts.ocupada})
-              </button>
-
-              <button
-                className={`filter-chip ${filtroEstado === 'INHABILITADA' ? 'active' : ''}`}
-                onClick={() => setFiltroEstado('INHABILITADA')}
-              >
-                <span className="dot dot-inhabilitada"></span> Inhabilitadas ({counts.inhabilitada})
-              </button>
-            </div>
-          </div>
-        </div>
-
-        {/* Loading Spinner */}
-
-        {loading && (
-          <div className="rooms-loading-state">
-            <div className="spinner"></div>
-            <p>Cargando habitaciones...</p>
-          </div>
-        )}
-
-        {/* Error State */}
-        {error && (
-          <div className="rooms-error-state">
-            <p>⚠️ {error}</p>
-            <button onClick={fetchHabitaciones} className="btn-retry">
-              Reintentar
-            </button>
-          </div>
-        )}
-
-        {/* Grid de Tarjetas de Habitaciones */}
-        {!loading && !error && habitacionesFiltradas.length > 0 && (
-          <div className="rooms-cards-grid">
-            {habitacionesFiltradas.map((hab) => {
-              const statusClass = getStatusClass(hab.estado);
-              const isReservada = hab.estado === 'Reservada';
-              const isOcupada = hab.estado === 'Ocupada';
-              const isLocked = isReservada || isOcupada;
-              const isSelected = selectedHabIds.includes(hab.id);
-              const hasFiltroActivo = busquedaHuesped.trim().length > 0;
-
-              return (
-                <div
-                  key={hab.id}
-                  className={`room-card ${statusClass}-card ${isSelected ? 'room-card-selected' : ''}`}
-                  onClick={() => onOpenModal(hab)}
-                >
-                  <div className="room-card-top-bar">
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      {isOcupada && hasFiltroActivo && (
-                        <div
-                          className={`room-checkbox-selector ${isSelected ? 'checked' : ''}`}
-                          onClick={(e) => toggleSelectHab(e, hab)}
-                          title={isSelected ? 'Deseleccionar habitación' : 'Seleccionar habitación para facturación conjunta'}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={isSelected}
-                            onChange={() => {}}
-                            className="room-card-checkbox-input"
-                          />
-                        </div>
-                      )}
-                      <span className="room-badge-type">{hab.tipo || 'SENCILLA'} · P{hab.piso || 1}</span>
-                    </div>
-
-                    <div className="room-card-quick-actions">
-                      <button
-                        className={`btn-room-edit-quick ${isReservada ? 'btn-action-disabled' : ''}`}
-                        onClick={(e) => handleEditHabitacion(e, hab)}
-                        title={isReservada ? 'No se puede editar mientras esté reservada' : `Editar configuración de habitación ${hab.numero}`}
-                        disabled={isReservada}
-                      >
-                        ✏️
-                      </button>
-                      <button
-                        className={`btn-room-delete-quick ${isLocked ? 'btn-action-disabled' : ''}`}
-                        onClick={(e) => handleDeleteHabitacion(e, hab.id, hab.numero, hab.estado)}
-                        title={
-                          isLocked
-                            ? `No se puede inhabilitar mientras esté ${hab.estado}`
-                            : `Inhabilitar habitación ${hab.numero}`
-                        }
-                        disabled={isLocked}
-                      >
-                        ✕
-                      </button>
-                    </div>
-                  </div>
-
-                  <h3 className="room-card-number">{hab.numero}</h3>
-
-                  {/* Icono de Cama con color de estado */}
-                  <div className={`room-bed-icon-box ${statusClass}`}>
-                    <svg viewBox="0 0 64 64" fill="currentColor" className="bed-svg">
-                      <path d="M6 22H12V46H6V22Z" />
-                      <path d="M52 32H58V46H52V32Z" />
-                      <path d="M12 36H52V42H12V36Z" />
-                      <rect x="15" y="27" width="10" height="7" rx="2" />
-                      <path d="M28 31H52V36H28V31Z" />
-                      <rect x="8" y="46" width="4" height="6" />
-                      <rect x="52" y="46" width="4" height="6" />
-                    </svg>
-                  </div>
-
-                  {/* Texto de Estado */}
-                  <span className={`room-status-label ${statusClass}`}>
-                    {hab.estado}
-                  </span>
-
-                  {/* Detalle Huésped o Código de Artículo y Precio de Lista */}
-                  <div className="room-extra-info">
-                    {(hab.estado === 'Ocupada' || hab.estado === 'Reservada') && hab.huesped ? (
-                      <span className="room-guest-name" title={hab.huesped}>
-                        👤 {hab.huesped}
-                      </span>
-                    ) : (
-                      <span className="room-art-tag">
-                        🏷️ Art: {hab.artiCod || '001'} · ${Number(hab.precioNoche || 0).toLocaleString('es-CO')}
-                      </span>
-                    )}
-                    {hab.estado === 'Disponible' && Boolean(hab.totalReservasFuturas && hab.totalReservasFuturas > 0) && (
-                      <span
-                        style={{
-                          fontSize: '11px',
-                          color: '#b45309',
-                          background: '#fef3c7',
-                          padding: '2px 6px',
-                          borderRadius: '4px',
-                          fontWeight: 700,
-                          display: 'inline-block',
-                          marginTop: '4px',
-                        }}
-                        title={`${hab.totalReservasFuturas} reserva(s) programada(s) para fechas futuras`}
-                      >
-                        📅 {hab.totalReservasFuturas} {hab.totalReservasFuturas === 1 ? 'reserva futura' : 'reservas futuras'}
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Indicador de Productos & Pedido Web (solo cuando se encuentre ocupada) */}
-                  {hab.estado === 'Ocupada' && (
-                    <div className="room-product-indicator">
-                      {hab.productos > 0 ? (
-                        <span className="badge-con-productos">
-                          Con productos <span className="product-count-circle">{hab.productos}</span>
-                        </span>
-                      ) : (
-                        <span className="badge-sin-productos">Sin consumos</span>
-                      )}
-
-                      {hab.peweId && (
-                        <span className="badge-pewe-id" title={`Pedido Web activo #${hab.peweId}`}>
-                          WEB #{hab.peweId}
-                        </span>
-                      )}
-                    </div>
-                  )}
+              {/* Error State */}
+              {error && (
+                <div className="rooms-error-state">
+                  <p>⚠️ {error}</p>
+                  <button onClick={fetchHabitaciones} className="btn-retry">
+                    Reintentar
+                  </button>
                 </div>
-              );
-            })}
-          </div>
-        )}
+              )}
 
-        {/* Barra Flotante de Facturación Múltiple */}
-        {selectedHabIds.length > 0 && !showMultiFacturarModal && (
-          <div className="multi-room-floating-bar">
-            <div className="floating-bar-info">
-              <span className="floating-bar-badge">
-                ☑️ {selectedHabIds.length} {selectedHabIds.length === 1 ? 'habitación seleccionada' : 'habitaciones seleccionadas'}
-              </span>
-              <span className="floating-bar-habs">
-                (Habs: {habitaciones.filter((h) => selectedHabIds.includes(h.id)).map((h) => `#${h.numero}`).join(', ')})
-              </span>
-            </div>
-            <div className="floating-bar-actions">
-              <button
-                type="button"
-                className="btn-floating-clear"
-                onClick={() => setSelectedHabIds([])}
-              >
-                ✕ Desmarcar
-              </button>
-              <button
-                type="button"
-                className="btn-floating-facturar"
-                onClick={() => setShowMultiFacturarModal(true)}
-              >
-                🧾 Facturar {selectedHabIds.length} Habitaciones Juntas
-              </button>
-            </div>
-          </div>
-        )}
+              {/* Grid de Tarjetas de Habitaciones */}
+              {!loading && !error && habitacionesFiltradas.length > 0 && (
+                <div className="rooms-cards-grid">
+                  {habitacionesFiltradas.map((hab) => {
+                    const statusClass = getStatusClass(hab.estado);
+                    const isReservada = hab.estado === 'Reservada';
+                    const isOcupada = hab.estado === 'Ocupada';
+                    const isLocked = isReservada || isOcupada;
+                    const isSelected = selectedHabIds.includes(hab.id);
+                    const hasFiltroActivo = busquedaHuesped.trim().length > 0;
 
-        {/* Nota Informativa del Pie */}
-        <div className="rooms-footer-hint">
-          <svg className="hint-info-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <circle cx="12" cy="12" r="10" />
-            <line x1="12" y1="16" x2="12" y2="12" />
-            <line x1="12" y1="8" x2="12.01" y2="8" />
-          </svg>
-          <span>Haz clic en una habitación para gestionar su reserva</span>
-        </div>
-      </main>
+                    return (
+                      <div
+                        key={hab.id}
+                        className={`room-card ${statusClass}-card ${isSelected ? 'room-card-selected' : ''}`}
+                        onClick={() => onOpenModal(hab)}
+                      >
+                        <div className="room-card-top-bar">
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            {isOcupada && hasFiltroActivo && (
+                              <div
+                                className={`room-checkbox-selector ${isSelected ? 'checked' : ''}`}
+                                onClick={(e) => toggleSelectHab(e, hab)}
+                                title={isSelected ? 'Deseleccionar habitación' : 'Seleccionar habitación para facturación conjunta'}
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={isSelected}
+                                  onChange={() => {}}
+                                  className="room-card-checkbox-input"
+                                />
+                              </div>
+                            )}
+                            <span className="room-badge-type">{hab.tipo || 'SENCILLA'} · P{hab.piso || 1}</span>
+                          </div>
+
+                          <div className="room-card-quick-actions">
+                            <button
+                              className={`btn-room-edit-quick ${isReservada ? 'btn-action-disabled' : ''}`}
+                              onClick={(e) => handleEditHabitacion(e, hab)}
+                              title={isReservada ? 'No se puede editar mientras esté reservada' : `Editar configuración de habitación ${hab.numero}`}
+                              disabled={isReservada}
+                            >
+                              ✏️
+                            </button>
+                            <button
+                              className={`btn-room-delete-quick ${isLocked ? 'btn-action-disabled' : ''}`}
+                              onClick={(e) => handleDeleteHabitacion(e, hab.id, hab.numero, hab.estado)}
+                              title={
+                                isLocked
+                                  ? `No se puede inhabilitar mientras esté ${hab.estado}`
+                                  : `Inhabilitar habitación ${hab.numero}`
+                              }
+                              disabled={isLocked}
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        </div>
+
+                        <h3 className="room-card-number">{hab.numero}</h3>
+
+                        {/* Icono de Cama con color de estado */}
+                        <div className={`room-bed-icon-box ${statusClass}`}>
+                          <svg viewBox="0 0 64 64" fill="currentColor" className="bed-svg">
+                            <path d="M6 22H12V46H6V22Z" />
+                            <path d="M52 32H58V46H52V32Z" />
+                            <path d="M12 36H52V42H12V36Z" />
+                            <rect x="15" y="27" width="10" height="7" rx="2" />
+                            <path d="M28 31H52V36H28V31Z" />
+                            <rect x="8" y="46" width="4" height="6" />
+                            <rect x="52" y="46" width="4" height="6" />
+                          </svg>
+                        </div>
+
+                        {/* Texto de Estado */}
+                        <span className={`room-status-label ${statusClass}`}>
+                          {hab.estado}
+                        </span>
+
+                        {/* Detalle Huésped o Código de Artículo y Precio de Lista */}
+                        <div className="room-extra-info">
+                          {(hab.estado === 'Ocupada' || hab.estado === 'Reservada') && hab.huesped ? (
+                            <span className="room-guest-name" title={hab.huesped}>
+                              👤 {hab.huesped}
+                            </span>
+                          ) : (
+                            <span className="room-art-tag">
+                              🏷️ Art: {hab.artiCod || '001'} · ${Number(hab.precioNoche || 0).toLocaleString('es-CO')}
+                            </span>
+                          )}
+                          {hab.estado === 'Disponible' && Boolean(hab.totalReservasFuturas && hab.totalReservasFuturas > 0) && (
+                            <span
+                              style={{
+                                fontSize: '11px',
+                                color: '#b45309',
+                                background: '#fef3c7',
+                                padding: '2px 6px',
+                                borderRadius: '4px',
+                                fontWeight: 700,
+                                display: 'inline-block',
+                                marginTop: '4px',
+                              }}
+                              title={`${hab.totalReservasFuturas} reserva(s) programada(s) para fechas futuras`}
+                            >
+                              📅 {hab.totalReservasFuturas} reserva(s) futura(s)
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Indicadores de Consumos / Abonos */}
+                        {hab.estado === 'Ocupada' && (
+                          <div className="room-card-footer">
+                            <span className="room-products-count">
+                              Con productos {hab.productos}
+                            </span>
+                            {hab.peweId && (
+                              <span className="room-pewe-badge" title={`Borrador de Factura WEB #${hab.peweId}`}>
+                                WEB #{hab.peweId}
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Barra Flotante de Facturación Múltiple */}
+              {selectedHabIds.length > 0 && !showMultiFacturarModal && (
+                <div className="multi-room-floating-bar">
+                  <div className="floating-bar-info">
+                    <span className="floating-bar-badge">
+                      ☑️ {selectedHabIds.length} {selectedHabIds.length === 1 ? 'habitación seleccionada' : 'habitaciones seleccionadas'}
+                    </span>
+                    <span className="floating-bar-habs">
+                      (Habs: {habitaciones.filter((h) => selectedHabIds.includes(h.id)).map((h) => `#${h.numero}`).join(', ')})
+                    </span>
+                  </div>
+                  <div className="floating-bar-actions">
+                    <button
+                      type="button"
+                      className="btn-floating-clear"
+                      onClick={() => setSelectedHabIds([])}
+                    >
+                      ✕ Desmarcar
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-floating-facturar"
+                      onClick={() => setShowMultiFacturarModal(true)}
+                    >
+                      🧾 Facturar {selectedHabIds.length} Habitaciones Juntas
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Nota Informativa del Pie */}
+              <div className="rooms-footer-hint">
+                <svg className="hint-info-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <circle cx="12" cy="12" r="10" />
+                  <line x1="12" y1="16" x2="12" y2="12" />
+                  <line x1="12" y1="8" x2="12.01" y2="8" />
+                </svg>
+                <span>Haz clic en una habitación para gestionar su reserva</span>
+              </div>
+            </>
+          )}
+        </main>
 
         {/* Modal de Creación / Edición de Habitación */}
         {showCreateModal && (
@@ -729,6 +809,44 @@ export const Habitaciones = ({
               setHabitacionAEditar(null);
             }}
             onSaved={() => fetchHabitaciones()}
+          />
+        )}
+
+        {/* Modal de Apertura de Turno */}
+        {showModalApertura && (
+          <ModalAperturaTurno
+            user={user}
+            onClose={() => setShowModalApertura(false)}
+            onTurnoAbierto={(nuevoTurno) => {
+              setTurnoActivo(nuevoTurno);
+              setShowModalApertura(false);
+              fetchHabitaciones();
+            }}
+          />
+        )}
+
+        {/* Modal de Cierre Z */}
+        {showModalCierreZ && turnoActivo && (
+          <ModalCierreZ
+            idTurno={turnoActivo.ID_TURNO}
+            user={user}
+            onClose={() => setShowModalCierreZ(false)}
+            onCierreCompletado={(ticketData) => {
+              setShowModalCierreZ(false);
+              setTurnoActivo(null);
+              setCierreZTicketData(ticketData);
+            }}
+          />
+        )}
+
+        {/* Modal de Impresión POS de Cierre Z */}
+        {cierreZTicketData && (
+          <ModalImpresionCierreZ
+            data={cierreZTicketData}
+            onClose={() => {
+              setCierreZTicketData(null);
+              onLogout();
+            }}
           />
         )}
 
@@ -758,4 +876,3 @@ export const Habitaciones = ({
     </div>
   );
 };
-
