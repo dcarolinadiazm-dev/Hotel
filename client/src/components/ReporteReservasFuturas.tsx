@@ -171,9 +171,9 @@ export const ReporteReservasFuturas = ({
   const totalHabitacionesReservadas = new Set(reservasFiltradas.map((r) => r.habitacionId)).size;
 
   return (
-    <div className="hotel-app-layout">
-      {/* Sidebar Izquierdo */}
-      <aside className={`hotel-sidebar ${sidebarOpen ? 'open' : 'closed'}`}>
+    <div className="hotel-dashboard-layout">
+      {/* Sidebar Izquierdo Azul Moderno */}
+      <aside className={`hotel-sidebar-navy ${sidebarOpen ? 'open' : 'closed'}`}>
         <div className="sidebar-top-section">
           <div className="sidebar-brand-box" onClick={onBackToRooms} style={{ cursor: 'pointer' }}>
             <img src="/LogoHotel.png" alt="Hotel" className="sidebar-logo-img" />
