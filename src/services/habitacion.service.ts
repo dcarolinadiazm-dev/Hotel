@@ -956,8 +956,15 @@ export class HabitacionService {
         const day = String(today.getDate()).padStart(2, '0');
         const todayStr = `${year}-${month}-${day}`;
 
+        const defaultLipr = await ArticuloService.getDefaultLiprCod();
+
         let query = db(tables.HABITACION_MOVIM)
             .join(tables.HABITACION, `${tables.HABITACION_MOVIM}.ID_HABITACION`, '=', `${tables.HABITACION}.ID_HABITACION`)
+            .leftJoin(tables.PRECIOS_ARTICULO, function () {
+                this.on(`${tables.HABITACION}.ARTI_COD`, '=', `${tables.PRECIOS_ARTICULO}.ARTI_COD`)
+                    .andOnVal(`${tables.PRECIOS_ARTICULO}.LIPR_COD`, '=', defaultLipr);
+            })
+            .leftJoin(tables.ARTICULO, `${tables.HABITACION}.ARTI_COD`, '=', `${tables.ARTICULO}.ARTI_COD`)
             .leftJoin(tables.DOC_INVENTARIO_WEB, `${tables.HABITACION_MOVIM}.DINW_ID`, '=', `${tables.DOC_INVENTARIO_WEB}.DINW_ID`)
             .leftJoin(tables.TERCEROS, `${tables.DOC_INVENTARIO_WEB}.DINW_NIT`, '=', `${tables.TERCEROS}.TERC_NIT`)
             .where(function () {
@@ -979,7 +986,8 @@ export class HabitacionService {
                 `${tables.HABITACION}.NUMERO as HAB_NUMERO`,
                 `${tables.HABITACION}.TIPO as HAB_TIPO`,
                 `${tables.HABITACION}.PISO as HAB_PISO`,
-                `${tables.HABITACION}.PRECIO as HAB_PRECIO`,
+                `${tables.HABITACION}.ARTI_COD as HAB_ARTI_COD`,
+                db.raw(`COALESCE(${tables.PRECIOS_ARTICULO}.PRAR_FIJO, ${tables.ARTICULO}.ARTI_PRECIO, 0) as "HAB_PRECIO"`),
                 `${tables.DOC_INVENTARIO_WEB}.DINW_NIT`,
                 `${tables.DOC_INVENTARIO_WEB}.DINW_TOTAL`,
                 `${tables.DOC_INVENTARIO_WEB}.DINW_OBS`,
@@ -993,10 +1001,10 @@ export class HabitacionService {
             query = query.where(`${tables.HABITACION_MOVIM}.ID_HABITACION`, filters.habitacionId);
         }
         if (filters?.fechaDesde) {
-            query = query.where(`${tables.HABITACION_MOVIM}.FECHA_RESERVA`, '>=', `${filters.fechaDesde} 00:00:00`);
+            query = query.where(`${tables.HABITACION_MOVIM}.FECHA_RESERVA`, '>=', `${filters.fechaDesde}`);
         }
         if (filters?.fechaHasta) {
-            query = query.where(`${tables.HABITACION_MOVIM}.FECHA_RESERVA`, '<=', `${filters.fechaHasta} 23:59:59`);
+            query = query.where(`${tables.HABITACION_MOVIM}.FECHA_RESERVA`, '<=', `${filters.fechaHasta}T23:59:59`);
         }
 
         const rows = await query;
