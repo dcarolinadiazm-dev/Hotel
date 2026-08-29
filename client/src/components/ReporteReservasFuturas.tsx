@@ -137,7 +137,6 @@ export const ReporteReservasFuturas = ({
       'Total Estadía': r.totalEstadia,
       'Abonos/Anticipos': r.abonos,
       'Saldo Pendiente': r.saldoPendiente,
-      'Estado': r.estadoReserva,
       'Borrador Web #': r.peweId || '',
       'Observaciones': r.observaciones || '',
     }));
@@ -477,13 +476,10 @@ export const ReporteReservasFuturas = ({
                     <th style={{ padding: '12px 14px', textAlign: 'right' }}>Total Estadía</th>
                     <th style={{ padding: '12px 14px', textAlign: 'right' }}>Abonos</th>
                     <th style={{ padding: '12px 14px', textAlign: 'right' }}>Saldo Pendiente</th>
-                    <th style={{ padding: '12px 14px', textAlign: 'center' }}>Estado</th>
                   </tr>
                 </thead>
                 <tbody>
                   {reservasFiltradas.map((r) => {
-                    const isToday = r.estadoReserva === 'Llega Hoy';
-
                     return (
                       <tr key={r.idMovim} style={{ borderBottom: '1px solid #f1f5f9' }}>
                         <td style={{ padding: '12px 14px' }}>
@@ -526,22 +522,6 @@ export const ReporteReservasFuturas = ({
                         </td>
                         <td style={{ padding: '12px 14px', textAlign: 'right', fontWeight: 700, color: r.saldoPendiente > 0 ? '#b45309' : '#64748b' }}>
                           ${r.saldoPendiente.toLocaleString('es-CO')}
-                        </td>
-                        <td style={{ padding: '12px 14px', textAlign: 'center' }}>
-                          <span
-                            style={{
-                              display: 'inline-block',
-                              padding: '3px 8px',
-                              borderRadius: '4px',
-                              fontSize: '11px',
-                              fontWeight: 700,
-                              background: isToday ? '#dcfce7' : '#fef3c7',
-                              color: isToday ? '#15803d' : '#b45309',
-                              border: `1px solid ${isToday ? '#86efac' : '#fde68a'}`,
-                            }}
-                          >
-                            {isToday ? '🟢 Llega Hoy' : '🟡 Futura'}
-                          </span>
                         </td>
                       </tr>
                     );
