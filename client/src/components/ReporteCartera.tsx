@@ -227,7 +227,7 @@ export const ReporteCartera: React.FC<ReporteCarteraProps> = ({
               type="button"
               className="sidebar-nav-item"
               onClick={onGoToPedidosReport}
-              title="Reporte de Pedidos"
+              title="Reporte de Facturas"
             >
               <span className="nav-item-icon">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
