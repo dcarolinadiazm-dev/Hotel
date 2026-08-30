@@ -55,8 +55,14 @@ export class HabitacionController {
     static async update(req: Request, res: Response) {
         const id = String(req.params.id);
         try {
-            await HabitacionService.updateHabitacion(id, req.body);
-            res.json({ success: true, message: 'Habitación actualizada correctamente en Firebird' });
+            const result = await HabitacionService.updateHabitacion(id, req.body);
+            res.json({
+                success: true,
+                message: 'Habitación actualizada correctamente en Firebird',
+                data: result,
+                idMovim: result?.idMovim,
+                dinwId: result?.dinwId
+            });
         } catch (error: any) {
             console.error(`Error en HabitacionController.update (${id}):`, error.message);
             res.status(500).json({ error: error.message });

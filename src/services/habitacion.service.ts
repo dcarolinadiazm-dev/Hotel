@@ -534,6 +534,7 @@ export class HabitacionService {
             : precioArticulo;
 
         let dinwId: number | undefined = undefined;
+        let finalMovId: number | undefined = targetMovId || (existingActiveMov?.ID_MOVIM ? parseInt(String(existingActiveMov.ID_MOVIM), 10) : undefined);
 
         if (isReservaFormal) {
             if (esNueva || !existingActiveMov) {
@@ -545,6 +546,7 @@ export class HabitacionService {
                 const firstMovRow = movRows[0] || {};
                 const maxMovVal = firstMovRow.MAXID ?? firstMovRow.maxid ?? firstMovRow.MAX ?? firstMovRow.max ?? 0;
                 const nextMovId = (parseInt(String(maxMovVal || '0'), 10) || 0) + 1;
+                finalMovId = nextMovId;
 
                 await db(tables.HABITACION_MOVIM).insert({
                     ID_MOVIM: nextMovId,
@@ -558,6 +560,7 @@ export class HabitacionService {
                 });
             } else {
                 dinwId = existingActiveMov.DINW_ID;
+                finalMovId = existingActiveMov.ID_MOVIM ? parseInt(String(existingActiveMov.ID_MOVIM), 10) : undefined;
                 if (!dinwId) {
                     dinwId = await PedidoService.createNewDinw(id, habNumero, documento, huesped);
                 }
@@ -743,12 +746,16 @@ export class HabitacionService {
 
         if (data.artiCod) updatePayload.ARTI_COD = data.artiCod.trim();
         if (data.numero) updatePayload.NUMERO = data.numero.trim();
-        if (data.tipo) updatePayload.TIPO = data.tipo.trim();
-        if (data.piso !== undefined) updatePayload.PISO = parseInt(String(data.piso), 10);
-
-        return db(tables.HABITACION)
+        await db(tables.HABITACION)
             .where('ID_HABITACION', id)
             .update(updatePayload);
+
+        return {
+            id,
+            idMovim: finalMovId,
+            dinwId,
+            estado: estadoFinal
+        };
     }
 
     // Inhabilitar habitación

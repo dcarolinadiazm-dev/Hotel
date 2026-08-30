@@ -311,7 +311,7 @@ export const ModalHabitacion = ({
     setEstado('Reservada');
   };
 
-  const fetchRoomDetails = () => {
+  const fetchRoomDetails = (preferredMovimId?: number) => {
     const token = localStorage.getItem('hotel_token');
     const fetchHab = fetch(`/api/habitaciones/${habitacion.id}`, {
       headers: { Authorization: `Bearer ${token}` },
@@ -328,9 +328,10 @@ export const ModalHabitacion = ({
         setMovimientos(movs);
 
         if (movs.length > 0) {
-          let target = movs.find(m => m.idMovim === selectedMovimId);
-          if (!target && selectedMovimId !== 'NUEVA') {
-            target = (data.peweId ? movs.find(m => m.dinwId === data.peweId) : null) || movs[0];
+          const targetId = preferredMovimId ?? (selectedMovimId !== 'NUEVA' ? selectedMovimId : undefined);
+          let target = targetId ? movs.find((m) => m.idMovim === targetId) : undefined;
+          if (!target) {
+            target = (data.peweId ? movs.find((m) => m.dinwId === data.peweId) : null) || movs[movs.length - 1] || movs[0];
           }
           if (target) {
             cargarMovimientoEnFormulario(target);
@@ -986,7 +987,8 @@ export const ModalHabitacion = ({
           type: 'success',
           message: '✅ Reserva guardada exitosamente.',
         });
-        await fetchRoomDetails();
+        const savedMovimId = d.idMovim || d.data?.idMovim;
+        await fetchRoomDetails(savedMovimId);
         if (onHabitacionUpdated) onHabitacionUpdated();
       } else {
         alert(d.error || 'Error al guardar cambios de habitación');
