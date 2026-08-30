@@ -1474,6 +1474,18 @@ export const ModalHabitacion = ({
                         const val = e.target.value;
                         setFechaReserva(val);
                         if (val) {
+                          const inDate = new Date(val);
+                          if (!isNaN(inDate.getTime())) {
+                            // Aumentar automáticamente 1 día (24 horas) para la fecha de salida por defecto
+                            const outDate = new Date(inDate.getTime() + 24 * 60 * 60 * 1000);
+                            const outY = outDate.getFullYear();
+                            const outM = String(outDate.getMonth() + 1).padStart(2, '0');
+                            const outD = String(outDate.getDate()).padStart(2, '0');
+                            const outH = String(outDate.getHours()).padStart(2, '0');
+                            const outMin = String(outDate.getMinutes()).padStart(2, '0');
+                            setFechaSalida(`${outY}-${outM}-${outD}T${outH}:${outMin}`);
+                          }
+
                           const now = new Date();
                           const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
                           const fDate = val.split('T')[0];
