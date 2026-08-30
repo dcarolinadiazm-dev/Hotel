@@ -629,13 +629,6 @@ export const Habitaciones = ({
                     </button>
 
                     <button
-                      className={`filter-chip ${filtroEstado === 'RESERVADA' ? 'active' : ''}`}
-                      onClick={() => setFiltroEstado('RESERVADA')}
-                    >
-                      <span className="dot dot-reservada"></span> Reservadas ({counts.reservada})
-                    </button>
-
-                    <button
                       className={`filter-chip ${filtroEstado === 'OCUPADA' ? 'active' : ''}`}
                       onClick={() => setFiltroEstado('OCUPADA')}
                     >
