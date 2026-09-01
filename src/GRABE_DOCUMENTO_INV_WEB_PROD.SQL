@@ -1,4 +1,4 @@
-create procedure GRABE_DOCUMENTO_INV_WEB (
+CREATE OR ALTER PROCEDURE GRABE_DOCUMENTO_INV_WEB (
     TIPO integer,
     ID integer)
 returns (
