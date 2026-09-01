@@ -82,6 +82,8 @@ declare variable EXTRA numeric(18,2);
 declare variable INALC numeric(18,2);
 declare variable DTOFFEC date;
 declare variable BODRETAL integer;
+declare variable CERROR char(1);
+declare variable SALDO_PAGO numeric(18,2);
 begin
 if (TIPO = 31) then
     BEGIN
@@ -235,6 +237,7 @@ if (TIPO = 31) then
     select a.auto_contado from autorizaciones a, facturas f where a.pref_pre = f.pref_pre and a.auto_numero = f.auto_numero and f.fact_id = :iddoc into :contado;
     if (contado = 'S') then
         begin
+        SALDO_PAGO = :TOTAL;
         /* grabe el recibo */
         SELECT FIRST 1 CAJA_ID FROM punto_venta WHERE PTVT_ID = :PTOVTA INTO :CAJA;
         if (CAJA is null) then SELECT FIRST 1 CAJA_ID FROM cajas INTO :CAJA;
@@ -249,18 +252,24 @@ if (TIPO = 31) then
                 INTO :ITEM, :FORMAP, :PAGO_MONTO, :CODBCO, :CTABCO, :NUMBCO
             DO
             BEGIN
-                if (CODBCO is null) then CODBCO = '';
-                if (CTABCO is null) then CTABCO = '';
-                if (NUMBCO is null) then NUMBCO = '';
-                if (FORMAP <> 1 AND (NUMBCO = '' OR NUMBCO IS NULL)) then
-                    BEGIN
-                    CTABCO = '9999';
-                    SELECT CAJA_FPBCO FROM CAJAS C WHERE CAJA_ID = :CAJA INTO :CODBCO;
-                    select max(rcpa_numero) from recibos_caja_pago where rcpa_banco = :CODBCO and rcpa_cuenta = '9999' INTO :NUMBCO;
-                    if (NUMBCO is null) then NUMBCO = '000001';
-                    END
-                insert into FACTURAS_CONTADO_PAGO (FCNT_ID, FCNP_ITEM, FOPA_ID, FCNP_BANCO, FCNP_CUENTA, FCNP_NUMERO, FCNP_FECHA, FCNP_MONTO, FCNP_ANULADO, FCNP_CERRADO)
-                    values (:iddoc, :ITEM, :formap, :codbco, :ctabco, :numbco, :FECHA, :PAGO_MONTO, 'N', 'N');
+                if (PAGO_MONTO > SALDO_PAGO) then PAGO_MONTO = SALDO_PAGO;
+                
+                if (PAGO_MONTO > 0) then
+                BEGIN
+                    if (CODBCO is null) then CODBCO = '';
+                    if (CTABCO is null) then CTABCO = '';
+                    if (NUMBCO is null) then NUMBCO = '';
+                    if (FORMAP <> 1 AND (NUMBCO = '' OR NUMBCO IS NULL)) then
+                        BEGIN
+                        CTABCO = '9999';
+                        SELECT CAJA_FPBCO FROM CAJAS C WHERE CAJA_ID = :CAJA INTO :CODBCO;
+                        select max(rcpa_numero) from recibos_caja_pago where rcpa_banco = :CODBCO and rcpa_cuenta = '9999' INTO :NUMBCO;
+                        if (NUMBCO is null) then NUMBCO = '000001';
+                        END
+                    insert into FACTURAS_CONTADO_PAGO (FCNT_ID, FCNP_ITEM, FOPA_ID, FCNP_BANCO, FCNP_CUENTA, FCNP_NUMERO, FCNP_FECHA, FCNP_MONTO, FCNP_ANULADO, FCNP_CERRADO)
+                        values (:iddoc, :ITEM, :formap, :codbco, :ctabco, :numbco, :FECHA, :PAGO_MONTO, 'N', 'N');
+                    SALDO_PAGO = SALDO_PAGO - PAGO_MONTO;
+                END
             END
             END
         ELSE
