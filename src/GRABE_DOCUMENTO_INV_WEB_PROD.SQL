@@ -55,16 +55,15 @@ declare variable CAJA INTEGER;
 declare variable CODBCO VARCHAR(20);
 declare variable CTABCO VARCHAR(20);
 declare variable NUMBCO VARCHAR(20);
-declare variable VER INTEGER;
+declare variable VER CHAR(1);
 declare variable IDC INTEGER;
 declare variable TIVA INTEGER;
-declare variable IMPINCP CHAR(1);
-declare variable IMPINCM CHAR(1);
 declare variable IMPBA NUMERIC(18,2);
 declare variable IMPUP NUMERIC(18,2);
 declare variable IMPUPP NUMERIC(18,2);
 declare variable IMPUPM NUMERIC(18,2);
-declare variable IMPUPPORC NUMERIC(18,2);
+declare variable INALCP NUMERIC(18,4);
+declare variable INALCM NUMERIC(18,4);
 declare variable DTO1 NUMERIC(18,2);
 declare variable DTO2 NUMERIC(18,2);
 declare variable DTO3 NUMERIC(18,2);
@@ -80,6 +79,7 @@ declare variable PREFREF varchar(4);
 declare variable IDREF integer;
 declare variable ADICIONAL numeric(18,2);
 declare variable EXTRA numeric(18,2);
+declare variable INALC numeric(18,2);
 declare variable DTOFFEC date;
 declare variable BODRETAL integer;
 begin
@@ -88,11 +88,16 @@ if (TIPO = 31) then
     /* FACTURA VENTA */
     IDDOC = GEN_ID(id_factura, 1);
     select DINW_PREF, DINW_BODEGA, DINW_FECHA, DINW_CONCEPTO, DINW_TIPOREF, DINW_NUMREF, DINW_OBS, DINW_IMPINC, DINW_NIT, DINW_DTOPORC,
-        DINW_DTOMONTO,DINW_FORMAP, DINW_SUCURSAL, DINW_PTVTA, DINW_VEND, DINW_VENCE, D.dinw_rtfteporc, D.dinw_rtivaporc, D.dinw_rticaporc,
+        DINW_DTOMONTO, DINW_FORMAP, DINW_SUCURSAL, DINW_PTVTA, DINW_VEND, DINW_VENCE, D.dinw_rtfteporc, D.dinw_rtivaporc, D.dinw_rticaporc,
         D.dinw_dtoporc, D.dinw_adicional, D.dinw_extra, D.dinw_inalc, D.dinw_impba, D.dinw_impup, D.dinw_contado, D.DINW_DTOFFEC
         FROM doc_inventario_web D WHERE D.dinw_id = :ID
-        INTO :PREF, :BODEGA, :FECHA, :CONCEPTO, :TIPOREF, :NUMREF, :OBS, :ivainc, :NIT, :DTOPORC, :DTOMONTO, :formap, :SUCURSAL, :PTOVTA,
-        :vend, :VENCE, :rtfteporc, :rtivaporc, :rticaporc, :dtoporc, :adicional, :extra, :impinc, :impba, :impup, :contado, :dtoffec;
+        INTO :PREF, :BODEGA, :FECHA, :CONCEPTO, :TIPOREF, :NUMREF, :OBS, :impinc, :NIT, :DTOPORC,
+        :DTOMONTO, :formap, :SUCURSAL, :PTOVTA, :vend, :VENCE, :rtfteporc, :rtivaporc, :rticaporc,
+        :dtoporc, :adicional, :extra, :inalc, :impba, :impup, :contado, :dtoffec;
+
+    if (impinc is null) then impinc = 'S';
+    if (contado is null) then contado = 'S';
+
     if ((TIPOREF = 32) AND (NUMREF <> '')) then
         BEGIN
         select pref_ivainc from prefijos where tido_cod = 31 and pref_pre = :pref into :ivainc;
@@ -144,11 +149,13 @@ if (TIPO = 31) then
         SELECT FIRST 1 BODE_COD FROM BODEGA WHERE BODE_FACTURA = 'S' OR BODE_ACTIVA = 'S' INTO :BODEGA;
     IF ((BODEGA IS NULL) OR (BODEGA = '')) THEN
         SELECT FIRST 1 BODE_COD FROM BODEGA INTO :BODEGA;
+    if (BODEGA IS NULL OR BODEGA = '') then BODEGA = '1';
     SELECT FIRST 1 LIPR_COD FROM lista_precios L, USUARIO U WHERE L.lipr_predet = 'S' AND U.user_cod = USER AND ((L.sucu_id = U.sucu_id) or (U.sucu_id = 0) or (L.sucu_id = 0)) INTO :LISTA;
+    select pref_actual from prefijos where tido_cod = 31 and pref_pre = :pref into :numero;
+    if (numero is null or numero = '') then numero = '00000001';
     select FIRST 1 a.auto_numero from autorizaciones a
         where a.pref_pre = :pref and a.tido_cod = 31 and a.auto_fecha <= :fecha and a.auto_vence >= :fecha
-        AND CAST(a.auto_inicial AS BIGINT) <= CAST(:numero AS BIGINT)
-        AND CAST(a.auto_final AS BIGINT) >= CAST(:numero AS BIGINT) into :autorizacion;
+        order by a.auto_vence desc into :autorizacion;
     insert into FACTURAS (FACT_ID, PTVT_ID, VEND_COD, TERC_NIT, AUTO_NUMERO, FACT_NUMERO, FACT_FECHA, FACT_DESPACHO,
                           FACT_VENCE, FACT_IVAINC, FACT_COMIPORC, FACT_COMIMONTO, FACT_DTOPOR, FACT_DTOMONTO,
                           FACT_ADICIONAL, FACT_IVAMONTO, FACT_RTFTEPOR, FACT_RTFTEMONTO, FACT_RTIVAPOR, FACT_RTIVAMONTO,
@@ -165,7 +172,7 @@ if (TIPO = 31) then
                           FACT_DIAIVA, FACT_FORMAP, FACT_FECHADIAN, FACT_CONTADO, FACT_PROFORMA, FACT_UUID, FACT_IMPBA,
                           FACT_IMPUP)
         values (:iddoc, :ptovta, :vend, :nit, :autorizacion, :numero, :fecha, NULL,
-                :vence, :ivainc, 0, 0, 0, 0,
+                :vence, :impinc, 0, 0, 0, 0,
                 0, :ivatot, :rtfteporc, :rtfte, :rtivaporc, :rteiva,
                 :rticaporc, :rteica, 0, 0, 0, :fecha,
                 :pref, NULL, :nomterc, NULL, NULL, NULL, 'N',
@@ -186,8 +193,9 @@ if (TIPO = 31) then
                DIWD_IMPUPP, DIWD_INALCP, DIWD_INALCM, DIWD_IMPUPM, DIWD_DTO1, DIWD_DTO2, DIWD_DTO3, DIWD_DTOM1, DIWD_DTOM2, DIWD_DTOM3
         FROM DOC_INVENTARIO_DET_WEB WHERE DINW_ID = :ID INTO :ITEM, :articulo, :cant, :unidad, :lote, :costo, :dtoporc, :ivaporc, :consumo,
                :factor, :descripcion, :obsite, :codbar, :refite, :bodega, :lista, :tiva, :impba, :impup,
-               :impupporc, :impincp, :impincm, :impupm, :dto1, :dto2, :dto3, :dto1m, :dto2m, :dto3m DO
+               :impupp, :inalcp, :inalcm, :impupm, :dto1, :dto2, :dto3, :dto1m, :dto2m, :dto3m DO
         BEGIN
+        if (BODEGA IS NULL OR BODEGA = '') then BODEGA = '1';
         TOTAL = CANT * COSTO;
         if (IMPINC = 'S') then
           BEGIN
@@ -211,8 +219,8 @@ if (TIPO = 31) then
                 :descripcion, :obsite, :CODBAR, 0, 0, :TOTAL, :lista,
                 :refite, 'N', 'N', 0, :dto1, :DTO2,
                 :DTO3, 0, 0, 0, 1, 0, 0,
-                :TIVA, :impincp, :impinc, NULL, 0, NULL,
-                0, 0, 'N', NULL, :impupporc, :impup, :impba);
+                :TIVA, :inalcp, :inalcm, NULL, 0, NULL,
+                0, 0, 'N', NULL, :impupp, :impupm, :impba);
         END
     UPDATE doc_inventario_web D SET D.dinw_iddoc = :iddoc WHERE D.dinw_id = :ID;
     SELECT PREF_PRE || FACT_NUMERO FROM FACTURAS WHERE FACT_ID = :iddoc INTO :numdoc;
@@ -270,7 +278,7 @@ if (TIPO = 31) then
     NERROR = 0;
     select max(inve_id) from interfaz_ventas where tido_cod = 31 and pref_pre = :pref into :idinter;
     execute procedure contabil_factura(:IDDOC, :IDINTER, 0) returning_values (:NERROR, :VER, :IDC);
-    if (NERROR = 0) then
+    if (NERROR = 0 and IDC is not null and IDC > 0) then
         execute procedure CONTABILIZA_PENDIENTE(:IDC);
     suspend;
     END
