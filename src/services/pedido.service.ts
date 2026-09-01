@@ -746,47 +746,64 @@ export class PedidoService {
                     // Fallback caja 1
                 }
 
-                // Eliminar registros previos de pago generados por defecto por el SP
-                await db('FACTURAS_CONTADO_PAGO').where('FCNT_ID', idGenerado).del();
+                // Verificar que la factura ya esté grabada en FACTURAS antes de insertar pagos (FK)
+                // En producción el SP puede necesitar un momento para confirmar la transacción
+                let facturaExiste = false;
+                for (let attempt = 0; attempt < 5; attempt++) {
+                    const checkFact = await db('FACTURAS').where('FACT_ID', idGenerado).first().catch(() => null);
+                    if (checkFact) { facturaExiste = true; break; }
+                    await new Promise(r => setTimeout(r, 600));
+                }
 
-                // Insertar cada forma de pago seleccionada
-                for (let i = 0; i < listaPagos.length; i++) {
-                    const p = listaPagos[i];
-                    const isEfectivo = p.formaPagoId === 1;
-                    let numBco = '';
+                if (!facturaExiste) {
+                    console.warn(`Aviso: FACT_ID ${idGenerado} no encontrado en FACTURAS después de 5 intentos. Se omite registro de formas de pago en FACTURAS_CONTADO_PAGO.`);
+                } else {
+                    // Eliminar registros previos de pago generados por defecto por el SP
+                    await db('FACTURAS_CONTADO_PAGO').where('FCNT_ID', idGenerado).del().catch(() => {});
 
-                    if (!isEfectivo && codbco) {
+                    // Insertar cada forma de pago seleccionada
+                    for (let i = 0; i < listaPagos.length; i++) {
+                        const p = listaPagos[i];
+                        const isEfectivo = p.formaPagoId === 1;
+                        let numBco = '';
+
+                        if (!isEfectivo && codbco) {
+                            try {
+                                const maxRcpa = await db('RECIBOS_CAJA_PAGO')
+                                    .where({ RCPA_BANCO: codbco, RCPA_CUENTA: '9999' })
+                                    .max('RCPA_NUMERO as MAXN')
+                                    .first();
+                                const maxDpca = await db('DOCUMENTOS_PAGO_CAJA')
+                                    .where({ FOPA_ID: p.formaPagoId })
+                                    .max('DPCA_NUMERO as MAXD')
+                                    .first();
+                                const maxVal = Math.max(
+                                    parseInt(String(maxRcpa?.MAXN || '0'), 10) || 0,
+                                    parseInt(String(maxDpca?.MAXD || '0'), 10) || 0
+                                );
+                                numBco = String(maxVal + 1 + i).padStart(6, '0');
+                            } catch (e) {
+                                numBco = '000001';
+                            }
+                        }
+
                         try {
-                            const maxRcpa = await db('RECIBOS_CAJA_PAGO')
-                                .where({ RCPA_BANCO: codbco, RCPA_CUENTA: '9999' })
-                                .max('RCPA_NUMERO as MAXN')
-                                .first();
-                            const maxDpca = await db('DOCUMENTOS_PAGO_CAJA')
-                                .where({ FOPA_ID: p.formaPagoId })
-                                .max('DPCA_NUMERO as MAXD')
-                                .first();
-                            const maxVal = Math.max(
-                                parseInt(String(maxRcpa?.MAXN || '0'), 10) || 0,
-                                parseInt(String(maxDpca?.MAXD || '0'), 10) || 0
-                            );
-                            numBco = String(maxVal + 1 + i).padStart(6, '0');
-                        } catch (e) {
-                            numBco = '000001';
+                            await db('FACTURAS_CONTADO_PAGO').insert({
+                                FCNT_ID: idGenerado,
+                                FCNP_ITEM: i + 1,
+                                FOPA_ID: p.formaPagoId,
+                                FCNP_BANCO: isEfectivo ? '' : codbco,
+                                FCNP_CUENTA: isEfectivo ? '' : '9999',
+                                FCNP_NUMERO: isEfectivo ? '' : numBco,
+                                FCNP_FECHA: new Date(),
+                                FCNP_MONTO: p.monto,
+                                FCNP_ANULADO: 'N',
+                                FCNP_CERRADO: 'N'
+                            });
+                        } catch (pagoInsertErr: any) {
+                            console.warn(`Aviso insertando forma de pago ${i + 1} en FACTURAS_CONTADO_PAGO:`, pagoInsertErr.message);
                         }
                     }
-
-                    await db('FACTURAS_CONTADO_PAGO').insert({
-                        FCNT_ID: idGenerado,
-                        FCNP_ITEM: i + 1,
-                        FOPA_ID: p.formaPagoId,
-                        FCNP_BANCO: isEfectivo ? '' : codbco,
-                        FCNP_CUENTA: isEfectivo ? '' : '9999',
-                        FCNP_NUMERO: isEfectivo ? '' : numBco,
-                        FCNP_FECHA: new Date(),
-                        FCNP_MONTO: p.monto,
-                        FCNP_ANULADO: 'N',
-                        FCNP_CERRADO: 'N'
-                    });
                 }
             } catch (syncErr: any) {
                 console.error('Error sincronizando pagos y factura generada:', syncErr.message);
@@ -1101,44 +1118,60 @@ export class PedidoService {
                     if (cajaRow?.CAJA_FPBCO) codbco = String(cajaRow.CAJA_FPBCO).trim();
                 } catch (cajaErr) { }
 
-                await db('FACTURAS_CONTADO_PAGO').where('FCNT_ID', idGenerado).del();
+                // Verificar que exista en FACTURAS antes de insertar pagos (FK)
+                let factExiste2 = false;
+                for (let attempt = 0; attempt < 5; attempt++) {
+                    const chk = await db('FACTURAS').where('FACT_ID', idGenerado).first().catch(() => null);
+                    if (chk) { factExiste2 = true; break; }
+                    await new Promise(r => setTimeout(r, 600));
+                }
 
-                for (let i = 0; i < listaPagos.length; i++) {
-                    const p = listaPagos[i];
-                    const isEfectivo = p.formaPagoId === 1;
-                    let numBco = '';
-                    if (!isEfectivo && codbco) {
+                if (factExiste2) {
+                    await db('FACTURAS_CONTADO_PAGO').where('FCNT_ID', idGenerado).del().catch(() => {});
+
+                    for (let i = 0; i < listaPagos.length; i++) {
+                        const p = listaPagos[i];
+                        const isEfectivo = p.formaPagoId === 1;
+                        let numBco = '';
+                        if (!isEfectivo && codbco) {
+                            try {
+                                const maxRcpa = await db('RECIBOS_CAJA_PAGO')
+                                    .where({ RCPA_BANCO: codbco, RCPA_CUENTA: '9999' })
+                                    .max('RCPA_NUMERO as MAXN')
+                                    .first();
+                                const maxDpca = await db('DOCUMENTOS_PAGO_CAJA')
+                                    .where({ FOPA_ID: p.formaPagoId })
+                                    .max('DPCA_NUMERO as MAXD')
+                                    .first();
+                                const maxVal = Math.max(
+                                    parseInt(String(maxRcpa?.MAXN || '0'), 10) || 0,
+                                    parseInt(String(maxDpca?.MAXD || '0'), 10) || 0
+                                );
+                                numBco = String(maxVal + 1 + i).padStart(6, '0');
+                            } catch (e) {
+                                numBco = '000001';
+                            }
+                        }
+
                         try {
-                            const maxRcpa = await db('RECIBOS_CAJA_PAGO')
-                                .where({ RCPA_BANCO: codbco, RCPA_CUENTA: '9999' })
-                                .max('RCPA_NUMERO as MAXN')
-                                .first();
-                            const maxDpca = await db('DOCUMENTOS_PAGO_CAJA')
-                                .where({ FOPA_ID: p.formaPagoId })
-                                .max('DPCA_NUMERO as MAXD')
-                                .first();
-                            const maxVal = Math.max(
-                                parseInt(String(maxRcpa?.MAXN || '0'), 10) || 0,
-                                parseInt(String(maxDpca?.MAXD || '0'), 10) || 0
-                            );
-                            numBco = String(maxVal + 1 + i).padStart(6, '0');
-                        } catch (e) {
-                            numBco = '000001';
+                            await db('FACTURAS_CONTADO_PAGO').insert({
+                                FCNT_ID: idGenerado,
+                                FCNP_ITEM: i + 1,
+                                FOPA_ID: p.formaPagoId,
+                                FCNP_BANCO: isEfectivo ? '' : codbco,
+                                FCNP_CUENTA: isEfectivo ? '' : '9999',
+                                FCNP_NUMERO: isEfectivo ? '' : numBco,
+                                FCNP_FECHA: new Date(),
+                                FCNP_MONTO: p.monto,
+                                FCNP_ANULADO: 'N',
+                                FCNP_CERRADO: 'N'
+                            });
+                        } catch (pagoErr: any) {
+                            console.warn(`Aviso insertando pago ${i + 1}:`, pagoErr.message);
                         }
                     }
-
-                    await db('FACTURAS_CONTADO_PAGO').insert({
-                        FCNT_ID: idGenerado,
-                        FCNP_ITEM: i + 1,
-                        FOPA_ID: p.formaPagoId,
-                        FCNP_BANCO: isEfectivo ? '' : codbco,
-                        FCNP_CUENTA: isEfectivo ? '' : '9999',
-                        FCNP_NUMERO: isEfectivo ? '' : numBco,
-                        FCNP_FECHA: new Date(),
-                        FCNP_MONTO: p.monto,
-                        FCNP_ANULADO: 'N',
-                        FCNP_CERRADO: 'N'
-                    });
+                } else {
+                    console.warn(`Aviso: FACT_ID ${idGenerado} no encontrado en FACTURAS (multiples). Omitiendo FACTURAS_CONTADO_PAGO.`);
                 }
             } catch (syncErr: any) {
                 console.error('Error sincronizando facturarDirecto:', syncErr.message);
@@ -1872,44 +1905,60 @@ export class PedidoService {
                     if (cajaRow?.CAJA_FPBCO) codbco = String(cajaRow.CAJA_FPBCO).trim();
                 } catch (e) {}
 
-                await db('FACTURAS_CONTADO_PAGO').where('FCNT_ID', idGenerado).del();
+                // Verificar que exista en FACTURAS antes de insertar pagos (FK)
+                let factExiste3 = false;
+                for (let attempt = 0; attempt < 5; attempt++) {
+                    const chk = await db('FACTURAS').where('FACT_ID', idGenerado).first().catch(() => null);
+                    if (chk) { factExiste3 = true; break; }
+                    await new Promise(r => setTimeout(r, 600));
+                }
 
-                for (let i = 0; i < listaPagos.length; i++) {
-                    const p = listaPagos[i];
-                    const isEfectivo = p.formaPagoId === 1;
-                    let numBco = '';
-                    if (!isEfectivo && codbco) {
+                if (factExiste3) {
+                    await db('FACTURAS_CONTADO_PAGO').where('FCNT_ID', idGenerado).del().catch(() => {});
+
+                    for (let i = 0; i < listaPagos.length; i++) {
+                        const p = listaPagos[i];
+                        const isEfectivo = p.formaPagoId === 1;
+                        let numBco = '';
+                        if (!isEfectivo && codbco) {
+                            try {
+                                const maxRcpa = await db('RECIBOS_CAJA_PAGO')
+                                    .where({ RCPA_BANCO: codbco, RCPA_CUENTA: '9999' })
+                                    .max('RCPA_NUMERO as MAXN')
+                                    .first();
+                                const maxDpca = await db('DOCUMENTOS_PAGO_CAJA')
+                                    .where({ FOPA_ID: p.formaPagoId })
+                                    .max('DPCA_NUMERO as MAXD')
+                                    .first();
+                                const maxVal = Math.max(
+                                    parseInt(String(maxRcpa?.MAXN || '0'), 10) || 0,
+                                    parseInt(String(maxDpca?.MAXD || '0'), 10) || 0
+                                );
+                                numBco = String(maxVal + 1 + i).padStart(6, '0');
+                            } catch (e) {
+                                numBco = '000001';
+                            }
+                        }
+
                         try {
-                            const maxRcpa = await db('RECIBOS_CAJA_PAGO')
-                                .where({ RCPA_BANCO: codbco, RCPA_CUENTA: '9999' })
-                                .max('RCPA_NUMERO as MAXN')
-                                .first();
-                            const maxDpca = await db('DOCUMENTOS_PAGO_CAJA')
-                                .where({ FOPA_ID: p.formaPagoId })
-                                .max('DPCA_NUMERO as MAXD')
-                                .first();
-                            const maxVal = Math.max(
-                                parseInt(String(maxRcpa?.MAXN || '0'), 10) || 0,
-                                parseInt(String(maxDpca?.MAXD || '0'), 10) || 0
-                            );
-                            numBco = String(maxVal + 1 + i).padStart(6, '0');
-                        } catch (e) {
-                            numBco = '000001';
+                            await db('FACTURAS_CONTADO_PAGO').insert({
+                                FCNT_ID: idGenerado,
+                                FCNP_ITEM: i + 1,
+                                FOPA_ID: p.formaPagoId,
+                                FCNP_BANCO: isEfectivo ? '' : codbco,
+                                FCNP_CUENTA: isEfectivo ? '' : '9999',
+                                FCNP_NUMERO: isEfectivo ? '' : numBco,
+                                FCNP_FECHA: new Date(),
+                                FCNP_MONTO: p.monto,
+                                FCNP_ANULADO: 'N',
+                                FCNP_CERRADO: 'N'
+                            });
+                        } catch (pagoErr: any) {
+                            console.warn(`Aviso insertando pago directo ${i + 1}:`, pagoErr.message);
                         }
                     }
-
-                    await db('FACTURAS_CONTADO_PAGO').insert({
-                        FCNT_ID: idGenerado,
-                        FCNP_ITEM: i + 1,
-                        FOPA_ID: p.formaPagoId,
-                        FCNP_BANCO: isEfectivo ? '' : codbco,
-                        FCNP_CUENTA: isEfectivo ? '' : '9999',
-                        FCNP_NUMERO: isEfectivo ? '' : numBco,
-                        FCNP_FECHA: new Date(),
-                        FCNP_MONTO: p.monto,
-                        FCNP_ANULADO: 'N',
-                        FCNP_CERRADO: 'N'
-                    });
+                } else {
+                    console.warn(`Aviso: FACT_ID ${idGenerado} no encontrado en FACTURAS (directo). Omitiendo FACTURAS_CONTADO_PAGO.`);
                 }
             } catch (e: any) {}
         }
