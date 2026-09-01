@@ -696,18 +696,22 @@ export class PedidoService {
         // Registrar múltiples formas de pago en FACTURAS_CONTADO_PAGO y sincronizar FACTURAS
         if (idGenerado) {
             try {
-                const subtotalFactura = Math.round((totalDoc - totalIva) * 100) / 100;
-                await db('FACTURAS')
-                    .where('FACT_ID', idGenerado)
-                    .update({
-                        FACT_FECHA: nowFecha,
-                        FACT_VENCE: nowFecha,
-                        FACT_TOTAL: totalDoc,
-                        FACT_IVAMONTO: totalIva,
-                        FACT_SUBTOTAL: subtotalFactura,
-                        FACT_FORMAP: primaryFopaId,
-                        FACT_OBS: Buffer.from(obsString, 'utf-8')
-                    });
+                try {
+                    const subtotalFactura = Math.round((totalDoc - totalIva) * 100) / 100;
+                    await db('FACTURAS')
+                        .where('FACT_ID', idGenerado)
+                        .update({
+                            FACT_FECHA: nowFecha,
+                            FACT_VENCE: nowFecha,
+                            FACT_TOTAL: totalDoc,
+                            FACT_IVAMONTO: totalIva,
+                            FACT_SUBTOTAL: subtotalFactura,
+                            FACT_FORMAP: primaryFopaId,
+                            FACT_OBS: Buffer.from(obsString, 'utf-8')
+                        });
+                } catch (factHeaderErr: any) {
+                    console.warn('Aviso actualizando encabezado de FACTURAS (ya grabado por SP):', factHeaderErr.message);
+                }
 
                 // Sincronizar FADE_DTOPORC, FADE_DTOMONTO, FADE_TOTAL, FADE_IVAMONTO, FADE_IVAPORC, FADE_TIVA y FADE_BASE en FACTURAS_DETALLE
                 try {
@@ -1098,19 +1102,23 @@ export class PedidoService {
         // 4. Sincronizar FACTURAS, FACTURAS_DETALLE y FACTURAS_CONTADO_PAGO
         if (idGenerado) {
             try {
-                const nowFecha = new Date();
-                const subtotalFactura = Math.round((totalDoc - totalIva) * 100) / 100;
-                await db('FACTURAS')
-                    .where('FACT_ID', idGenerado)
-                    .update({
-                        FACT_FECHA: nowFecha,
-                        FACT_VENCE: nowFecha,
-                        FACT_TOTAL: totalDoc,
-                        FACT_IVAMONTO: totalIva,
-                        FACT_SUBTOTAL: subtotalFactura,
-                        FACT_FORMAP: primaryFopaId,
-                        FACT_OBS: Buffer.from(obsString, 'utf-8')
-                    });
+                try {
+                    const nowFecha = new Date();
+                    const subtotalFactura = Math.round((totalDoc - totalIva) * 100) / 100;
+                    await db('FACTURAS')
+                        .where('FACT_ID', idGenerado)
+                        .update({
+                            FACT_FECHA: nowFecha,
+                            FACT_VENCE: nowFecha,
+                            FACT_TOTAL: totalDoc,
+                            FACT_IVAMONTO: totalIva,
+                            FACT_SUBTOTAL: subtotalFactura,
+                            FACT_FORMAP: primaryFopaId,
+                            FACT_OBS: Buffer.from(obsString, 'utf-8')
+                        });
+                } catch (factHeaderErr: any) {
+                    console.warn('Aviso actualizando encabezado de FACTURAS (directo):', factHeaderErr.message);
+                }
 
                 for (const sd of preparedDetails) {
                     const baseItem = Math.round((sd.DIWD_TOTAL - sd.DIWD_IVAMONTO) * 100) / 100;
@@ -1885,19 +1893,23 @@ export class PedidoService {
         // Registrar formas de pago y sincronizar FACTURAS
         if (idGenerado) {
             try {
-                const nowFecha = new Date();
-                const subtotalFactura = Math.round((totalDoc - totalIva) * 100) / 100;
-                await db('FACTURAS')
-                    .where('FACT_ID', idGenerado)
-                    .update({
-                        FACT_FECHA: nowFecha,
-                        FACT_VENCE: nowFecha,
-                        FACT_TOTAL: totalDoc,
-                        FACT_IVAMONTO: totalIva,
-                        FACT_SUBTOTAL: subtotalFactura,
-                        FACT_FORMAP: primaryFopaId,
-                        FACT_OBS: Buffer.from(obsGeneral, 'utf-8')
-                    });
+                try {
+                    const nowFecha = new Date();
+                    const subtotalFactura = Math.round((totalDoc - totalIva) * 100) / 100;
+                    await db('FACTURAS')
+                        .where('FACT_ID', idGenerado)
+                        .update({
+                            FACT_FECHA: nowFecha,
+                            FACT_VENCE: nowFecha,
+                            FACT_TOTAL: totalDoc,
+                            FACT_IVAMONTO: totalIva,
+                            FACT_SUBTOTAL: subtotalFactura,
+                            FACT_FORMAP: primaryFopaId,
+                            FACT_OBS: Buffer.from(obsGeneral, 'utf-8')
+                        });
+                } catch (factHeaderErr: any) {
+                    console.warn('Aviso actualizando encabezado de FACTURAS (multiples):', factHeaderErr.message);
+                }
 
                 // Sincronizar FADE_DTOPORC, FADE_DTOMONTO, FADE_TOTAL en FACTURAS_DETALLE
                 try {
