@@ -2,9 +2,8 @@ module.exports = {
   apps: [
     {
       name: 'hotel-app',
-      script: 'npm',
-      args: 'run server',
-      shell: true,
+      script: 'cmd.exe',
+      args: '/c npm run server',
       cwd: 'C:\\SYSplus\\Hotel',
       watch: false,
       env: {
@@ -12,7 +11,9 @@ module.exports = {
         PORT: '3000'
       },
       restart_delay: 3000,
-      max_restarts: 10
+      max_restarts: 10,
+      autorestart: true
     }
   ]
 };
+
