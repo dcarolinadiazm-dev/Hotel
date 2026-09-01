@@ -746,8 +746,14 @@ export class PedidoService {
                     // Fallback caja 1
                 }
 
+                // Verificar que FACTURAS_CONTADO_PAGO tiene columna CAJA_ID (solo en algunas DBs de producción)
+                let fcntTieneCajaId = false;
+                try {
+                    const fcntCols = await db.raw(`SELECT r.RDB$FIELD_NAME AS N FROM RDB$RELATION_FIELDS r WHERE r.RDB$RELATION_NAME = 'FACTURAS_CONTADO_PAGO' AND TRIM(r.RDB$FIELD_NAME) = 'CAJA_ID'`);
+                    fcntTieneCajaId = (fcntCols.rows || fcntCols || []).length > 0;
+                } catch (e) {}
+
                 // Verificar que la factura ya esté grabada en FACTURAS antes de insertar pagos (FK)
-                // En producción el SP puede necesitar un momento para confirmar la transacción
                 let facturaExiste = false;
                 for (let attempt = 0; attempt < 5; attempt++) {
                     const checkFact = await db('FACTURAS').where('FACT_ID', idGenerado).first().catch(() => null);
@@ -788,7 +794,7 @@ export class PedidoService {
                         }
 
                         try {
-                            await db('FACTURAS_CONTADO_PAGO').insert({
+                            const insertPago: any = {
                                 FCNT_ID: idGenerado,
                                 FCNP_ITEM: i + 1,
                                 FOPA_ID: p.formaPagoId,
@@ -799,7 +805,9 @@ export class PedidoService {
                                 FCNP_MONTO: p.monto,
                                 FCNP_ANULADO: 'N',
                                 FCNP_CERRADO: 'N'
-                            });
+                            };
+                            if (fcntTieneCajaId) insertPago.CAJA_ID = cajaId;
+                            await db('FACTURAS_CONTADO_PAGO').insert(insertPago);
                         } catch (pagoInsertErr: any) {
                             console.warn(`Aviso insertando forma de pago ${i + 1} en FACTURAS_CONTADO_PAGO:`, pagoInsertErr.message);
                         }
@@ -1110,13 +1118,21 @@ export class PedidoService {
                 }
 
                 // Sincronizar formas de pago
-                let codbco = '';
+                let codbco2 = '';
+                let cajaId2 = 1;
                 try {
                     const ptvt = await db('PUNTO_VENTA').first();
-                    const cajaId = ptvt?.CAJA_ID ? parseInt(String(ptvt.CAJA_ID), 10) : 1;
-                    const cajaRow = await db('CAJAS').where('CAJA_ID', cajaId).first();
-                    if (cajaRow?.CAJA_FPBCO) codbco = String(cajaRow.CAJA_FPBCO).trim();
+                    cajaId2 = ptvt?.CAJA_ID ? parseInt(String(ptvt.CAJA_ID), 10) : 1;
+                    const cajaRow = await db('CAJAS').where('CAJA_ID', cajaId2).first();
+                    if (cajaRow?.CAJA_FPBCO) codbco2 = String(cajaRow.CAJA_FPBCO).trim();
                 } catch (cajaErr) { }
+
+                // Detectar si la BD tiene CAJA_ID en FACTURAS_CONTADO_PAGO
+                let fcntTieneCajaId2 = false;
+                try {
+                    const fcntCols2 = await db.raw(`SELECT r.RDB$FIELD_NAME AS N FROM RDB$RELATION_FIELDS r WHERE r.RDB$RELATION_NAME = 'FACTURAS_CONTADO_PAGO' AND TRIM(r.RDB$FIELD_NAME) = 'CAJA_ID'`);
+                    fcntTieneCajaId2 = (fcntCols2.rows || fcntCols2 || []).length > 0;
+                } catch (e) {}
 
                 // Verificar que exista en FACTURAS antes de insertar pagos (FK)
                 let factExiste2 = false;
@@ -1133,10 +1149,10 @@ export class PedidoService {
                         const p = listaPagos[i];
                         const isEfectivo = p.formaPagoId === 1;
                         let numBco = '';
-                        if (!isEfectivo && codbco) {
+                        if (!isEfectivo && codbco2) {
                             try {
                                 const maxRcpa = await db('RECIBOS_CAJA_PAGO')
-                                    .where({ RCPA_BANCO: codbco, RCPA_CUENTA: '9999' })
+                                    .where({ RCPA_BANCO: codbco2, RCPA_CUENTA: '9999' })
                                     .max('RCPA_NUMERO as MAXN')
                                     .first();
                                 const maxDpca = await db('DOCUMENTOS_PAGO_CAJA')
@@ -1154,18 +1170,20 @@ export class PedidoService {
                         }
 
                         try {
-                            await db('FACTURAS_CONTADO_PAGO').insert({
+                            const ins2: any = {
                                 FCNT_ID: idGenerado,
                                 FCNP_ITEM: i + 1,
                                 FOPA_ID: p.formaPagoId,
-                                FCNP_BANCO: isEfectivo ? '' : codbco,
+                                FCNP_BANCO: isEfectivo ? '' : codbco2,
                                 FCNP_CUENTA: isEfectivo ? '' : '9999',
                                 FCNP_NUMERO: isEfectivo ? '' : numBco,
                                 FCNP_FECHA: new Date(),
                                 FCNP_MONTO: p.monto,
                                 FCNP_ANULADO: 'N',
                                 FCNP_CERRADO: 'N'
-                            });
+                            };
+                            if (fcntTieneCajaId2) ins2.CAJA_ID = cajaId2;
+                            await db('FACTURAS_CONTADO_PAGO').insert(ins2);
                         } catch (pagoErr: any) {
                             console.warn(`Aviso insertando pago ${i + 1}:`, pagoErr.message);
                         }
@@ -1896,13 +1914,20 @@ export class PedidoService {
                 } catch (dtoErr: any) {}
 
                 // Formas de pago múltiples
-                let cajaId = 1;
-                let codbco = '';
+                let cajaId3 = 1;
+                let codbco3 = '';
                 try {
                     const ptvt = await db('PUNTO_VENTA').first();
-                    if (ptvt?.CAJA_ID) cajaId = parseInt(String(ptvt.CAJA_ID), 10);
-                    const cajaRow = await db('CAJAS').where('CAJA_ID', cajaId).first();
-                    if (cajaRow?.CAJA_FPBCO) codbco = String(cajaRow.CAJA_FPBCO).trim();
+                    if (ptvt?.CAJA_ID) cajaId3 = parseInt(String(ptvt.CAJA_ID), 10);
+                    const cajaRow = await db('CAJAS').where('CAJA_ID', cajaId3).first();
+                    if (cajaRow?.CAJA_FPBCO) codbco3 = String(cajaRow.CAJA_FPBCO).trim();
+                } catch (e) {}
+
+                // Detectar si la BD tiene CAJA_ID en FACTURAS_CONTADO_PAGO
+                let fcntTieneCajaId3 = false;
+                try {
+                    const fcntCols3 = await db.raw(`SELECT r.RDB$FIELD_NAME AS N FROM RDB$RELATION_FIELDS r WHERE r.RDB$RELATION_NAME = 'FACTURAS_CONTADO_PAGO' AND TRIM(r.RDB$FIELD_NAME) = 'CAJA_ID'`);
+                    fcntTieneCajaId3 = (fcntCols3.rows || fcntCols3 || []).length > 0;
                 } catch (e) {}
 
                 // Verificar que exista en FACTURAS antes de insertar pagos (FK)
@@ -1920,10 +1945,10 @@ export class PedidoService {
                         const p = listaPagos[i];
                         const isEfectivo = p.formaPagoId === 1;
                         let numBco = '';
-                        if (!isEfectivo && codbco) {
+                        if (!isEfectivo && codbco3) {
                             try {
                                 const maxRcpa = await db('RECIBOS_CAJA_PAGO')
-                                    .where({ RCPA_BANCO: codbco, RCPA_CUENTA: '9999' })
+                                    .where({ RCPA_BANCO: codbco3, RCPA_CUENTA: '9999' })
                                     .max('RCPA_NUMERO as MAXN')
                                     .first();
                                 const maxDpca = await db('DOCUMENTOS_PAGO_CAJA')
@@ -1941,18 +1966,20 @@ export class PedidoService {
                         }
 
                         try {
-                            await db('FACTURAS_CONTADO_PAGO').insert({
+                            const ins3: any = {
                                 FCNT_ID: idGenerado,
                                 FCNP_ITEM: i + 1,
                                 FOPA_ID: p.formaPagoId,
-                                FCNP_BANCO: isEfectivo ? '' : codbco,
+                                FCNP_BANCO: isEfectivo ? '' : codbco3,
                                 FCNP_CUENTA: isEfectivo ? '' : '9999',
                                 FCNP_NUMERO: isEfectivo ? '' : numBco,
                                 FCNP_FECHA: new Date(),
                                 FCNP_MONTO: p.monto,
                                 FCNP_ANULADO: 'N',
                                 FCNP_CERRADO: 'N'
-                            });
+                            };
+                            if (fcntTieneCajaId3) ins3.CAJA_ID = cajaId3;
+                            await db('FACTURAS_CONTADO_PAGO').insert(ins3);
                         } catch (pagoErr: any) {
                             console.warn(`Aviso insertando pago directo ${i + 1}:`, pagoErr.message);
                         }
