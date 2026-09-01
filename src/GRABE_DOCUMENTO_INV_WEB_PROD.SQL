@@ -34,7 +34,7 @@ declare variable RTFTE NUMERIC(18,2);
 declare variable RTEFTE NUMERIC(18,2);
 declare variable RTEICA NUMERIC(18,2);
 declare variable RTEIVA NUMERIC(18,2);
-declare variable AUTORIZACION VARCHAR(10);
+declare variable AUTORIZACION VARCHAR(30);
 declare variable ITEM INTEGER;
 declare variable ARTICULO VARCHAR(20);
 declare variable CANT NUMERIC(18,4);
@@ -295,8 +295,14 @@ if (TIPO = 31) then
     select max(inve_id) from interfaz_ventas where tido_cod = 31 and pref_pre = :pref into :idinter;
     execute procedure contabil_factura(:IDDOC, :IDINTER, 0) returning_values (:NERROR, :VER, :IDC);
     if (NERROR = 0 and IDC is not null and IDC > 0) then
+    begin
         execute procedure CONTABILIZA_PENDIENTE(:IDC);
+    end
     suspend;
+    when any do
+    begin
+        suspend;
+    end
     END
 
 end

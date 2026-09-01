@@ -1,8 +1,6 @@
 import { db } from '../src/config/knex.config';
-import fs from 'fs';
-import path from 'path';
 
-const TRIGGER_AI_SQL = `
+const TRIGGER_SQL = `
 CREATE OR ALTER TRIGGER FACTURAS_CONTADO_PAGO_AI FOR FACTURAS_CONTADO_PAGO
 ACTIVE AFTER INSERT POSITION 0
 AS
@@ -88,71 +86,16 @@ if (CARTERA = 'N') then
 end
 `;
 
-async function setupSPAndTable() {
+async function updateTrigger() {
   try {
-    console.log('1. Creating table DOC_INVENTARIO_PAGO_WEB if not exists...');
-    const tableCheck = await db.raw(`
-      SELECT RDB$RELATION_NAME
-      FROM RDB$RELATIONS
-      WHERE RDB$RELATION_NAME = 'DOC_INVENTARIO_PAGO_WEB'
-    `);
-    
-    if ((tableCheck.rows || tableCheck).length === 0) {
-      await db.raw(`
-        CREATE TABLE DOC_INVENTARIO_PAGO_WEB (
-            DINW_ID INTEGER NOT NULL,
-            DIWP_ITEM INTEGER NOT NULL,
-            FOPA_ID INTEGER NOT NULL,
-            DIWP_MONTO NUMERIC(18,2) DEFAULT 0 NOT NULL,
-            DIWP_BANCO VARCHAR(20),
-            DIWP_CUENTA VARCHAR(20),
-            DIWP_NUMERO VARCHAR(20),
-            CONSTRAINT PK_DOC_INVENTARIO_PAGO_WEB PRIMARY KEY (DINW_ID, DIWP_ITEM)
-        );
-      `);
-      console.log('Table DOC_INVENTARIO_PAGO_WEB CREATED!');
-    } else {
-      console.log('Table DOC_INVENTARIO_PAGO_WEB already exists.');
-    }
-
-    console.log('2. Reading GRABE_DOCUMENTO_INV_WEB_PROD.SQL...');
-    const rawSql = fs.readFileSync(path.join(__dirname, '../src/GRABE_DOCUMENTO_INV_WEB_PROD.SQL'), 'utf-8');
-    const finalSpSql = rawSql.replace(/^CREATE\s+PROCEDURE/im, 'CREATE OR ALTER PROCEDURE');
-
-    console.log('3. Executing CREATE OR ALTER PROCEDURE GRABE_DOCUMENTO_INV_WEB...');
-    await db.raw(finalSpSql);
-    console.log('PROCEDURE GRABE_DOCUMENTO_INV_WEB UPDATED SUCCESSFULLY!');
-
-    console.log('4. Updating trigger FACTURAS_CONTADO_PAGO_AI for multi-payment support...');
-    await db.raw(TRIGGER_AI_SQL);
+    console.log('Updating trigger FACTURAS_CONTADO_PAGO_AI...');
+    await db.raw(TRIGGER_SQL);
     console.log('TRIGGER FACTURAS_CONTADO_PAGO_AI UPDATED SUCCESSFULLY!');
-
-    console.log('5. Ensuring CONFIGURACION account 42958101...');
-    await db('CONFIGURACION')
-      .where({
-        CONF_MODULO: 'CONTABILIDAD',
-        CONF_CATEGORIA: 'GENERAL',
-        CONF_PROPIEDAD: 'CUENTA DE AJUSTE AL PESO POR REDONDEO EN VENTAS'
-      })
-      .update({ CONF_VALOR: '42958101' })
-      .catch(() => {});
-
-    await db('CONFIGURACION')
-      .where({
-        CONF_MODULO: 'CONTABILIDAD',
-        CONF_CATEGORIA: 'GENERAL',
-        CONF_PROPIEDAD: 'CUENTA DE AJUSTE AL PESO NIIF POR REDONDEO EN VENTAS'
-      })
-      .update({ CONF_VALOR: '42958101' })
-      .catch(() => {});
-    console.log('CONFIGURACION VERIFIED!');
-
-    console.log('\n=== ALL DATABASE UPDATES COMPLETED SUCCESSFULLY! ===');
   } catch (e: any) {
-    console.error('SETUP ERROR:', e.message);
+    console.error('ERROR UPDATING TRIGGER:', e.message);
   } finally {
     process.exit(0);
   }
 }
 
-setupSPAndTable();
+updateTrigger();
