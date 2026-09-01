@@ -673,7 +673,7 @@ export class HabitacionService {
                     DIWD_OBS: '',
                     DIWD_DTOPORC: dtoPorc,
                     DIWD_DTOMONTO: dtoMonto,
-                    DIWD_BODEGA: '01',
+                    DIWD_BODEGA: '1',
                     DIWD_TIVA: taivCod,
                     DIWD_CONSUMO: 0,
                     DIWD_IVAPORC: ivaPorc,

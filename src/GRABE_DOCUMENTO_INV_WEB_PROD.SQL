@@ -143,13 +143,14 @@ if (TIPO = 31) then
         SELECT FIRST 1 PTVT_ID, BODE_COD FROM punto_venta WHERE PTVT_ACTIVO = 'S' INTO :PTOVTA, :BODEGA;
     IF ((PTOVTA IS NULL) OR (PTOVTA = 0)) THEN
         SELECT FIRST 1 PTVT_ID, BODE_COD FROM punto_venta INTO :PTOVTA, :BODEGA;
-    IF ((BODEGA IS NULL) OR (BODEGA = '')) THEN
+    IF ((BODEGA IS NULL) OR (BODEGA = '') OR NOT EXISTS (SELECT BODE_COD FROM BODEGA WHERE BODE_COD = :BODEGA)) THEN
         SELECT BODE_COD FROM punto_venta WHERE PTVT_ID = :PTOVTA INTO :BODEGA;
-    IF ((BODEGA IS NULL) OR (BODEGA = '')) THEN
+    IF ((BODEGA IS NULL) OR (BODEGA = '') OR NOT EXISTS (SELECT BODE_COD FROM BODEGA WHERE BODE_COD = :BODEGA)) THEN
         SELECT FIRST 1 BODE_COD FROM BODEGA WHERE BODE_FACTURA = 'S' OR BODE_ACTIVA = 'S' INTO :BODEGA;
-    IF ((BODEGA IS NULL) OR (BODEGA = '')) THEN
+    IF ((BODEGA IS NULL) OR (BODEGA = '') OR NOT EXISTS (SELECT BODE_COD FROM BODEGA WHERE BODE_COD = :BODEGA)) THEN
         SELECT FIRST 1 BODE_COD FROM BODEGA INTO :BODEGA;
     if (BODEGA IS NULL OR BODEGA = '') then BODEGA = '1';
+
     SELECT FIRST 1 LIPR_COD FROM lista_precios L, USUARIO U WHERE L.lipr_predet = 'S' AND U.user_cod = USER AND ((L.sucu_id = U.sucu_id) or (U.sucu_id = 0) or (L.sucu_id = 0)) INTO :LISTA;
     select pref_actual from prefijos where tido_cod = 31 and pref_pre = :pref into :numero;
     if (numero is null or numero = '') then numero = '00000001';
@@ -195,7 +196,13 @@ if (TIPO = 31) then
                :factor, :descripcion, :obsite, :codbar, :refite, :bodega, :lista, :tiva, :impba, :impup,
                :impupp, :inalcp, :inalcm, :impupm, :dto1, :dto2, :dto3, :dto1m, :dto2m, :dto3m DO
         BEGIN
-        if (BODEGA IS NULL OR BODEGA = '') then BODEGA = '1';
+        if (BODEGA IS NULL OR BODEGA = '' OR NOT EXISTS (SELECT BODE_COD FROM BODEGA WHERE BODE_COD = :BODEGA)) then
+        begin
+            SELECT FIRST 1 BODE_COD FROM BODEGA WHERE BODE_FACTURA = 'S' OR BODE_ACTIVA = 'S' INTO :BODEGA;
+            IF (BODEGA IS NULL OR BODEGA = '') THEN SELECT FIRST 1 BODE_COD FROM BODEGA INTO :BODEGA;
+            IF (BODEGA IS NULL OR BODEGA = '') THEN BODEGA = '1';
+        end
+
         TOTAL = CANT * COSTO;
         if (IMPINC = 'S') then
           BEGIN
