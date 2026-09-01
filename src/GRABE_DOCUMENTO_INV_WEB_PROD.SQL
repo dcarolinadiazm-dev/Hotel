@@ -1,108 +1,85 @@
 CREATE OR ALTER PROCEDURE GRABE_DOCUMENTO_INV_WEB (
-    TIPO integer,
-    ID integer)
-returns (
-    IDDOC integer,
-    NUMDOC varchar(12),
-    NERROR integer)
+    TIPO INTEGER,
+    ID INTEGER)
+RETURNS (
+    NUMDOC VARCHAR(20),
+    NERROR INTEGER,
+    IDDOC INTEGER)
 AS
-declare variable PREF varchar(4);
-declare variable NUMERO varchar(8);
-declare variable BODEGA varchar(2);
-declare variable BODDES varchar(2);
-declare variable FECHA date;
-declare variable CONCEPTO varchar(60);
+declare variable IDINTER INTEGER;
+declare variable PREF VARCHAR(4);
+declare variable NUMERO VARCHAR(8);
+declare variable CLIENTE VARCHAR(20);
+declare variable NIT VARCHAR(20);
+declare variable SUCURSAL VARCHAR(20);
+declare variable FECHA DATE;
+declare variable VENCE DATE;
+declare variable CONCEPTO VARCHAR(60);
+declare variable OBS VARCHAR(250);
+declare variable IMPINC CHAR(1);
+declare variable IVAINC CHAR(1);
+declare variable BASE NUMERIC(18,2);
+declare variable IVATOT NUMERIC(18,2);
+declare variable TOTAL NUMERIC(18,2);
+declare variable FORMAP INTEGER;
+declare variable VEND INTEGER;
+declare variable PTOVTA INTEGER;
+declare variable BODEGA VARCHAR(10);
+declare variable LISTA INTEGER;
+declare variable NOMTERC VARCHAR(60);
+declare variable RTFTEPORC NUMERIC(18,2);
+declare variable RTICAPORC NUMERIC(18,2);
+declare variable RTIVAPORC NUMERIC(18,2);
+declare variable RTFTE NUMERIC(18,2);
+declare variable RTEICA NUMERIC(18,2);
+declare variable RTEIVA NUMERIC(18,2);
+declare variable AUTORIZACION VARCHAR(10);
+declare variable ITEM INTEGER;
+declare variable ARTICULO VARCHAR(20);
+declare variable CANT NUMERIC(18,4);
+declare variable UNIDAD VARCHAR(10);
+declare variable LOTE VARCHAR(20);
+declare variable COSTO NUMERIC(18,4);
+declare variable DTOPORC NUMERIC(18,2);
+declare variable IVAPORC NUMERIC(18,2);
+declare variable CONSUMO NUMERIC(18,4);
+declare variable FACTOR NUMERIC(18,4);
+declare variable DESCRIPCION VARCHAR(60);
+declare variable OBSITE VARCHAR(250);
+declare variable CODBAR VARCHAR(20);
+declare variable REFITE VARCHAR(20);
+declare variable IVAMONTO NUMERIC(18,2);
+declare variable CONTADO CHAR(1);
+declare variable CAJA INTEGER;
+declare variable CODBCO VARCHAR(20);
+declare variable CTABCO VARCHAR(20);
+declare variable NUMBCO VARCHAR(20);
+declare variable VER INTEGER;
+declare variable IDC INTEGER;
+declare variable TIVA INTEGER;
+declare variable IMPINCp CHAR(1);
+declare variable IMPBA NUMERIC(18,2);
+declare variable IMPUP NUMERIC(18,2);
+declare variable IMPUPp NUMERIC(18,2);
+declare variable IMPUPPORC NUMERIC(18,2);
+declare variable DTO1 NUMERIC(18,2);
+declare variable DTO2 NUMERIC(18,2);
+declare variable DTO3 NUMERIC(18,2);
+declare variable DTO1M NUMERIC(18,2);
+declare variable DTO2M NUMERIC(18,2);
+declare variable DTO3M NUMERIC(18,2);
+declare variable PREFR VARCHAR(4);
+declare variable PAGO_MONTO NUMERIC(18,2);
 declare variable TIPOREF integer;
-declare variable NUMREF varchar(12);
-declare variable ORDEN varchar(12);
-declare variable NUMORDEN varchar(12);
-declare variable OBS varchar(1024);
+declare variable NUMREF varchar(20);
+declare variable DTOMONTO numeric(18,2);
 declare variable PREFREF varchar(4);
 declare variable IDREF integer;
-declare variable ITEM integer;
-declare variable ARTICULO varchar(20);
-declare variable DESCRIPCION varchar(300);
-declare variable DESCRIPARTI varchar(300);
-declare variable DESVAR varchar(1);
-declare variable CODBAR varchar(60);
-declare variable CANT numeric(18,4);
-declare variable UNIDAD varchar(8);
-declare variable FACTOR numeric(18,4);
-declare variable COSTO numeric(18,2);
-declare variable LOTE varchar(20);
-declare variable REFITE varchar(20);
-declare variable NIT varchar(20);
-declare variable VENCELOTE date;
-declare variable OBSITE varchar(1024);
-declare variable IDC integer;
-declare variable PTOVTA integer;
-declare variable LISTA integer;
-declare variable IVAPORC numeric(18,2);
-declare variable IVAMONTO numeric(18,2);
-declare variable IMPINC numeric(18,2);
-declare variable IMPINCP integer;
-declare variable IMPBA numeric(18,2);
-declare variable IMPUPPORC integer;
-declare variable IMPUP numeric(18,2);
-declare variable CONSUMO numeric(18,2);
-declare variable TOTAL numeric(18,2);
-declare variable DTOPORC numeric(18,2);
-declare variable DTOMONTO numeric(18,2);
 declare variable ADICIONAL numeric(18,2);
 declare variable EXTRA numeric(18,2);
-declare variable RTFTEPORC numeric(18,2);
-declare variable RTFTEMONTO numeric(18,2);
-declare variable RTIVAPORC numeric(18,2);
-declare variable RTICAPORC numeric(18,2);
-declare variable RTEFTE numeric(18,2);
-declare variable RTEICA numeric(18,2);
-declare variable RTEIVA numeric(18,2);
-declare variable DIASP integer;
-declare variable IVAINC varchar(1);
-declare variable CONTADO varchar(1);
-declare variable TRANSMIT varchar(1);
-declare variable MONEDA integer;
-declare variable TERMINOS integer;
-declare variable FORMAP integer;
-declare variable VENCE date;
-declare variable IMPORTA integer;
-declare variable NUMIMP varchar(12);
-declare variable PROY varchar(4);
-declare variable CENT varchar(4);
-declare variable BASE numeric(18,2);
-declare variable IVATOT numeric(18,2);
-declare variable DTOFPORC numeric(18,2);
 declare variable DTOFFEC date;
-declare variable NOMTERC varchar(60);
-declare variable SIMPL varchar(1);
-declare variable STAND varchar(20);
-declare variable PASADA integer;
-declare variable VEND integer;
-declare variable TIVA integer;
-declare variable SUCURSAL varchar(10);
-declare variable CUFE varchar(100);
-declare variable DTO1 numeric(18,2);
-declare variable DTO2 numeric(18,2);
-declare variable DTO3 numeric(18,2);
-declare variable IDINTER integer;
-declare variable VER varchar(1);
-declare variable NROPROV varchar(20);
-declare variable ARTI varchar(20);
-declare variable DESARTICULO varchar(300);
-declare variable DESRETAL varchar(300);
-declare variable PESO numeric(18,4);
-declare variable TURNO integer;
-declare variable OPER integer;
-declare variable MAQUINA integer;
-declare variable CODRETAL varchar(20);
-declare variable AUTORIZACION varchar(20);
-declare variable CANTRETAL numeric(18,4);
+declare variable IMPINCM char(1);
 declare variable BODRETAL integer;
-declare variable CAJA integer;
-declare variable CODBCO varchar(2);
-declare variable CTABCO varchar(20);
-declare variable NUMBCO varchar(20);
-declare variable PAGO_MONTO numeric(18,2);
 begin
 if (TIPO = 31) then
     BEGIN
@@ -182,50 +159,43 @@ if (TIPO = 31) then
                           FACT_REFERENCIA, FACT_PROY, FACT_CENTRO, FACT_SUBC, FACT_TIPOENTREGA, ACFJ_COD, FACT_NEGOCIO,
                           FACT_PMA, FACT_IMPFIS, FACT_SUBTOTAL, FACT_AUTOCAR, FACT_AUTOCUPO, FACT_PTOSCLIFAC, FACT_CUFE,
                           FACT_XML, FACT_REPGRA, FACT_ORDENCLI, FACT_ESTADO, FACT_ESTOBS, FACT_IMPLICA, FACT_CLIEXE,
-                          FACT_DIAIVA, FACT_FORMAP, FACT_FECHADIAN, FACT_CONTADO, FACT_PROFORMA, FACT_UUID, FACT_IMPBA, FACT_IMPUP)
-    values (:iddoc, :ptovta, :vend, :NIT, :autorizacion, '00000001', :fecha, NULL,
-            :VENCE, :ivainc, 0, 0, :dtoporc, :dtomonto,
-            :adicional, :ivatot, :rtfteporc, (:BASE * :rtfteporc / 100), :rtivaporc, (:ivatot * :rtivaporc / 100),
-            :rticaporc, (:BASE * :rticaporc / 1000), :extra, :dtofporc, (:BASE * :dtofporc / 100), :dtoffec,
-            :pref, NULL, :nomterc, NULL, IIF(:tiporef = 34, :NUMREF, NULL), IIF(:tiporef = 32, :NUMREF, NULL), 'N',
-            'N', :TOTAL, :bodega, :OBS, NULL, :idc, 0,
-            USER, :sucursal, 'N', :vend, 1, 'N', NULL,
-            0, 0, 0, 1, 0, NULL, NULL,
-            NULL, NULL, 0, 0, 0, NULL, :nomterc,
-            NULL, NULL, 'N', NULL, 1, NULL, NULL,
-            NULL, NULL, NULL, NULL, 1, NULL, NULL,
-            'N', NULL, :BASE, NULL, NULL, 0, NULL,
-            NULL, NULL, NULL, 0, NULL, 'S', 'N',
-            'N', :FORMAP, NULL, :contado, NULL, NULL, :impba, :impup);
+                          FACT_DIAIVA, FACT_FORMAP, FACT_FECHADIAN, FACT_CONTADO, FACT_PROFORMA, FACT_UUID, FACT_IMPBA,
+                          FACT_IMPUP, FACT_OBS1)
+        values (:iddoc, :ptvta, :vend, :nit, :autorizacion, :numero, :fecha, NULL,
+                :vence, :ivainc, 0, 0, 0, 0,
+                0, :ivatot, :rtfteporc, :rtfte, :rtivaporc, :rteiva,
+                :rticaporc, :rteica, 0, 0, 0, :fecha,
+                :pref, NULL, :nomterc, NULL, NULL, NULL, 'N',
+                'N', :total, :bodega, :OBS, NULL, 0, 0,
+                USER, :sucursal, 'S', :vend, 1, 'N', NULL,
+                0, 0, 0, 1, 0, NULL, NULL,
+                NULL, NULL, 0, 0, 0, NULL, :nomterc,
+                NULL, NULL, 'N', 0, 1, NULL, NULL,
+                NULL, NULL, NULL, NULL, 1, NULL, NULL,
+                'N', NULL, :base, NULL, NULL, 0, NULL,
+                NULL, NULL, NULL, 0, NULL, 'S', 'S',
+                'N', :formap, NULL, NULL, NULL, NULL, 0,
+                0, NULL);
 
-    for select DIWD_ITEM, DIWD_ARTICULO, DIWD_DESCART, DIWD_CODBAR, DIWD_CANT, DIWD_UNIDAD, DIWD_COSTO, DIWD_IVAPORC, DIWD_TIVA, DIWD_IVAMONTO,
-        D.diwd_dtoporc, DIWD_LOTE, DIWD_VENCELOTE, DIWD_REF, DIWD_OBS, DIWD_LISTA, D.diwd_inalcm, D.diwd_inalcp, D.diwd_impupp, D.diwd_impupm, D.diwd_impba
-        from DOC_INVENTARIO_DET_WEB D WHERE DINW_ID = :ID
-        into :ITEM, :ARTICULO, :descripcion, :CODBAR, :CANT, :UNIDAD, :COSTO, :IVAPORC, :TIVA, :ivamonto, :dtoporc, :LOTE, :VENCELOTE,
-        :REFITE, :OBSITE, :LISTA, :impinc, :impincp, :impupporc, :impup, :impba
-
-        DO
+    ITEM = 0;
+    FOR SELECT DIWD_ITEM, DIWD_ARTICULO, DIWD_CANT, DIWD_UNIDAD, DIWD_LOTE, DIWD_PRUNIT, DIWD_DTOPORC, DIWD_IVAPORC, DIWD_CONSUMO,
+               DIWD_FACTOR, DIWD_DESCART, DIWD_OBS, DIWD_CODBAR, DIWD_REF, DIWD_BODEGA, DIWD_LISTA, DIWD_TIVA, DIWD_IMPBA, DIWD_IMPUP,
+               DIWD_IMPUPP, DIWD_INALCP, DIWD_INALCM, DIWD_IMPUPM, DIWD_DTO1, DIWD_DTO2, DIWD_DTO3, DIWD_DTOM1, DIWD_DTOM2, DIWD_DTOM3
+        FROM DOC_INVENTARIO_DET_WEB WHERE DINW_ID = :ID INTO :ITEM, :articulo, :cant, :unidad, :lote, :costo, :dtoporc, :ivaporc, :consumo,
+               :factor, :descripcion, :obsite, :codbar, :refite, :bodega, :lista, :tiva, :impba, :impup,
+               :impupporc, :impincp, :impincm, :impupm, :dto1, :dto2, :dto3, :dto1m, :dto2m, :dto3m DO
         BEGIN
-        TOTAL = (COSTO - (COSTO * (COALESCE(DTOPORC, 0) / 100))) * CANT;
-        SELECT ARTI_CONSUMO, TAIV_COD, ARTI_DES, ARTI_DESVAR FROM ARTICULO A WHERE ARTI_COD = :articulo INTO :consumo, :TIVA, :descriparti, :DESVAR;
-
-        /* Descripcion variable */
-        IF (DESVAR = 'N') THEN
-        BEGIN
-        descripcion = descriparti;
-        END
-
-        EXECUTE PROCEDURE factor_unidad_cant(:articulo, :unidad) returning_values (factor);
-        if (IVAINC = 'N') then
-         BEGIN
-         IVAMONTO = TOTAL * (IVAPORC / 100);
-         TOTAL = TOTAL + IVAMONTO;
-         END
-        ELSE
+        TOTAL = CANT * COSTO;
+        if (IMPINC = 'S') then
           BEGIN
-         IVAMONTO = (TOTAL - (CONSUMO * CANT)) / (100 + IVAPORC);
-         IVAMONTO = IVAMONTO * IVAPORC;
-        END
+          IVAMONTO = TOTAL * (IVAPORC / 100);
+          TOTAL = TOTAL + IVAMONTO;
+          END
+         ELSE
+           BEGIN
+          IVAMONTO = (TOTAL - (CONSUMO * CANT)) / (100 + IVAPORC);
+          IVAMONTO = IVAMONTO * IVAPORC;
+          END
         insert into FACTURAS_DETALLE (FACT_ID, FADE_ITEM, BODE_COD, ARTI_COD, FADE_CANT, FADE_UNIDAD, FADE_LOTE, FADE_PRUNIT,
                                       FADE_DTOPORC, FADE_DTOMONTO, FADE_IVAPORC, FADE_IVAMONTO, FADE_CONSUMO, FADE_FACTOR,
                                       FADE_DESC, FADE_OBS, FADE_CODBAR, FADE_REMISIONADO, FADE_DEVUELTO, FADE_TOTAL, LIPR_COD,
