@@ -705,7 +705,7 @@ export class PedidoService {
         await db(tables.DOC_INVENTARIO_WEB).where('DINW_ID', dinwId).update(updateHeaderPayload);
 
         // Garantizar que los consecutivos de Facturas y Recibos de Caja estén sincronizados
-        await PedidoService.syncConsecutivos(prefijoFac);
+        await PedidoService.syncConsecutivos(prefijo);
 
         // Preparar caja y formas de pago en DOC_INVENTARIO_PAGO_WEB antes de llamar al SP
         try {
@@ -1076,7 +1076,7 @@ export class PedidoService {
         }
 
         // Garantizar que los consecutivos de Facturas y Recibos de Caja estén sincronizados
-        await PedidoService.syncConsecutivos(prefijoFac);
+        await PedidoService.syncConsecutivos(prefijo);
 
         // Preparar caja y formas de pago en DOC_INVENTARIO_PAGO_WEB antes de llamar al SP
         try {
