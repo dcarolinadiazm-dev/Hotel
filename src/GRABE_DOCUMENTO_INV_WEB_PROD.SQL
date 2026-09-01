@@ -31,6 +31,7 @@ declare variable RTFTEPORC NUMERIC(18,2);
 declare variable RTICAPORC NUMERIC(18,2);
 declare variable RTIVAPORC NUMERIC(18,2);
 declare variable RTFTE NUMERIC(18,2);
+declare variable RTEFTE NUMERIC(18,2);
 declare variable RTEICA NUMERIC(18,2);
 declare variable RTEIVA NUMERIC(18,2);
 declare variable AUTORIZACION VARCHAR(10);
@@ -57,10 +58,12 @@ declare variable NUMBCO VARCHAR(20);
 declare variable VER INTEGER;
 declare variable IDC INTEGER;
 declare variable TIVA INTEGER;
-declare variable IMPINCp CHAR(1);
+declare variable IMPINCP CHAR(1);
+declare variable IMPINCM CHAR(1);
 declare variable IMPBA NUMERIC(18,2);
 declare variable IMPUP NUMERIC(18,2);
-declare variable IMPUPp NUMERIC(18,2);
+declare variable IMPUPP NUMERIC(18,2);
+declare variable IMPUPM NUMERIC(18,2);
 declare variable IMPUPPORC NUMERIC(18,2);
 declare variable DTO1 NUMERIC(18,2);
 declare variable DTO2 NUMERIC(18,2);
@@ -78,7 +81,6 @@ declare variable IDREF integer;
 declare variable ADICIONAL numeric(18,2);
 declare variable EXTRA numeric(18,2);
 declare variable DTOFFEC date;
-declare variable IMPINCM char(1);
 declare variable BODRETAL integer;
 begin
 if (TIPO = 31) then
@@ -128,6 +130,7 @@ if (TIPO = 31) then
         total = BASE + ivatot;
     end
     RTEFTE = (:BASE * (CAST(:RTFTEPORC AS FLOAT) / 100));
+    RTFTE = RTEFTE;
     RTEICA = (:BASE * (:rticaporc / 1000.0));
     RTEIVA = (:ivatot * (:rtivaporc/100));
     SELECT TERC_NOM, VEND_COD FROM terceros T, CLIENTES C WHERE T.terc_nit = C.terc_nit AND T.TERC_NIT = :nit INTO :nomterc, :VEND;
@@ -160,8 +163,8 @@ if (TIPO = 31) then
                           FACT_PMA, FACT_IMPFIS, FACT_SUBTOTAL, FACT_AUTOCAR, FACT_AUTOCUPO, FACT_PTOSCLIFAC, FACT_CUFE,
                           FACT_XML, FACT_REPGRA, FACT_ORDENCLI, FACT_ESTADO, FACT_ESTOBS, FACT_IMPLICA, FACT_CLIEXE,
                           FACT_DIAIVA, FACT_FORMAP, FACT_FECHADIAN, FACT_CONTADO, FACT_PROFORMA, FACT_UUID, FACT_IMPBA,
-                          FACT_IMPUP, FACT_OBS1)
-        values (:iddoc, :ptvta, :vend, :nit, :autorizacion, :numero, :fecha, NULL,
+                          FACT_IMPUP)
+        values (:iddoc, :ptovta, :vend, :nit, :autorizacion, :numero, :fecha, NULL,
                 :vence, :ivainc, 0, 0, 0, 0,
                 0, :ivatot, :rtfteporc, :rtfte, :rtivaporc, :rteiva,
                 :rticaporc, :rteica, 0, 0, 0, :fecha,
@@ -175,7 +178,7 @@ if (TIPO = 31) then
                 'N', NULL, :base, NULL, NULL, 0, NULL,
                 NULL, NULL, NULL, 0, NULL, 'S', 'S',
                 'N', :formap, NULL, NULL, NULL, NULL, 0,
-                0, NULL);
+                0);
 
     ITEM = 0;
     FOR SELECT DIWD_ITEM, DIWD_ARTICULO, DIWD_CANT, DIWD_UNIDAD, DIWD_LOTE, DIWD_PRUNIT, DIWD_DTOPORC, DIWD_IVAPORC, DIWD_CONSUMO,
