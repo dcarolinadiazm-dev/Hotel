@@ -680,7 +680,12 @@ export class PedidoService {
         const spResult = await db.raw('SELECT * FROM GRABE_DOCUMENTO_INV_WEB(?, ?)', [31, dinwId]);
         const resultRow = spResult.rows ? spResult.rows[0] : (Array.isArray(spResult) ? spResult[0] : spResult);
 
-        const idGenerado = resultRow?.IDDOC || resultRow?.iddoc;
+        let idGenerado = resultRow?.IDDOC || resultRow?.iddoc || resultRow?.Iddoc || (Array.isArray(resultRow) ? resultRow[0] : null);
+        if (!idGenerado) {
+            const dinwCheck = await db(tables.DOC_INVENTARIO_WEB).where('DINW_ID', dinwId).select('DINW_IDDOC').first().catch(() => null);
+            idGenerado = dinwCheck?.DINW_IDDOC || dinwCheck?.dinw_iddoc;
+        }
+
         const numDocGenerado = String(resultRow?.NUMDOC || resultRow?.numdoc || `${prefijo}-${dinwId}`).trim();
         const nError = resultRow?.NERROR ?? resultRow?.nerror ?? 0;
 
@@ -801,7 +806,7 @@ export class PedidoService {
                                 FCNP_BANCO: isEfectivo ? '' : codbco,
                                 FCNP_CUENTA: isEfectivo ? '' : '9999',
                                 FCNP_NUMERO: isEfectivo ? '' : numBco,
-                                FCNP_FECHA: new Date(),
+                                FCNP_FECHA: db.raw('CURRENT_DATE'),
                                 FCNP_MONTO: p.monto,
                                 FCNP_ANULADO: 'N',
                                 FCNP_CERRADO: 'N'
@@ -1077,7 +1082,12 @@ export class PedidoService {
         const spResult = await db.raw('SELECT * FROM GRABE_DOCUMENTO_INV_WEB(?, ?)', [31, dinwId]);
         const resultRow = spResult.rows ? spResult.rows[0] : (Array.isArray(spResult) ? spResult[0] : spResult);
 
-        const idGenerado = resultRow?.IDDOC || resultRow?.iddoc;
+        let idGenerado = resultRow?.IDDOC || resultRow?.iddoc || resultRow?.Iddoc || (Array.isArray(resultRow) ? resultRow[0] : null);
+        if (!idGenerado) {
+            const dinwCheck = await db(tables.DOC_INVENTARIO_WEB).where('DINW_ID', dinwId).select('DINW_IDDOC').first().catch(() => null);
+            idGenerado = dinwCheck?.DINW_IDDOC || dinwCheck?.dinw_iddoc;
+        }
+
         const numDocGenerado = String(resultRow?.NUMDOC || resultRow?.numdoc || `${prefijo}-${dinwId}`).trim();
         const nError = resultRow?.NERROR ?? resultRow?.nerror ?? 0;
 
@@ -1177,7 +1187,7 @@ export class PedidoService {
                                 FCNP_BANCO: isEfectivo ? '' : codbco2,
                                 FCNP_CUENTA: isEfectivo ? '' : '9999',
                                 FCNP_NUMERO: isEfectivo ? '' : numBco,
-                                FCNP_FECHA: new Date(),
+                                FCNP_FECHA: db.raw('CURRENT_DATE'),
                                 FCNP_MONTO: p.monto,
                                 FCNP_ANULADO: 'N',
                                 FCNP_CERRADO: 'N'
@@ -1528,8 +1538,8 @@ export class PedidoService {
 
                 if (pagosRows && pagosRows.length > 0) {
                     pagosList = pagosRows.map((p: any) => ({
-                        nombre: String(p.nombre || p.NOMBRE || 'EFECTIVO').trim(),
-                        monto: parseFloat(String(p.monto || p.MONTO || '0'))
+                        nombre: String(p.nombre || p.NOMBRE || p.FOPA_NOM || 'EFECTIVO').trim(),
+                        monto: parseFloat(String(p.monto ?? p.MONTO ?? p.FCNP_MONTO ?? '0'))
                     }));
                 }
             } catch (e: any) {
@@ -1859,7 +1869,12 @@ export class PedidoService {
         const spResult = await db.raw('SELECT * FROM GRABE_DOCUMENTO_INV_WEB(?, ?)', [31, masterDinwId]);
         const resultRow = spResult.rows ? spResult.rows[0] : (Array.isArray(spResult) ? spResult[0] : spResult);
 
-        const idGenerado = resultRow?.IDDOC || resultRow?.iddoc;
+        let idGenerado = resultRow?.IDDOC || resultRow?.iddoc || resultRow?.Iddoc || (Array.isArray(resultRow) ? resultRow[0] : null);
+        if (!idGenerado) {
+            const dinwCheck = await db(tables.DOC_INVENTARIO_WEB).where('DINW_ID', masterDinwId).select('DINW_IDDOC').first().catch(() => null);
+            idGenerado = dinwCheck?.DINW_IDDOC || dinwCheck?.dinw_iddoc;
+        }
+
         const numDocGenerado = String(resultRow?.NUMDOC || resultRow?.numdoc || `${prefijo}-${masterDinwId}`).trim();
         const nError = resultRow?.NERROR ?? resultRow?.nerror ?? 0;
 
@@ -1973,7 +1988,7 @@ export class PedidoService {
                                 FCNP_BANCO: isEfectivo ? '' : codbco3,
                                 FCNP_CUENTA: isEfectivo ? '' : '9999',
                                 FCNP_NUMERO: isEfectivo ? '' : numBco,
-                                FCNP_FECHA: new Date(),
+                                FCNP_FECHA: db.raw('CURRENT_DATE'),
                                 FCNP_MONTO: p.monto,
                                 FCNP_ANULADO: 'N',
                                 FCNP_CERRADO: 'N'
