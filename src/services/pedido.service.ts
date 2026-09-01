@@ -28,6 +28,37 @@ export class PedidoService {
         return { ptvtId: 1, bodeCod: '1' };
     }
 
+    // Sincronizar consecutivos de Facturas (31) y Recibos (61) con el máximo real
+    static async syncConsecutivos(prefijo: string = '0000') {
+        try {
+            const maxFact = await db('FACTURAS').where('PREF_PRE', prefijo).max('FACT_NUMERO as MAXF').first();
+            const maxFactVal = parseInt(String(maxFact?.MAXF || '0'), 10) || 0;
+            const prefFact = await db(tables.PREFIJOS).where({ TIDO_COD: 31, PREF_PRE: prefijo }).first();
+            const curFactVal = parseInt(String(prefFact?.PREF_ACTUAL || '0'), 10) || 0;
+            if (curFactVal <= maxFactVal) {
+                await db(tables.PREFIJOS).where({ TIDO_COD: 31, PREF_PRE: prefijo }).update({
+                    PREF_ACTUAL: String(maxFactVal + 1).padStart(6, '0')
+                });
+            }
+        } catch (e) {
+            console.warn('Aviso sincronizando prefijo facturas:', e);
+        }
+
+        try {
+            const maxReca = await db('RECIBOS_CAJA').max('RECA_NUMERO as MAXR').first();
+            const maxRecaVal = parseInt(String(maxReca?.MAXR || '0'), 10) || 0;
+            const prefReca = await db(tables.PREFIJOS).where('TIDO_COD', 61).first();
+            const curRecaVal = parseInt(String(prefReca?.PREF_ACTUAL || '0'), 10) || 0;
+            if (curRecaVal <= maxRecaVal) {
+                await db(tables.PREFIJOS).where('TIDO_COD', 61).update({
+                    PREF_ACTUAL: String(maxRecaVal + 1).padStart(6, '0')
+                });
+            }
+        } catch (e) {
+            console.warn('Aviso sincronizando prefijo recibos:', e);
+        }
+    }
+
     // Obtener prefijos de Factura de Venta (TIDO_COD = 31)
     static async getPrefijosFactura() {
         const rows = await db(tables.PREFIJOS)
@@ -35,7 +66,19 @@ export class PedidoService {
             .orderBy('PREF_ACTIVO', 'desc')
             .orderBy('PREF_PRE', 'asc');
 
-        return rows.map((r: any) => ({
+        for (const r of rows) {
+            const prefStr = String(r.PREF_PRE || '').trim();
+            if (prefStr) {
+                await PedidoService.syncConsecutivos(prefStr);
+            }
+        }
+
+        const freshRows = await db(tables.PREFIJOS)
+            .where('TIDO_COD', 31)
+            .orderBy('PREF_ACTIVO', 'desc')
+            .orderBy('PREF_PRE', 'asc');
+
+        return freshRows.map((r: any) => ({
             prefijo: String(r.PREF_PRE || '').trim(),
             actual: String(r.PREF_ACTUAL || '').trim(),
             ivaInc: r.PREF_IVAINC === 'S',
@@ -661,20 +704,8 @@ export class PedidoService {
 
         await db(tables.DOC_INVENTARIO_WEB).where('DINW_ID', dinwId).update(updateHeaderPayload);
 
-        // Garantizar que el consecutivo de Recibos de Caja (TIDO_COD = 61) esté sincronizado para evitar colisiones de numeración
-        try {
-            const maxReca = await db('RECIBOS_CAJA').max('RECA_NUMERO as MAXR').first();
-            const maxVal = parseInt(String(maxReca?.MAXR || '0'), 10) || 0;
-            const prefReca = await db(tables.PREFIJOS).where('TIDO_COD', 61).first();
-            const curVal = parseInt(String(prefReca?.PREF_ACTUAL || '0'), 10) || 0;
-            if (curVal <= maxVal) {
-                await db(tables.PREFIJOS).where('TIDO_COD', 61).update({
-                    PREF_ACTUAL: String(maxVal + 1).padStart(6, '0')
-                });
-            }
-        } catch (syncPrefErr) {
-            console.warn('Aviso sincronizando prefijo de recibos de caja:', syncPrefErr);
-        }
+        // Garantizar que los consecutivos de Facturas y Recibos de Caja estén sincronizados
+        await PedidoService.syncConsecutivos(prefijoFac);
 
         // Preparar caja y formas de pago en DOC_INVENTARIO_PAGO_WEB antes de llamar al SP
         try {
@@ -1044,20 +1075,8 @@ export class PedidoService {
             await db(tables.DOC_INVENTARIO_DET_WEB).insert(det);
         }
 
-        // Garantizar consecutivo
-        try {
-            const maxReca = await db('RECIBOS_CAJA').max('RECA_NUMERO as MAXR').first();
-            const maxVal = parseInt(String(maxReca?.MAXR || '0'), 10) || 0;
-            const prefReca = await db(tables.PREFIJOS).where('TIDO_COD', 61).first();
-            const curVal = parseInt(String(prefReca?.PREF_ACTUAL || '0'), 10) || 0;
-            if (curVal <= maxVal) {
-                await db(tables.PREFIJOS).where('TIDO_COD', 61).update({
-                    PREF_ACTUAL: String(maxVal + 1).padStart(6, '0')
-                });
-            }
-        } catch (syncPrefErr) {
-            console.warn('Aviso sincronizando prefijo de recibos de caja:', syncPrefErr);
-        }
+        // Garantizar que los consecutivos de Facturas y Recibos de Caja estén sincronizados
+        await PedidoService.syncConsecutivos(prefijoFac);
 
         // Preparar caja y formas de pago en DOC_INVENTARIO_PAGO_WEB antes de llamar al SP
         try {
@@ -1813,23 +1832,12 @@ export class PedidoService {
                 DIWD_LISTA: parseInt(String(it.DIWD_LISTA || '1'), 10) || 1,
                 DIWD_REF: it._habNumero ? `HAB-${it._habNumero}` : 'MULTI-HAB',
                 DIWD_ANULADO: 'N',
-                DIWD_TRANSMIT: 'N',
-                DIWD_FACTOR: 1
+                DIWD_TRANSMIT: 'N'
             });
         }
-
-        // Consecutivo Recibos de Caja
-        try {
-            const maxReca = await db('RECIBOS_CAJA').max('RECA_NUMERO as MAXR').first();
-            const maxVal = parseInt(String(maxReca?.MAXR || '0'), 10) || 0;
-            const prefReca = await db(tables.PREFIJOS).where('TIDO_COD', 61).first();
-            const curVal = parseInt(String(prefReca?.PREF_ACTUAL || '0'), 10) || 0;
-            if (curVal <= maxVal) {
-                await db(tables.PREFIJOS).where('TIDO_COD', 61).update({
-                    PREF_ACTUAL: String(maxVal + 1).padStart(6, '0')
-                });
-            }
-        } catch (syncPrefErr) {}
+        
+        // Garantizar que los consecutivos de Facturas y Recibos de Caja estén sincronizados
+        await PedidoService.syncConsecutivos(prefijo);
 
         // Preparar caja y formas de pago en DOC_INVENTARIO_PAGO_WEB antes de llamar al SP
         try {

@@ -180,7 +180,7 @@ if (TIPO = 31) then
                 :rticaporc, :rteica, 0, 0, 0, :fecha,
                 :pref, NULL, :nomterc, NULL, NULL, NULL, 'N',
                 'N', :total, :bodega, :OBS, NULL, 0, 0,
-                USER, :sucursal, 'S', :vend, 1, 'N', NULL,
+                USER, :sucursal, 'N', :vend, 1, 'N', NULL,
                 0, 0, 0, 1, 0, NULL, NULL,
                 NULL, NULL, 0, 0, 0, NULL, :nomterc,
                 NULL, NULL, 'N', 0, 1, NULL, NULL,
