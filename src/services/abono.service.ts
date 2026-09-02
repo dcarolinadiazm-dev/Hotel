@@ -46,20 +46,29 @@ export class AbonoService {
 
     // 2. Obtener lista de Abonos de la reserva activa (HABITACION_MOVIM_ANTICIPOS) excluyendo anulados
     static async getAbonos(idHabitacion: string, tercNit?: string) {
+        const habNum = String(idHabitacion).trim();
+
         // 1. Buscar si hay movimiento activo en HABITACION_MOVIM
         const activeMov = await db(tables.HABITACION_MOVIM)
-            .where('ID_HABITACION', idHabitacion)
+            .where(function () {
+                this.where('ID_HABITACION', habNum)
+                    .orWhere('ID_MOVIM', habNum)
+                    .orWhere('DINW_ID', habNum);
+            })
             .andWhere(function () {
-                this.where('ESTADO', 'Activo').orWhereNull('ESTADO');
+                this.where('ESTADO', 'Activo')
+                    .orWhereNull('ESTADO')
+                    .orWhere('ESTADO', 'Ocupada')
+                    .orWhere('ESTADO', 'Reservada');
             })
             .orderBy('ID_MOVIM', 'desc')
             .first();
 
-        let rows: any[] = [];
+        let rowsMap = new Map<number, any>();
 
         if (activeMov && activeMov.ID_MOVIM) {
             // Filtrar EXCLUSIVAMENTE los anticipos vinculados a ESTA reserva específica en HABITACION_MOVIM_ANTICIPOS
-            rows = await db(tables.HABITACION_MOVIM_ANTICIPOS)
+            const movRows = await db(tables.HABITACION_MOVIM_ANTICIPOS)
                 .join(tables.ANTICIPOS_CLIENTE, `${tables.HABITACION_MOVIM_ANTICIPOS}.ANCL_ID`, `${tables.ANTICIPOS_CLIENTE}.ANCL_ID`)
                 .leftJoin(tables.RECIBOS_CAJA, `${tables.ANTICIPOS_CLIENTE}.RECA_ID`, `${tables.RECIBOS_CAJA}.RECA_ID`)
                 .leftJoin(tables.RECIBOS_CAJA_PAGO, `${tables.RECIBOS_CAJA}.RECA_ID`, `${tables.RECIBOS_CAJA_PAGO}.RECA_ID`)
@@ -96,14 +105,20 @@ export class AbonoService {
                     `${tables.RECIBOS_CAJA_PAGO}.RCPA_NUMERO`
                 )
                 .orderBy(`${tables.HABITACION_MOVIM_ANTICIPOS}.ITEM_ID`, 'asc');
-        } else if (tercNit && String(tercNit).trim().length > 0) {
-            // Si aún no se ha guardado el movimiento de reserva, buscar anticipos por NIT de la habitación actual
-            const habNum = String(idHabitacion).trim();
-            rows = await db(tables.ANTICIPOS_CLIENTE)
+
+            for (const r of movRows) {
+                if (r.ANCL_ID) rowsMap.set(r.ANCL_ID, r);
+            }
+        }
+
+        if (tercNit && String(tercNit).trim().length > 0) {
+            // Buscar anticipos por NIT del cliente para esta habitación
+            const nitClean = String(tercNit).trim();
+            const fallbackRows = await db(tables.ANTICIPOS_CLIENTE)
                 .leftJoin(tables.RECIBOS_CAJA, `${tables.ANTICIPOS_CLIENTE}.RECA_ID`, `${tables.RECIBOS_CAJA}.RECA_ID`)
                 .leftJoin(tables.RECIBOS_CAJA_PAGO, `${tables.RECIBOS_CAJA}.RECA_ID`, `${tables.RECIBOS_CAJA_PAGO}.RECA_ID`)
                 .leftJoin(tables.FORMAS_PAGO, `${tables.RECIBOS_CAJA_PAGO}.FOPA_ID`, `${tables.FORMAS_PAGO}.FOPA_ID`)
-                .where(`${tables.ANTICIPOS_CLIENTE}.TERC_NIT`, String(tercNit).trim())
+                .where(`${tables.ANTICIPOS_CLIENTE}.TERC_NIT`, nitClean)
                 .andWhere(function () {
                     this.where(`${tables.ANTICIPOS_CLIENTE}.ANCL_CONC`, 'like', `%HABITACION ${habNum}%`)
                         .orWhere(`${tables.ANTICIPOS_CLIENTE}.ANCL_CONC`, 'like', `%HAB ${habNum}%`)
@@ -137,7 +152,15 @@ export class AbonoService {
                     `${tables.RECIBOS_CAJA_PAGO}.RCPA_NUMERO`
                 )
                 .orderBy(`${tables.ANTICIPOS_CLIENTE}.ANCL_ID`, 'desc');
+
+            for (const r of fallbackRows) {
+                if (r.ANCL_ID && !rowsMap.has(r.ANCL_ID)) {
+                    rowsMap.set(r.ANCL_ID, r);
+                }
+            }
         }
+
+        const rows = Array.from(rowsMap.values());
 
         const abonos = rows.map((r: any, idx: number) => {
             const anclId = r.ANCL_ID ?? r.ancl_id;
@@ -396,7 +419,12 @@ export class AbonoService {
         try {
             const activeMov = await db(tables.HABITACION_MOVIM)
                 .where('ID_HABITACION', idHabitacion)
-                .where('ESTADO', 'Activo')
+                .andWhere(function () {
+                    this.where('ESTADO', 'Activo')
+                        .orWhereNull('ESTADO')
+                        .orWhere('ESTADO', 'Ocupada')
+                        .orWhere('ESTADO', 'Reservada');
+                })
                 .orderBy('ID_MOVIM', 'desc')
                 .first();
 

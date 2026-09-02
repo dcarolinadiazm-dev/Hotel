@@ -237,7 +237,11 @@ if (TIPO = 31) then
     select a.auto_contado from autorizaciones a, facturas f where a.pref_pre = f.pref_pre and a.auto_numero = f.auto_numero and f.fact_id = :iddoc into :contado;
     if (contado = 'S') then
         begin
-        SALDO_PAGO = :TOTAL;
+        SELECT FACT_TOTAL FROM FACTURAS WHERE FACT_ID = :iddoc INTO :SALDO_PAGO;
+        if (SALDO_PAGO is null or SALDO_PAGO <= 0) then
+            SELECT SUM(FADE_TOTAL) FROM FACTURAS_DETALLE WHERE FACT_ID = :iddoc INTO :SALDO_PAGO;
+        if (SALDO_PAGO is null or SALDO_PAGO <= 0) then SALDO_PAGO = :TOTAL;
+
         /* grabe el recibo */
         SELECT FIRST 1 CAJA_ID FROM punto_venta WHERE PTVT_ID = :PTOVTA INTO :CAJA;
         if (CAJA is null) then SELECT FIRST 1 CAJA_ID FROM cajas INTO :CAJA;

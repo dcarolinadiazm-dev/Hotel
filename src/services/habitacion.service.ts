@@ -270,8 +270,9 @@ export class HabitacionService {
             let mFechaReserva = mov.FECHA_RESERVA ? String(mov.FECHA_RESERVA).trim() : '';
             let mFechaSalida = mov.FECHA_SALIDA ? String(mov.FECHA_SALIDA).trim() : '';
 
+            let dinwRow: any = null;
             if (mDinwId) {
-                const dinwRow = await db(tables.DOC_INVENTARIO_WEB)
+                dinwRow = await db(tables.DOC_INVENTARIO_WEB)
                     .leftJoin(tables.TERCEROS, `${tables.DOC_INVENTARIO_WEB}.DINW_NIT`, '=', `${tables.TERCEROS}.TERC_NIT`)
                     .where(`${tables.DOC_INVENTARIO_WEB}.DINW_ID`, mDinwId)
                     .andWhere(function () {
@@ -324,17 +325,23 @@ export class HabitacionService {
                 ? parseFloat(String(mRoomDetail.DIWD_DTOPORC))
                 : 0;
 
-            let mAbonos = 0;
-            if (mDinwId) {
-                try {
-                    mAbonos = await AbonoService.getTotalAbonos(mDinwId);
-                } catch (abErr) {}
+            let mObservaciones = '';
+            if (mRoomDetail && mRoomDetail.DIWD_OBS) {
+                mObservaciones = String(mRoomDetail.DIWD_OBS).trim();
+            } else if (dinwRow && dinwRow.DINW_OBS) {
+                mObservaciones = String(dinwRow.DINW_OBS).trim();
             }
+
+            let mAbonos = 0;
+            try {
+                mAbonos = await AbonoService.getTotalAbonos(habId, mDocumento);
+            } catch (abErr) {}
 
             movimientosList.push({
                 idMovim: mId,
                 dinwId: mDinwId,
                 huesped: mHuesped,
+                observaciones: mObservaciones,
                 documento: mDocumento,
                 fechaReserva: mFechaReserva,
                 fechaSalida: mFechaSalida,
@@ -713,7 +720,8 @@ export class HabitacionService {
             await db(tables.DOC_INVENTARIO_WEB).where('DINW_ID', dinwId).update({
                 DINW_BASE: nuevoDinwBase,
                 DINW_IVAMONTO: nuevoDinwIva,
-                DINW_MONTO: nuevoDinwTotal
+                DINW_MONTO: nuevoDinwTotal,
+                DINW_OBS: obsSubHuesped
             });
         }
 

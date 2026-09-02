@@ -834,7 +834,8 @@ export class PedidoService {
                     console.warn('Aviso sincronizando FADE_DTOPORC/FADE_DTOMONTO/FADE_TOTAL/FADE_OBS:', dtoErr.message);
                 }
 
-                // Sincronización de pagos realizada automáticamente por GRABE_DOCUMENTO_INV_WEB mediante DOC_INVENTARIO_PAGO_WEB
+                // Garantizar sincronización exacta de formas de pago en FACTURAS_CONTADO_PAGO
+                await PedidoService.syncFacturaPagos(idGenerado, listaPagos);
             } catch (syncErr: any) {
                 console.error('Error procesando factura generada:', syncErr.message);
             }
@@ -1190,7 +1191,8 @@ export class PedidoService {
                             FADE_BASE: baseItem
                         });
                 }
-                // Sincronización de pagos realizada automáticamente por GRABE_DOCUMENTO_INV_WEB mediante DOC_INVENTARIO_PAGO_WEB
+                // Garantizar sincronización exacta de formas de pago en FACTURAS_CONTADO_PAGO
+                await PedidoService.syncFacturaPagos(idGenerado, listaPagos);
             } catch (syncErr: any) {
                 console.error('Error sincronizando facturarDirecto:', syncErr.message);
             }
@@ -2054,7 +2056,8 @@ export class PedidoService {
                             .update(updateObj);
                     }
                 } catch (dtoErr: any) {}
-                // Sincronización de pagos realizada automáticamente por GRABE_DOCUMENTO_INV_WEB mediante DOC_INVENTARIO_PAGO_WEB
+                // Garantizar sincronización exacta de formas de pago en FACTURAS_CONTADO_PAGO
+                await PedidoService.syncFacturaPagos(idGenerado, listaPagos);
             } catch (syncErr: any) {
                 console.error('Error procesando factura múltiple:', syncErr.message);
             }
@@ -2112,4 +2115,69 @@ export class PedidoService {
             habitacionesProcesadas: habsNumeros
         };
     }
+
+    // Sincronizar fielmente las formas de pago en FACTURAS_CONTADO_PAGO
+    static async syncFacturaPagos(idDoc: number, listaPagos: Array<{ formaPagoId: number; monto: number }>) {
+        if (!idDoc || !listaPagos || listaPagos.length === 0) return;
+
+        try {
+            const existing = await db('FACTURAS_CONTADO_PAGO').where('FCNT_ID', idDoc).orderBy('FCNP_ITEM', 'asc');
+            const matches = existing.length === listaPagos.length && existing.every((row: any, idx: number) => {
+                return parseInt(String(row.FOPA_ID), 10) === listaPagos[idx].formaPagoId &&
+                    Math.abs(parseFloat(String(row.FCNP_MONTO)) - listaPagos[idx].monto) < 1;
+            });
+
+            if (matches) return;
+
+            console.log(`[PAGOS] Ajustando formas de pago en FACTURAS_CONTADO_PAGO para Factura ID ${idDoc}. Formas enviadas: ${listaPagos.length}, en BD: ${existing.length}`);
+
+            // Obtener datos de caja y banco
+            let cajaId = 1;
+            let codbco = '';
+            try {
+                const ptvt = await db('PUNTO_VENTA').first();
+                if (ptvt?.CAJA_ID) cajaId = parseInt(String(ptvt.CAJA_ID), 10);
+                const cajaRow = await db('CAJAS').where('CAJA_ID', cajaId).first();
+                if (cajaRow?.CAJA_FPBCO) codbco = String(cajaRow.CAJA_FPBCO).trim();
+            } catch (e) {}
+
+            const nowFecha = new Date();
+
+            // Eliminar registros incompletos o desactualizados
+            await db('FACTURAS_CONTADO_PAGO').where('FCNT_ID', idDoc).del();
+
+            for (let i = 0; i < listaPagos.length; i++) {
+                const p = listaPagos[i];
+                const isEfectivo = p.formaPagoId === 1;
+                let numBco = '';
+                if (!isEfectivo && codbco) {
+                    try {
+                        const maxRcpa = await db('RECIBOS_CAJA_PAGO')
+                            .where({ RCPA_BANCO: codbco, RCPA_CUENTA: '9999' })
+                            .max('RCPA_NUMERO as MAXN')
+                            .first();
+                        numBco = String((parseInt(String(maxRcpa?.MAXN || '0'), 10) || 0) + 1 + i).padStart(6, '0');
+                    } catch (e) {
+                        numBco = '000001';
+                    }
+                }
+
+                await db('FACTURAS_CONTADO_PAGO').insert({
+                    FCNT_ID: idDoc,
+                    FCNP_ITEM: i + 1,
+                    FOPA_ID: p.formaPagoId,
+                    FCNP_BANCO: isEfectivo ? '' : codbco,
+                    FCNP_CUENTA: isEfectivo ? '' : '9999',
+                    FCNP_NUMERO: isEfectivo ? '' : numBco,
+                    FCNP_FECHA: nowFecha,
+                    FCNP_MONTO: p.monto,
+                    FCNP_ANULADO: 'N',
+                    FCNP_CERRADO: 'N'
+                });
+            }
+        } catch (err: any) {
+            console.warn('[PAGOS] Aviso en syncFacturaPagos:', err.message);
+        }
+    }
 }
+
