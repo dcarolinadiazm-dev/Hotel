@@ -624,15 +624,18 @@ export class HabitacionService {
             // Consultar tarifa de IVA del artículo vinculado
             const { taivCod, ivaPorc } = await ArticuloService.getTarifaIvaArticulo(artiCod);
             
-            // Cálculo de Descuento por noche y porcentaje DIWD_DTOPORC
+            // Cálculo de Descuento total sobre el subtotal de la estadía
             const dtoMonto = parseFloat(String(data.descuento || data.dtoMonto || data.descuentoMonto || 0)) || 0;
-            const dtoPorc = precioFinal > 0 && dtoMonto > 0 ? Math.round(((dtoMonto / precioFinal) * 100) * 10000) / 10000 : 0;
-            const precioConDescuento = Math.max(0, precioFinal - dtoMonto);
-            const nuevoItemTotal = precioConDescuento * cantidadDias;
+            const subtotalSinDescuento = precioFinal * cantidadDias;
+            const dtoPorc = subtotalSinDescuento > 0 && dtoMonto > 0 ? Math.round(((dtoMonto / subtotalSinDescuento) * 100) * 10000) / 10000 : 0;
+            const nuevoItemTotal = Math.max(0, subtotalSinDescuento - dtoMonto);
             const ivaItemMonto = ivaPorc > 0 ? Math.round(((nuevoItemTotal / (100 + ivaPorc)) * ivaPorc) * 100) / 100 : 0;
 
+            // Texto de Sub-Huésped / Ocupante para DIWD_OBS / FADE_OBS
+            const obsSubHuesped = data.observaciones ? sanitizeText(String(data.observaciones).trim()) : (huesped ? sanitizeText(String(huesped).trim()) : '');
+
             if (existingRoomItem) {
-                // Actualizar ítem existente de la habitación con los nuevos días, precio, descuento e IVA
+                // Actualizar ítem existente de la habitación con los nuevos días, precio, descuento, IVA y Sub-Huésped en DIWD_OBS
                 await db(tables.DOC_INVENTARIO_DET_WEB)
                     .where('DINW_ID', dinwId)
                     .andWhere('DIWD_ITEM', existingRoomItem.DIWD_ITEM)
@@ -645,7 +648,8 @@ export class HabitacionService {
                         DIWD_IVAPORC: ivaPorc,
                         DIWD_IVAMONTO: ivaItemMonto,
                         DIWD_TOTAL: nuevoItemTotal,
-                        DIWD_LISTA: defaultLipr
+                        DIWD_LISTA: defaultLipr,
+                        DIWD_OBS: obsSubHuesped
                     });
             } else if (totalItems === 0) {
                 let artDesc = `Hospedaje Habitación ${habNumero} (${data.tipo || hab.TIPO || 'SENCILLA'})`;
@@ -670,7 +674,7 @@ export class HabitacionService {
                     DIWD_VENCELOTE: null,
                     DIWD_REF: `HAB-${habNumero}`,
                     DIWD_ANULADO: 'N',
-                    DIWD_OBS: '',
+                    DIWD_OBS: obsSubHuesped,
                     DIWD_DTOPORC: dtoPorc,
                     DIWD_DTOMONTO: dtoMonto,
                     DIWD_BODEGA: '1',

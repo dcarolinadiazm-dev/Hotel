@@ -7,6 +7,7 @@ export interface PedidoReporte {
   numeroPedido: string;
   habitacion: string;
   huesped: string;
+  subHuesped?: string;
   documento: string;
   articulos: number;
   total: number;
@@ -56,6 +57,7 @@ export const ReportePedidos = ({
   const todayStr = getLocalDateStr();
   const [fechaDesde, setFechaDesde] = useState(`${todayStr}T00:00`);
   const [fechaHasta, setFechaHasta] = useState(`${todayStr}T23:59`);
+  const [subHuespedFilter, setSubHuespedFilter] = useState('');
 
   const fetchReporte = async () => {
     setLoading(true);
@@ -64,6 +66,7 @@ export const ReportePedidos = ({
       const params = new URLSearchParams();
       if (fechaDesde) params.append('fechaDesde', fechaDesde);
       if (fechaHasta) params.append('fechaHasta', fechaHasta);
+      if (subHuespedFilter.trim()) params.append('subHuesped', subHuespedFilter.trim());
 
       const res = await fetch(`/api/reportes/pedidos?${params.toString()}`, {
         headers: {
@@ -95,7 +98,8 @@ export const ReportePedidos = ({
     const data = pedidos.map((p) => ({
       'Fecha y hora': p.fechaTexto,
       'Habitación': p.habitacion,
-      'Huésped': p.huesped,
+      'Huésped / Cliente': p.huesped,
+      'Sub-Huésped / Ocupante': p.subHuesped || '',
       'Documento': p.documento,
       'Artículos': p.articulos,
       'Total': Math.round(p.total),
@@ -106,7 +110,8 @@ export const ReportePedidos = ({
     data.push({
       'Fecha y hora': 'TOTALES',
       'Habitación': `${pedidos.length} facturas`,
-      'Huésped': '',
+      'Huésped / Cliente': '',
+      'Sub-Huésped / Ocupante': '',
       'Documento': '',
       'Artículos': totalArticulos,
       'Total': Math.round(totalVentas),
@@ -118,6 +123,7 @@ export const ReportePedidos = ({
       { wch: 22 },
       { wch: 15 },
       { wch: 28 },
+      { wch: 25 },
       { wch: 15 },
       { wch: 12 },
       { wch: 16 },
@@ -336,6 +342,22 @@ export const ReportePedidos = ({
               </div>
             </div>
 
+            <div className="filter-group" style={{ minWidth: '220px' }}>
+              <label className="filter-label">Sub-Huésped / Ocupante</label>
+              <div className="filter-input-wrapper">
+                <input
+                  type="text"
+                  className="filter-input"
+                  placeholder="Buscar por sub-huésped..."
+                  value={subHuespedFilter}
+                  onChange={(e) => setSubHuespedFilter(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') fetchReporte();
+                  }}
+                />
+              </div>
+            </div>
+
             <button className="btn-generate-report" onClick={fetchReporte}>
               Generar reporte
             </button>
@@ -396,7 +418,8 @@ export const ReportePedidos = ({
                 <tr>
                   <th>Fecha y hora <span className="sort-indicator">⇅</span></th>
                   <th>Habitación</th>
-                  <th>Huésped</th>
+                  <th>Huésped / Cliente</th>
+                  <th>Sub-Huésped</th>
                   <th>Documento</th>
                   <th style={{ textAlign: 'center' }}>Artículos</th>
                   <th style={{ textAlign: 'right' }}>Total</th>
@@ -407,49 +430,66 @@ export const ReportePedidos = ({
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan={8} className="table-loading-cell">
+                    <td colSpan={9} className="table-loading-cell">
                       <div className="spinner"></div>
                       <p>Consultando base de datos Firebird...</p>
                     </td>
                   </tr>
                 ) : pedidos.length === 0 ? (
                   <tr>
-                    <td colSpan={8} style={{ textAlign: 'center', padding: '32px' }}>
-                      No se encontraron facturas en el rango de fechas seleccionado.
+                    <td colSpan={9} style={{ textAlign: 'center', padding: '32px' }}>
+                      No se encontraron facturas con los filtros seleccionados.
                     </td>
                   </tr>
                 ) : (
-                  pedidos.map((p) => (
-                    <tr key={p.id}>
-                      <td>{p.fechaTexto}</td>
-                      <td style={{ fontWeight: 600 }}>{p.habitacion}</td>
-                      <td>{p.huesped}</td>
-                      <td>{p.documento}</td>
-                      <td style={{ textAlign: 'center' }}>{p.articulos}</td>
-                      <td style={{ textAlign: 'right', fontWeight: 600 }}>
-                        {formatMoney(p.total)}
-                      </td>
-                      <td style={{ textAlign: 'center', fontFamily: 'monospace', fontWeight: 600, color: '#1e3a8a' }}>
-                        {p.numeroPedido}
-                      </td>
-                      <td style={{ textAlign: 'center' }}>
-                        <button
-                          type="button"
-                          className="btn-print-tirilla-report"
-                          onClick={() =>
-                            setImpresionData({
-                              tipo: 'FACTURA',
-                              idDoc: p.id,
-                              habitacionNumero: p.habitacion.replace(/[^0-9]/g, '') || '',
-                            })
-                          }
-                          title="Imprimir Tirilla POS"
-                        >
-                          🖨️ Imprimir
-                        </button>
-                      </td>
-                    </tr>
-                  ))
+                  pedidos.map((p) => {
+                    const isCustomSubHuesped =
+                      p.subHuesped &&
+                      p.subHuesped.trim() !== '' &&
+                      !p.subHuesped.toLowerCase().startsWith('hospedaje habitac') &&
+                      p.subHuesped.trim().toLowerCase() !== p.huesped.trim().toLowerCase();
+
+                    return (
+                      <tr key={p.id}>
+                        <td>{p.fechaTexto}</td>
+                        <td style={{ fontWeight: 600 }}>{p.habitacion}</td>
+                        <td>{p.huesped}</td>
+                        <td>
+                          {isCustomSubHuesped ? (
+                            <span style={{ fontWeight: 700, color: '#1e293b', background: '#f1f5f9', padding: '2px 8px', borderRadius: '4px', border: '1px solid #cbd5e1' }} title={`Sub-Huésped en FADE_OBS: ${p.subHuesped}`}>
+                              🪪 {p.subHuesped}
+                            </span>
+                          ) : (
+                            <span style={{ color: '#94a3b8', fontSize: '12px' }}>-</span>
+                          )}
+                        </td>
+                        <td>{p.documento}</td>
+                        <td style={{ textAlign: 'center' }}>{p.articulos}</td>
+                        <td style={{ textAlign: 'right', fontWeight: 600 }}>
+                          {formatMoney(p.total)}
+                        </td>
+                        <td style={{ textAlign: 'center', fontFamily: 'monospace', fontWeight: 600, color: '#1e3a8a' }}>
+                          {p.numeroPedido}
+                        </td>
+                        <td style={{ textAlign: 'center' }}>
+                          <button
+                            type="button"
+                            className="btn-print-tirilla-report"
+                            onClick={() =>
+                              setImpresionData({
+                                tipo: 'FACTURA',
+                                idDoc: p.id,
+                                habitacionNumero: p.habitacion.replace(/[^0-9]/g, '') || '',
+                              })
+                            }
+                            title="Imprimir Tirilla POS"
+                          >
+                            🖨️ Imprimir
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })
                 )}
               </tbody>
               {pedidos.length > 0 && !loading && (

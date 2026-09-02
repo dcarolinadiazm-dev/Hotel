@@ -2329,13 +2329,14 @@
    ======================================================== */
 .report-main-content {
   flex: 1;
-  max-width: 1140px;
+  max-width: 100%;
   width: 100%;
   margin: 0 auto;
-  padding: 32px 24px;
+  padding: 24px 28px;
   display: flex;
   flex-direction: column;
   gap: 20px;
+  box-sizing: border-box;
 }
 
 .report-main-title {
@@ -2456,30 +2457,63 @@
   background: #ffffff;
   border: 1px solid #e2e8f0;
   border-radius: 12px;
-  overflow: hidden;
+  overflow-x: auto;
+  width: 100%;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.02);
 }
 
 .report-table {
   width: 100%;
+  min-width: 1300px;
   border-collapse: collapse;
   text-align: left;
+  table-layout: auto;
 }
 
 .report-table th {
-  padding: 14px 18px;
-  font-size: 13px;
-  font-weight: 600;
-  color: #64748b;
-  border-bottom: 1px solid #f1f5f9;
+  padding: 12px 14px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #475569;
+  border-bottom: 1.5px solid #e2e8f0;
   background: #fafafa;
+  white-space: nowrap;
 }
 
 .report-table td {
-  padding: 14px 18px;
-  font-size: 14px;
+  padding: 12px 14px;
+  font-size: 13.5px;
   color: #1e293b;
   border-bottom: 1px solid #f1f5f9;
+  vertical-align: middle;
+}
+
+.report-table th:last-child,
+.report-table td:last-child {
+  min-width: 120px;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.btn-print-tirilla-report {
+  background: #f0fdf4;
+  color: #16a34a;
+  border: 1px solid #bbf7d0;
+  padding: 6px 14px;
+  border-radius: 6px;
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  transition: all 0.2s;
+}
+
+.btn-print-tirilla-report:hover {
+  background: #dcfce7;
+  border-color: #86efac;
 }
 
 .badge-pedido-enviado {
@@ -5700,4 +5734,18 @@
   background: linear-gradient(135deg, #047857 0%, #065f46 100%);
   transform: translateY(-2px);
   box-shadow: 0 8px 22px rgba(5, 150, 105, 0.4);
+}
+
+.readonly-stepper {
+  background: #f1f5f9 !important;
+  border-color: #cbd5e1 !important;
+  padding: 3px 10px !important;
+  cursor: default !important;
+}
+
+.stepper-count-readonly {
+  font-size: 12px;
+  font-weight: 800;
+  color: #334155;
+  white-space: nowrap;
 }

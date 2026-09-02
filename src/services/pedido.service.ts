@@ -799,11 +799,11 @@ export class PedidoService {
                     console.warn('Aviso actualizando encabezado de FACTURAS (ya grabado por SP):', factHeaderErr.message);
                 }
 
-                // Sincronizar FADE_DTOPORC, FADE_DTOMONTO, FADE_TOTAL, FADE_IVAMONTO, FADE_IVAPORC, FADE_TIVA y FADE_BASE en FACTURAS_DETALLE
+                // Sincronizar FADE_DTOPORC, FADE_DTOMONTO, FADE_TOTAL, FADE_IVAMONTO, FADE_IVAPORC, FADE_TIVA, FADE_BASE y FADE_OBS en FACTURAS_DETALLE
                 try {
                     const sourceDets = await db(tables.DOC_INVENTARIO_DET_WEB)
                         .where({ DINW_ID: dinwId, DIWD_ANULADO: 'N' })
-                        .select('DIWD_ITEM', 'DIWD_DTOPORC', 'DIWD_DTOMONTO', 'DIWD_TOTAL', 'DIWD_IVAMONTO', 'DIWD_IVAPORC', 'DIWD_TIVA');
+                        .select('DIWD_ITEM', 'DIWD_OBS', 'DIWD_DTOPORC', 'DIWD_DTOMONTO', 'DIWD_TOTAL', 'DIWD_IVAMONTO', 'DIWD_IVAPORC', 'DIWD_TIVA');
                     for (const sd of sourceDets) {
                         const dtoporc = Number(sd.DIWD_DTOPORC || 0);
                         const dtomonto = Number(sd.DIWD_DTOMONTO || 0);
@@ -813,20 +813,25 @@ export class PedidoService {
                         const tiva = Number(sd.DIWD_TIVA || 0);
                         const baseItem = Math.round((totalItem - ivaMonto) * 100) / 100;
 
+                        const updateObj: any = {
+                            FADE_DTOPORC: dtoporc,
+                            FADE_DTOMONTO: dtomonto,
+                            FADE_IVAPORC: ivaPorc,
+                            FADE_TIVA: tiva,
+                            FADE_TOTAL: totalItem,
+                            FADE_IVAMONTO: ivaMonto,
+                            FADE_BASE: baseItem
+                        };
+                        if (sd.DIWD_OBS && String(sd.DIWD_OBS).trim()) {
+                            updateObj.FADE_OBS = sanitizeText(String(sd.DIWD_OBS).trim());
+                        }
+
                         await db('FACTURAS_DETALLE')
                             .where({ FACT_ID: idGenerado, FADE_ITEM: sd.DIWD_ITEM })
-                            .update({
-                                FADE_DTOPORC: dtoporc,
-                                FADE_DTOMONTO: dtomonto,
-                                FADE_IVAPORC: ivaPorc,
-                                FADE_TIVA: tiva,
-                                FADE_TOTAL: totalItem,
-                                FADE_IVAMONTO: ivaMonto,
-                                FADE_BASE: baseItem
-                            });
+                            .update(updateObj);
                     }
                 } catch (dtoErr: any) {
-                    console.warn('Aviso sincronizando FADE_DTOPORC/FADE_DTOMONTO/FADE_TOTAL:', dtoErr.message);
+                    console.warn('Aviso sincronizando FADE_DTOPORC/FADE_DTOMONTO/FADE_TOTAL/FADE_OBS:', dtoErr.message);
                 }
 
                 // Sincronización de pagos realizada automáticamente por GRABE_DOCUMENTO_INV_WEB mediante DOC_INVENTARIO_PAGO_WEB
@@ -1202,7 +1207,7 @@ export class PedidoService {
     }
 
     // 4. Reporte de Facturas de Venta consultando directamente la tabla FACTURAS
-    static async getReportePedidos(fechaDesde?: string, fechaHasta?: string): Promise<{ pedidos: any[]; totales: { totalArticulos: number; totalVentas: number; totalesPorFormaPago?: { [key: string]: number } } }> {
+    static async getReportePedidos(fechaDesde?: string, fechaHasta?: string, subHuesped?: string): Promise<{ pedidos: any[]; totales: { totalArticulos: number; totalVentas: number; totalesPorFormaPago?: { [key: string]: number } } }> {
         let query = db('FACTURAS as F')
             .leftJoin('DOC_INVENTARIO_WEB as D', 'F.FACT_ID', 'D.DINW_IDDOC')
             .leftJoin(tables.TERCEROS, 'F.TERC_NIT', `${tables.TERCEROS}.TERC_NIT`)
@@ -1251,7 +1256,30 @@ export class PedidoService {
 
         const rows = await query.orderBy('F.FACT_ID', 'desc').limit(200);
 
-        const pedidos: any[] = [];
+        let pedidos: any[] = [];
+
+        // Función auxiliar para leer valores BLOB/Buffer/String de Firebird
+        const parseBlob = async (val: any): Promise<string> => {
+            if (!val) return '';
+            if (typeof val === 'string') return val.trim();
+            if (Buffer.isBuffer(val)) return val.toString('utf8').trim();
+            if (typeof val === 'function') {
+                return new Promise((resolve) => {
+                    val((err: any, name: any, eStream: any) => {
+                        if (err || !eStream) return resolve('');
+                        let chunks: Buffer[] = [];
+                        eStream.on('data', (chunk: Buffer) => chunks.push(chunk));
+                        eStream.on('end', () => resolve(Buffer.concat(chunks).toString('utf8').trim()));
+                        eStream.on('error', () => resolve(''));
+                    });
+                });
+            }
+            if (typeof val === 'object' && val.toString) {
+                const s = val.toString('utf8');
+                return s === '[object Object]' ? '' : s.trim();
+            }
+            return String(val).trim();
+        };
 
         for (const r of rows) {
             // Contar cantidad de artículos de la factura
@@ -1266,6 +1294,30 @@ export class PedidoService {
                 }
             } catch (e) {
                 totalCant = 1;
+            }
+
+            // Consultar FADE_OBS (Sub-Huésped / Ocupante) desde FACTURAS_DETALLE
+            let subHuespedStr = '';
+            try {
+                const fadeDets = await db('FACTURAS_DETALLE')
+                    .where({ FACT_ID: r.FACT_ID, FADE_ANULADO: 'N' })
+                    .select('FADE_OBS')
+                    .orderBy('FADE_ITEM', 'asc');
+
+                for (const fd of fadeDets) {
+                    if (fd.FADE_OBS) {
+                        const blobTxt = await parseBlob(fd.FADE_OBS);
+                        if (blobTxt && blobTxt.length > 0) {
+                            subHuespedStr = blobTxt;
+                            break;
+                        }
+                    }
+                }
+            } catch (e) {
+                subHuespedStr = '';
+            }
+            if (!subHuespedStr && r.DINW_OBS) {
+                subHuespedStr = await parseBlob(r.DINW_OBS);
             }
 
             const obsStr = String(r.FACT_OBS || r.DINW_OBS || r.DINW_CONCEPTO || '');
@@ -1335,6 +1387,7 @@ export class PedidoService {
                 habitacion: habitacionStr,
                 habitacionNumero: matchHab ? matchHab[1] : '1',
                 huesped: huespedStr,
+                subHuesped: subHuespedStr,
                 documento: nitStr,
                 total: totalFactura,
                 fecha: fechaTexto,
@@ -1345,6 +1398,16 @@ export class PedidoService {
                 estado: 'Facturado',
                 numeroPedido: numDoc
             });
+        }
+
+        if (subHuesped && subHuesped.trim()) {
+            const term = subHuesped.trim().toLowerCase();
+            pedidos = pedidos.filter((p) =>
+                (p.subHuesped && p.subHuesped.toLowerCase().includes(term)) ||
+                (p.huesped && p.huesped.toLowerCase().includes(term)) ||
+                (p.documento && p.documento.toLowerCase().includes(term)) ||
+                (p.habitacion && p.habitacion.toLowerCase().includes(term))
+            );
         }
 
         const totalArticulos = pedidos.reduce((acc, p) => acc + p.articulos, 0);
@@ -1391,13 +1454,7 @@ export class PedidoService {
             console.error(`Error ejecutando IMPR_${isFactura ? 'FACTURA' : 'REMISION'}:`, e.message);
         }
 
-        if (!rawRows || rawRows.length === 0 || !rawRows[0]) {
-            throw new Error(`No se encontraron datos para imprimir el documento #${idDoc}`);
-        }
-
-        const first = rawRows[0] || {};
-
-        // Fallback a tablas de encabezado si el SP no trajo campos completos
+        // Fallback a tablas de encabezado si el SP no trajo campos completos o vino vacío
         let fallbackHeader: any = null;
         if (!isFactura) {
             try {
@@ -1408,17 +1465,26 @@ export class PedidoService {
         } else {
             try {
                 fallbackHeader = await db('FACTURAS').where('FACT_ID', idDoc).first();
+                if (!fallbackHeader) {
+                    fallbackHeader = await db(tables.DOC_INVENTARIO_WEB).where('DINW_ID', idDoc).first();
+                }
             } catch (e: any) {
                 console.error('Error cargando fallback FACTURAS:', e.message);
             }
         }
 
-        const pref = String(first.PREF || fallbackHeader?.PREF_PRE || (isFactura ? 'FAC' : 'REM')).trim();
-        const num = String(first.NUMERO || fallbackHeader?.REVT_NUMERO || fallbackHeader?.FACT_NUMERO || idDoc).trim();
+        if ((!rawRows || rawRows.length === 0 || !rawRows[0]) && !fallbackHeader) {
+            throw new Error(`No se encontraron datos para imprimir el documento #${idDoc}`);
+        }
+
+        const first = (rawRows && rawRows.length > 0 && rawRows[0]) ? rawRows[0] : {};
+
+        const pref = String(first.PREF || fallbackHeader?.PREF_PRE || fallbackHeader?.DINW_PREF || (isFactura ? 'FAC' : 'REM')).trim();
+        const num = String(first.NUMERO || fallbackHeader?.REVT_NUMERO || fallbackHeader?.FACT_NUMERO || fallbackHeader?.DINW_NUMERO || idDoc).trim();
         const numeroDoc = `${pref}-${num}`;
 
         // Fechas y horas
-        const rawFecha = first.FECHA || fallbackHeader?.REVT_FECHA || fallbackHeader?.FACT_FECHA;
+        const rawFecha = first.FECHA || fallbackHeader?.REVT_FECHA || fallbackHeader?.FACT_FECHA || fallbackHeader?.DINW_FECHA;
         let fechaTexto = '';
         if (rawFecha) {
             const d = new Date(rawFecha);
@@ -1439,14 +1505,14 @@ export class PedidoService {
             horaTexto = new Date().toLocaleTimeString('es-CO');
         }
 
-        const rawObs = first.OBS || fallbackHeader?.REVT_OBS || fallbackHeader?.FACT_OBS || fallbackHeader?.REVT_CONC;
+        const rawObs = first.OBS || fallbackHeader?.REVT_OBS || fallbackHeader?.FACT_OBS || fallbackHeader?.DINW_OBS || fallbackHeader?.REVT_CONC;
         const obsBuffer = rawObs ? (Buffer.isBuffer(rawObs) ? rawObs.toString('utf8') : String(rawObs)) : '';
         const matchHab = obsBuffer.match(/Habitaci[oó]n\s+(\w+)/i) || (first.REFITEM ? String(first.REFITEM).match(/HAB-(\w+)/i) : null);
         const habitacionNumero = matchHab ? matchHab[1] : '';
 
         const formaPagoStr = String(first.FORMAP || first.FORMAPAGO1 || 'EFECTIVO').trim();
         const huespedNombre = first.NOMCLIENTE || first.NOMTERCERO || fallbackHeader?.REVT_NOMTER || fallbackHeader?.FACT_NOMCLIENTE || 'Huésped General';
-        const docNit = first.NIT || fallbackHeader?.TERC_NIT || '';
+        const docNit = first.NIT || fallbackHeader?.TERC_NIT || fallbackHeader?.DINW_NIT || '';
 
         // Mapear los ítems
         let items: any[] = [];
@@ -1470,6 +1536,29 @@ export class PedidoService {
                 }
             } catch (facDetErr: any) {
                 console.warn('Aviso consultando FACTURAS_DETALLE para impresion:', facDetErr.message);
+            }
+
+            if (items.length === 0) {
+                try {
+                    const dinwDets = await db(tables.DOC_INVENTARIO_DET_WEB)
+                        .where({ DINW_ID: idDoc, DIWD_ANULADO: 'N' })
+                        .orderBy('DIWD_ITEM', 'asc');
+                    if (dinwDets && dinwDets.length > 0) {
+                        items = dinwDets.map((d: any) => ({
+                            item: parseInt(String(d.DIWD_ITEM || '1'), 10),
+                            articulo: String(d.DIWD_ARTICULO || '').trim(),
+                            descripcion: String(d.DIWD_DESCART || d.DIWD_ARTICULO || 'Producto / Hospedaje').trim(),
+                            referencia: String(d.DIWD_REF || '').trim(),
+                            cantidad: parseFloat(String(d.DIWD_CANT || '1')),
+                            precioUnitario: parseFloat(String(d.DIWD_COSTO || d.DIWD_PRUNIT || '0')),
+                            ivaPorc: parseFloat(String(d.DIWD_IVAPORC || '0')),
+                            ivaMonto: parseFloat(String(d.DIWD_IVAMONTO || '0')),
+                            total: parseFloat(String(d.DIWD_TOTAL || '0'))
+                        }));
+                    }
+                } catch (dinwDetErr: any) {
+                    console.warn('Aviso consultando DOC_INVENTARIO_DET_WEB para impresion:', dinwDetErr.message);
+                }
             }
         }
 
@@ -1932,11 +2021,11 @@ export class PedidoService {
                     console.warn('Aviso actualizando encabezado de FACTURAS (multiples):', factHeaderErr.message);
                 }
 
-                // Sincronizar FADE_DTOPORC, FADE_DTOMONTO, FADE_TOTAL en FACTURAS_DETALLE
+                // Sincronizar FADE_DTOPORC, FADE_DTOMONTO, FADE_TOTAL, FADE_OBS en FACTURAS_DETALLE
                 try {
                     const sourceDets = await db(tables.DOC_INVENTARIO_DET_WEB)
                         .where({ DINW_ID: masterDinwId, DIWD_ANULADO: 'N' })
-                        .select('DIWD_ITEM', 'DIWD_DTOPORC', 'DIWD_DTOMONTO', 'DIWD_TOTAL', 'DIWD_IVAMONTO', 'DIWD_IVAPORC', 'DIWD_TIVA', 'DIWD_DESCART');
+                        .select('DIWD_ITEM', 'DIWD_OBS', 'DIWD_DTOPORC', 'DIWD_DTOMONTO', 'DIWD_TOTAL', 'DIWD_IVAMONTO', 'DIWD_IVAPORC', 'DIWD_TIVA', 'DIWD_DESCART');
                     for (const sd of sourceDets) {
                         const dtoporc = Number(sd.DIWD_DTOPORC || 0);
                         const dtomonto = Number(sd.DIWD_DTOMONTO || 0);
@@ -1946,18 +2035,23 @@ export class PedidoService {
                         const tiva = Number(sd.DIWD_TIVA || 0);
                         const baseItem = Math.round((totalItem - ivaMonto) * 100) / 100;
 
+                        const updateObj: any = {
+                            FADE_DESC: sd.DIWD_DESCART ? String(sd.DIWD_DESCART).trim() : undefined,
+                            FADE_DTOPORC: dtoporc,
+                            FADE_DTOMONTO: dtomonto,
+                            FADE_IVAPORC: ivaPorc,
+                            FADE_TIVA: tiva,
+                            FADE_TOTAL: totalItem,
+                            FADE_IVAMONTO: ivaMonto,
+                            FADE_BASE: baseItem
+                        };
+                        if (sd.DIWD_OBS && String(sd.DIWD_OBS).trim()) {
+                            updateObj.FADE_OBS = sanitizeText(String(sd.DIWD_OBS).trim());
+                        }
+
                         await db('FACTURAS_DETALLE')
                             .where({ FACT_ID: idGenerado, FADE_ITEM: sd.DIWD_ITEM })
-                            .update({
-                                FADE_DESC: sd.DIWD_DESCART ? String(sd.DIWD_DESCART).trim() : undefined,
-                                FADE_DTOPORC: dtoporc,
-                                FADE_DTOMONTO: dtomonto,
-                                FADE_IVAPORC: ivaPorc,
-                                FADE_TIVA: tiva,
-                                FADE_TOTAL: totalItem,
-                                FADE_IVAMONTO: ivaMonto,
-                                FADE_BASE: baseItem
-                            });
+                            .update(updateObj);
                     }
                 } catch (dtoErr: any) {}
                 // Sincronización de pagos realizada automáticamente por GRABE_DOCUMENTO_INV_WEB mediante DOC_INVENTARIO_PAGO_WEB

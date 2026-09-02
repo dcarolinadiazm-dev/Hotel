@@ -53,6 +53,7 @@ export interface MovimientoReserva {
   dinwId?: number;
   huesped?: string;
   documento?: string;
+  observaciones?: string;
   fechaReserva?: string;
   fechaSalida?: string;
   precioNoche?: number;
@@ -217,6 +218,22 @@ export const ModalHabitacion = ({
     return `${y}-${m}-${day}T${h}:${min}`;
   };
 
+  // Helper para obtener fecha de salida por defecto con hora 13:00 (1:00 PM)
+  const getDefaultFechaSalida = (baseDateStr?: string, daysAhead = 1): string => {
+    let d: Date;
+    if (baseDateStr && baseDateStr.trim()) {
+      const parsed = new Date(baseDateStr);
+      d = !isNaN(parsed.getTime()) ? parsed : new Date();
+    } else {
+      d = new Date();
+    }
+    d.setDate(d.getDate() + daysAhead);
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}T13:00`;
+  };
+
   // Helper para convertir cualquier formato de fecha a 'YYYY-MM-DDTHH:mm' para input datetime-local
   const toDatetimeLocal = (val?: string): string => {
     if (!val || val.trim() === '') return '';
@@ -270,8 +287,9 @@ export const ModalHabitacion = ({
     setPeweId(m.dinwId);
     setHuesped(m.huesped || '');
     setDocumento(m.documento || '');
+    setObservaciones(m.observaciones || m.huesped || '');
     const fResLocal = toDatetimeLocal(m.fechaReserva) || getCurrentDatetimeLocal(0);
-    const fSalLocal = toDatetimeLocal(m.fechaSalida) || getCurrentDatetimeLocal(24);
+    const fSalLocal = toDatetimeLocal(m.fechaSalida) || getDefaultFechaSalida(m.fechaReserva, 1);
     setFechaReserva(fResLocal);
     setFechaSalida(fSalLocal);
     setPrecioNoche(m.precioNoche || defaultRoomPrecio || 0);
@@ -280,7 +298,11 @@ export const ModalHabitacion = ({
       setRoomLiprCod(m.liprCod);
     }
     setItems(m.items || []);
-    setTotalAbonos(m.totalAbonos || 0);
+    if (m.totalAbonos !== undefined && m.totalAbonos !== null) {
+      setTotalAbonos(m.totalAbonos);
+    } else {
+      refreshAbonosTotal(m.documento);
+    }
 
     // Si la reserva inicia en fecha futura (> hoy), el estado debe ser 'Reservada'
     // Si inicia hoy o en el pasado, el estado es 'Ocupada'
@@ -302,13 +324,34 @@ export const ModalHabitacion = ({
     setPeweId(undefined);
     setHuesped('');
     setDocumento('');
+    setObservaciones('');
     setFechaReserva(getCurrentDatetimeLocal(0));
-    setFechaSalida(getCurrentDatetimeLocal(24));
+    setFechaSalida(getDefaultFechaSalida(undefined, 1));
     setPrecioNoche(defaultRoomPrecio || 0);
     setDescuentoNoche(0);
     setItems([]);
     setTotalAbonos(0);
     setEstado('Reservada');
+  };
+
+  const refreshAbonosTotal = (docNit?: string) => {
+    const token = localStorage.getItem('hotel_token');
+    const nitParam = docNit !== undefined ? docNit : documento;
+    const query = nitParam && nitParam.trim() ? `?nit=${encodeURIComponent(nitParam.trim())}` : '';
+
+    return fetch(`/api/abonos/habitacion/${habitacion.id}${query}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        const val = data.totalAbonado || 0;
+        setTotalAbonos(val);
+        return val;
+      })
+      .catch((err) => {
+        console.error('Error al cargar total de abonos:', err);
+        return 0;
+      });
   };
 
   const fetchRoomDetails = (preferredMovimId?: number) => {
@@ -343,14 +386,7 @@ export const ModalHabitacion = ({
         return data;
       });
 
-    const fetchAbonosTotal = fetch(`/api/abonos/habitacion/${habitacion.id}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-      .then((res) => res.json())
-      .then((data) => {
-        setTotalAbonos(data.totalAbonado || 0);
-      })
-      .catch((err) => console.error('Error al cargar total de abonos:', err));
+    const fetchAbonosTotal = refreshAbonosTotal();
 
     return Promise.all([fetchHab, fetchAbonosTotal]);
   };
@@ -460,12 +496,16 @@ export const ModalHabitacion = ({
     if (!selectedNit) {
       setDocumento('');
       setHuesped('');
+      setObservaciones('');
+      refreshAbonosTotal('');
       return;
     }
     const found = terceros.find((t) => t.nit === selectedNit);
     if (found) {
       setDocumento(found.nit);
       setHuesped(found.nombre);
+      setObservaciones(found.nombre);
+      refreshAbonosTotal(found.nit);
     }
   };
 
@@ -591,22 +631,20 @@ export const ModalHabitacion = ({
     });
   }, [articulos, searchArticuloText]);
 
-  const seleccionarArticulo = (found: ArticuloCatalogo) => {
+  const seleccionarArticulo = (found: ArticuloCatalogo, overrideLiprCod?: number) => {
     setSelectedArticuloCod(found.codigo);
     setCustomDescripcion(found.descripcion);
     setCustomUnidad(found.unidad || 'UND');
 
-    let precioFinal = found.precio;
-    if (found.precios && found.precios.length > 0) {
-      const precioEnLista = found.precios.find((p) => p.liprCod === selectedLiprCod);
-      if (precioEnLista) {
-        precioFinal = precioEnLista.precio;
-      } else {
-        precioFinal = found.precios[0].precio;
-        setSelectedLiprCod(found.precios[0].liprCod);
-      }
+    const activeLipr = overrideLiprCod !== undefined ? overrideLiprCod : selectedLiprCod;
+    const precioObj = found.precios?.find((p) => p.liprCod === activeLipr);
+
+    if (precioObj && precioObj.precio !== undefined) {
+      setCustomPrecio(precioObj.precio);
+    } else {
+      // Si el artículo NO tiene precio asignado en esta lista de precios
+      setCustomPrecio(0);
     }
-    setCustomPrecio(precioFinal);
   };
 
   const handleBarcodeScanOrSearch = (query: string) => {
@@ -625,9 +663,11 @@ export const ModalHabitacion = ({
 
     if (match) {
       seleccionarArticulo(match);
+      const pObj = match.precios?.find((p) => p.liprCod === selectedLiprCod);
+      const pTxt = pObj && pObj.precio !== undefined ? formatMoney(pObj.precio) : 'Sin precio asignado';
       setActionFeedback({
         type: 'success',
-        message: `🔍 Producto seleccionado: ${match.descripcion} (${formatMoney(match.precio)})`,
+        message: `🔍 Producto seleccionado: ${match.descripcion} (${pTxt})`,
       });
       setSearchArticuloText('');
     } else if (filteredArticulos.length > 1) {
@@ -690,11 +730,8 @@ export const ModalHabitacion = ({
     const targetCod = (selectedArticuloCod || '').trim();
     if (targetCod) {
       const found = articulos.find((a) => a.codigo.trim() === targetCod);
-      if (found && found.precios && found.precios.length > 0) {
-        const precioEnLista = found.precios.find((p) => p.liprCod === lipr);
-        if (precioEnLista) {
-          setCustomPrecio(precioEnLista.precio);
-        }
+      if (found) {
+        seleccionarArticulo(found, lipr);
       }
     }
   };
@@ -703,6 +740,15 @@ export const ModalHabitacion = ({
     e.preventDefault();
     if (!customDescripcion.trim()) {
       alert('Por favor selecciona o escribe la descripción del producto');
+      return;
+    }
+
+    const precioNum = Number(customPrecio) || 0;
+    if (precioNum <= 0) {
+      setActionFeedback({
+        type: 'error',
+        message: '⚠️ No se puede agregar al carrito un producto con precio en cero ($0). Selecciona un artículo con precio o asigna un valor mayor a cero.',
+      });
       return;
     }
 
@@ -742,6 +788,15 @@ export const ModalHabitacion = ({
   };
 
   const handleUpdateCantidad = async (consumoId: number, nuevaCantidad: number) => {
+    const targetItem = items.find((it) => it.id === consumoId);
+    if (targetItem) {
+      const isRoomStayItem = targetItem.id === 1 || targetItem.articulo.toLowerCase().includes('hospedaje') || targetItem.articulo.toLowerCase().includes('habitacion');
+      if (isRoomStayItem) {
+        alert('⚠️ La cantidad de días/noches del hospedaje de la habitación no se puede modificar manualmente en el carrito. Se calcula automáticamente según la Fecha de Entrada y Salida.');
+        return;
+      }
+    }
+
     const token = localStorage.getItem('hotel_token');
     try {
       const res = await fetch(`/api/habitaciones/${habitacion.id}/consumos/${consumoId}`, {
@@ -762,6 +817,15 @@ export const ModalHabitacion = ({
   };
 
   const handleDeleteItem = async (consumoId: number) => {
+    const targetItem = items.find((it) => it.id === consumoId);
+    if (targetItem) {
+      const isRoomStayItem = targetItem.id === 1 || targetItem.articulo.toLowerCase().includes('hospedaje') || targetItem.articulo.toLowerCase().includes('habitacion');
+      if (isRoomStayItem) {
+        alert('⚠️ El ítem principal de hospedaje de la habitación no se puede eliminar del carrito.');
+        return;
+      }
+    }
+
     const token = localStorage.getItem('hotel_token');
     try {
       const res = await fetch(`/api/habitaciones/${habitacion.id}/consumos/${consumoId}`, {
@@ -848,7 +912,7 @@ export const ModalHabitacion = ({
         setHuesped('');
         setDocumento('');
         setFechaReserva(getCurrentDatetimeLocal(0));
-        setFechaSalida(getCurrentDatetimeLocal(24));
+        setFechaSalida(getDefaultFechaSalida(undefined, 1));
         setPeweId(undefined);
         setItems([]);
         await fetchRoomDetails();
@@ -1186,9 +1250,10 @@ export const ModalHabitacion = ({
                   <div className="modal-form-group flex-1">
                     <label className="modal-form-label">Estado de la habitación:</label>
                     <select
-                      className="modal-form-select status-select"
+                      className="modal-form-select status-select readonly-input-field"
                       value={estado}
-                      onChange={(e) => setEstado(e.target.value)}
+                      disabled
+                      title="El estado de la habitación no se modifica manualmente en la reserva. Se calcula automáticamente según las fechas."
                     >
                       <option value="Disponible">🟩 Disponible</option>
                       <option value="Reservada">🟧 Reservada</option>
@@ -1438,9 +1503,24 @@ export const ModalHabitacion = ({
                   )}
 
                   {huesped && (
-                    <span className="form-hint-text">
-                      👤 <strong>Cliente activo:</strong> {huesped} · NIT/C.C: {documento || 'Sin documento'}
-                    </span>
+                    <div style={{ marginTop: '8px', marginBottom: '8px', background: '#f8fafc', padding: '10px 12px', borderRadius: '8px', border: '1px solid #cbd5e1' }}>
+                      <span className="form-hint-text" style={{ display: 'block', marginBottom: '8px', fontSize: '12px', color: '#1e293b' }}>
+                        👤 <strong>Cliente activo:</strong> {huesped} · NIT/C.C: {documento || 'Sin documento'}
+                      </span>
+                      <div className="modal-form-group" style={{ marginBottom: 0 }}>
+                        <label className="modal-form-label" style={{ fontWeight: 700, color: '#0f172a', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                          <span>🪪 Sub-Huésped / Ocupante (Observación):</span>
+                        </label>
+                        <input
+                          type="text"
+                          className="modal-form-input"
+                          value={observaciones}
+                          onChange={(e) => setObservaciones(e.target.value)}
+                          placeholder="Nombre de la persona que se hospeda..."
+                          style={{ background: '#ffffff', borderColor: '#94a3b8' }}
+                        />
+                      </div>
+                    </div>
                   )}
                 </div>
 
@@ -1474,17 +1554,7 @@ export const ModalHabitacion = ({
                         const val = e.target.value;
                         setFechaReserva(val);
                         if (val) {
-                          const inDate = new Date(val);
-                          if (!isNaN(inDate.getTime())) {
-                            // Aumentar automáticamente 1 día (24 horas) para la fecha de salida por defecto
-                            const outDate = new Date(inDate.getTime() + 24 * 60 * 60 * 1000);
-                            const outY = outDate.getFullYear();
-                            const outM = String(outDate.getMonth() + 1).padStart(2, '0');
-                            const outD = String(outDate.getDate()).padStart(2, '0');
-                            const outH = String(outDate.getHours()).padStart(2, '0');
-                            const outMin = String(outDate.getMinutes()).padStart(2, '0');
-                            setFechaSalida(`${outY}-${outM}-${outD}T${outH}:${outMin}`);
-                          }
+                          setFechaSalida(getDefaultFechaSalida(val, 1));
 
                           const now = new Date();
                           const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
@@ -1521,7 +1591,7 @@ export const ModalHabitacion = ({
                   </div>
                 </div>
 
-                {/* 4. Lista de Precios, Precio por noche & Descuento ($) */}
+                {/* 4. Lista de Precios, Precio por noche & Descuento Total ($) */}
                 <div className="modal-form-row">
                   <div className="modal-form-group flex-1">
                     <label className="modal-form-label">Lista de Precios:</label>
@@ -1556,12 +1626,21 @@ export const ModalHabitacion = ({
 
                   <div className="modal-form-group flex-1">
                     <label className="modal-form-label">
-                      Descuento ($):
-                      {Number(precioNoche || 0) > 0 && Number(descuentoNoche || 0) > 0 && (
-                        <span style={{ fontSize: '0.82rem', color: '#16a34a', fontWeight: 'bold', marginLeft: '6px' }}>
-                          ({Math.round(((Number(descuentoNoche) / Number(precioNoche)) * 100) * 100) / 100}%)
-                        </span>
-                      )}
+                      Descuento Total ($):
+                      {(() => {
+                        const dVal = calculateDiasEstadia(fechaReserva, fechaSalida);
+                        const subTotalBase = dVal * Number(precioNoche || 0);
+                        const dDesc = Number(descuentoNoche || 0);
+                        if (subTotalBase > 0 && dDesc > 0) {
+                          const pct = Math.round(((dDesc / subTotalBase) * 100) * 100) / 100;
+                          return (
+                            <span style={{ fontSize: '0.82rem', color: '#16a34a', fontWeight: 'bold', marginLeft: '6px' }}>
+                              ({pct}%)
+                            </span>
+                          );
+                        }
+                        return null;
+                      })()}
                     </label>
                     <input
                       type="text"
@@ -1587,7 +1666,26 @@ export const ModalHabitacion = ({
                     </div>
                     {Number(precioNoche || 0) > 0 && (
                       <span className="dias-estadia-subtotal">
-                        {calculateDiasEstadia(fechaReserva, fechaSalida)} x {formatMoney(Math.max(0, Number(precioNoche || 0) - Number(descuentoNoche || 0)))} = <strong>{formatMoney(calculateDiasEstadia(fechaReserva, fechaSalida) * Math.max(0, Number(precioNoche || 0) - Number(descuentoNoche || 0)))}</strong>
+                        {(() => {
+                          const dVal = calculateDiasEstadia(fechaReserva, fechaSalida);
+                          const pNoche = Number(precioNoche || 0);
+                          const subTotalBase = dVal * pNoche;
+                          const dDesc = Number(descuentoNoche || 0);
+                          const totalFinalEstadia = Math.max(0, subTotalBase - dDesc);
+
+                          if (dDesc > 0) {
+                            return (
+                              <>
+                                {dVal} x {formatMoney(pNoche)} = {formatMoney(subTotalBase)} - {formatMoney(dDesc)} (desc.) = <strong>{formatMoney(totalFinalEstadia)}</strong>
+                              </>
+                            );
+                          }
+                          return (
+                            <>
+                              {dVal} x {formatMoney(pNoche)} = <strong>{formatMoney(totalFinalEstadia)}</strong>
+                            </>
+                          );
+                        })()}
                       </span>
                     )}
                   </div>
@@ -1603,18 +1701,6 @@ export const ModalHabitacion = ({
                     disabled
                     readOnly
                     title="Las características y tipo se configuran desde la edición de la habitación"
-                  />
-                </div>
-
-                {/* 6. Observaciones */}
-                <div className="modal-form-group">
-                  <label className="modal-form-label">Observaciones:</label>
-                  <textarea
-                    className="modal-form-textarea"
-                    rows={2}
-                    value={observaciones}
-                    onChange={(e) => setObservaciones(e.target.value)}
-                    placeholder="Notas especiales de la reserva o habitación..."
                   />
                 </div>
 
@@ -1689,11 +1775,15 @@ export const ModalHabitacion = ({
                             onChange={handleArticuloSelect}
                           >
                             <option value="">-- Seleccione un artículo o ingrese manual --</option>
-                            {filteredArticulos.map((a) => (
-                              <option key={a.codigo} value={a.codigo}>
-                                {a.descripcion} ({formatMoney(a.precio)}) - {a.unidad} {a.ivaPorc ? `[IVA ${a.ivaPorc}%]` : ''}
-                              </option>
-                            ))}
+                            {filteredArticulos.map((a) => {
+                              const pObj = a.precios?.find((p) => p.liprCod === selectedLiprCod);
+                              const precioTxt = pObj && pObj.precio !== undefined ? formatMoney(pObj.precio) : 'Sin precio en esta lista';
+                              return (
+                                <option key={a.codigo} value={a.codigo}>
+                                  {a.descripcion} ({precioTxt}) - {a.unidad} {a.ivaPorc ? `[IVA ${a.ivaPorc}%]` : ''}
+                                </option>
+                              );
+                            })}
                           </select>
                         </div>
 
@@ -1764,47 +1854,59 @@ export const ModalHabitacion = ({
                         <p className="modal-cart-empty">El carrito de esta habitación no tiene productos aún.</p>
                       ) : (
                         <div className="modal-cart-items-list">
-                          {items.map((item) => (
-                            <div key={item.id} className="modal-cart-item-row-interactive">
-                              <div className="item-info">
-                                <span className="item-title">
-                                  <span className="item-number-badge">#{item.id}</span> {item.articulo}
-                                </span>
-                                <span className="item-unit-price">{formatMoney(item.precio)} c/u</span>
-                              </div>
+                          {items.map((item) => {
+                            const isRoomStayItem = item.id === 1 || item.articulo.toLowerCase().includes('hospedaje') || item.articulo.toLowerCase().includes('habitacion');
 
-                              <div className="item-actions-box">
-                                <div className="modal-stepper">
-                                  <button
-                                    type="button"
-                                    className="stepper-btn-mini"
-                                    onClick={() => handleUpdateCantidad(item.id, item.cantidad - 1)}
-                                  >
-                                    -
-                                  </button>
-                                  <span className="stepper-count">{item.cantidad}</span>
-                                  <button
-                                    type="button"
-                                    className="stepper-btn-mini"
-                                    onClick={() => handleUpdateCantidad(item.id, item.cantidad + 1)}
-                                  >
-                                    +
-                                  </button>
+                            return (
+                              <div key={item.id} className="modal-cart-item-row-interactive">
+                                <div className="item-info">
+                                  <span className="item-title">
+                                    <span className="item-number-badge">#{item.id}</span> {item.articulo}
+                                  </span>
+                                  <span className="item-unit-price">{formatMoney(item.precio)} c/u</span>
                                 </div>
 
-                                <span className="item-subtotal">{formatMoney(item.subtotal)}</span>
+                                <div className="item-actions-box">
+                                  {isRoomStayItem ? (
+                                    <div className="modal-stepper readonly-stepper" title="La cantidad de noches de la habitación se calcula automáticamente según las fechas de reserva">
+                                      <span className="stepper-count-readonly">{item.cantidad} {item.cantidad === 1 ? 'noche' : 'noches'}</span>
+                                    </div>
+                                  ) : (
+                                    <div className="modal-stepper">
+                                      <button
+                                        type="button"
+                                        className="stepper-btn-mini"
+                                        onClick={() => handleUpdateCantidad(item.id, item.cantidad - 1)}
+                                      >
+                                        -
+                                      </button>
+                                      <span className="stepper-count">{item.cantidad}</span>
+                                      <button
+                                        type="button"
+                                        className="stepper-btn-mini"
+                                        onClick={() => handleUpdateCantidad(item.id, item.cantidad + 1)}
+                                      >
+                                        +
+                                      </button>
+                                    </div>
+                                  )}
 
-                                <button
-                                  type="button"
-                                  className="btn-remove-mini"
-                                  onClick={() => handleDeleteItem(item.id)}
-                                  title="Eliminar"
-                                >
-                                  ✕
-                                </button>
+                                  <span className="item-subtotal">{formatMoney(item.subtotal)}</span>
+
+                                  {!isRoomStayItem && (
+                                    <button
+                                      type="button"
+                                      className="btn-remove-mini"
+                                      onClick={() => handleDeleteItem(item.id)}
+                                      title="Eliminar producto"
+                                    >
+                                      ✕
+                                    </button>
+                                  )}
+                                </div>
                               </div>
-                            </div>
-                          ))}
+                            );
+                          })}
                         </div>
                       )}
                     </div>
@@ -2116,6 +2218,7 @@ export const ModalHabitacion = ({
           documento={documento}
           onClose={() => setShowModalAbonos(false)}
           onAbonoRegistrado={() => {
+            refreshAbonosTotal(documento);
             fetchRoomDetails();
             if (onHabitacionUpdated) onHabitacionUpdated();
           }}

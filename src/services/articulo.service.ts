@@ -42,14 +42,7 @@ export class ArticuloService {
             console.warn('Aviso consultando PRECIOS_ARTICULO:', e.message);
         }
 
-        // Fallback a ARTICULO.ARTI_PRECIO
-        try {
-            const artRow = await db(tables.ARTICULO).where('ARTI_COD', artiCod).first();
-            if (artRow && artRow.ARTI_PRECIO !== undefined && artRow.ARTI_PRECIO !== null) {
-                return parseFloat(String(artRow.ARTI_PRECIO));
-            }
-        } catch (e) {}
-
+        // No retornar el costo (ARTI_PRECIO). Si no tiene precio en la lista, retorna 0.
         return 0;
     }
 
@@ -106,7 +99,7 @@ export class ArticuloService {
             .select(
                 db.raw(`TRIM(${tables.ARTICULO}.ARTI_COD) as "codigo"`),
                 db.raw(`TRIM(${tables.ARTICULO}.ARTI_DES) as "descripcion"`),
-                db.raw(`COALESCE(${tables.PRECIOS_ARTICULO}.PRAR_FIJO, ${tables.ARTICULO}.ARTI_PRECIO, 0) as "precio"`),
+                db.raw(`COALESCE(${tables.PRECIOS_ARTICULO}.PRAR_FIJO, 0) as "precio"`),
                 db.raw(`TRIM(${tables.ARTICULO}.ARTI_UNIDAD) as "unidad"`),
                 db.raw(`TRIM(${tables.ARTICULO}.GRIN_COD) as "grinCod"`),
                 `${tables.ARTICULO}.TAIV_COD as taivCod`,
@@ -194,9 +187,7 @@ export class ArticuloService {
                 taivCod: parseInt(String(taivVal || '0'), 10) || 0,
                 ivaPorc: parseFloat(String(ivaPorcVal || '0')) || 0,
                 codigosBarra,
-                precios: preciosArticulo.length > 0 ? preciosArticulo : [
-                    { liprCod: defaultLipr, listaNombre: 'DETAL', precio: parseFloat(r.precio || '0'), esPredeterminada: true }
-                ]
+                precios: preciosArticulo
             };
         });
     }

@@ -106,6 +106,11 @@ export class PedidoController {
             return res.status(400).json({ error: 'habitacionId y datos del item son requeridos' });
         }
 
+        const precioVal = parseFloat(String(item.precio || 0));
+        if (isNaN(precioVal) || precioVal <= 0) {
+            return res.status(400).json({ error: 'No se puede ingresar ni guardar un producto con precio en cero ($0).' });
+        }
+
         try {
             const resultado = await PedidoService.agregarConsumo(String(habitacionId), item);
             res.json(resultado);
@@ -117,11 +122,12 @@ export class PedidoController {
 
     // GET /api/reportes/pedidos
     static async getReporte(req: Request, res: Response) {
-        const { fechaDesde, fechaHasta } = req.query;
+        const { fechaDesde, fechaHasta, subHuesped } = req.query;
         try {
             const reporte = await PedidoService.getReportePedidos(
                 fechaDesde ? String(fechaDesde) : undefined,
-                fechaHasta ? String(fechaHasta) : undefined
+                fechaHasta ? String(fechaHasta) : undefined,
+                subHuesped ? String(subHuesped) : undefined
             );
             res.json(reporte);
         } catch (error: any) {

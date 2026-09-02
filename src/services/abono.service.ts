@@ -49,14 +49,16 @@ export class AbonoService {
         // 1. Buscar si hay movimiento activo en HABITACION_MOVIM
         const activeMov = await db(tables.HABITACION_MOVIM)
             .where('ID_HABITACION', idHabitacion)
-            .where('ESTADO', 'Activo')
+            .andWhere(function () {
+                this.where('ESTADO', 'Activo').orWhereNull('ESTADO');
+            })
             .orderBy('ID_MOVIM', 'desc')
             .first();
 
         let rows: any[] = [];
 
         if (activeMov && activeMov.ID_MOVIM) {
-            // Filtrar exclusivamente los anticipos vinculados a esta reserva específica en HABITACION_MOVIM_ANTICIPOS
+            // Filtrar EXCLUSIVAMENTE los anticipos vinculados a ESTA reserva específica en HABITACION_MOVIM_ANTICIPOS
             rows = await db(tables.HABITACION_MOVIM_ANTICIPOS)
                 .join(tables.ANTICIPOS_CLIENTE, `${tables.HABITACION_MOVIM_ANTICIPOS}.ANCL_ID`, `${tables.ANTICIPOS_CLIENTE}.ANCL_ID`)
                 .leftJoin(tables.RECIBOS_CAJA, `${tables.ANTICIPOS_CLIENTE}.RECA_ID`, `${tables.RECIBOS_CAJA}.RECA_ID`)
@@ -95,12 +97,18 @@ export class AbonoService {
                 )
                 .orderBy(`${tables.HABITACION_MOVIM_ANTICIPOS}.ITEM_ID`, 'asc');
         } else if (tercNit && String(tercNit).trim().length > 0) {
-            // Fallback por documento del cliente si no hay ID_MOVIM activo
+            // Si aún no se ha guardado el movimiento de reserva, buscar anticipos por NIT de la habitación actual
+            const habNum = String(idHabitacion).trim();
             rows = await db(tables.ANTICIPOS_CLIENTE)
                 .leftJoin(tables.RECIBOS_CAJA, `${tables.ANTICIPOS_CLIENTE}.RECA_ID`, `${tables.RECIBOS_CAJA}.RECA_ID`)
                 .leftJoin(tables.RECIBOS_CAJA_PAGO, `${tables.RECIBOS_CAJA}.RECA_ID`, `${tables.RECIBOS_CAJA_PAGO}.RECA_ID`)
                 .leftJoin(tables.FORMAS_PAGO, `${tables.RECIBOS_CAJA_PAGO}.FOPA_ID`, `${tables.FORMAS_PAGO}.FOPA_ID`)
                 .where(`${tables.ANTICIPOS_CLIENTE}.TERC_NIT`, String(tercNit).trim())
+                .andWhere(function () {
+                    this.where(`${tables.ANTICIPOS_CLIENTE}.ANCL_CONC`, 'like', `%HABITACION ${habNum}%`)
+                        .orWhere(`${tables.ANTICIPOS_CLIENTE}.ANCL_CONC`, 'like', `%HAB ${habNum}%`)
+                        .orWhere(`${tables.ANTICIPOS_CLIENTE}.ANCL_CONC`, 'like', `%HAB.${habNum}%`);
+                })
                 .andWhere(function () {
                     this.where(`${tables.ANTICIPOS_CLIENTE}.ANCL_ANULADO`, '!=', 'S')
                         .orWhereNull(`${tables.ANTICIPOS_CLIENTE}.ANCL_ANULADO`);
@@ -185,19 +193,12 @@ export class AbonoService {
         };
     }
 
-    // Obtener la suma de abonos no anulados para un movimiento o reserva
-    static async getTotalAbonos(idMovimOrDinw: number): Promise<number> {
+    // Obtener la suma de abonos no anulados para una habitación, movimiento o cliente
+    static async getTotalAbonos(idHabitacionOrMovim?: string | number, tercNit?: string): Promise<number> {
         try {
-            const row: any = await db(tables.HABITACION_MOVIM_ANTICIPOS)
-                .join(tables.ANTICIPOS_CLIENTE, `${tables.HABITACION_MOVIM_ANTICIPOS}.ANCL_ID`, `${tables.ANTICIPOS_CLIENTE}.ANCL_ID`)
-                .where(`${tables.HABITACION_MOVIM_ANTICIPOS}.ID_MOVIM`, idMovimOrDinw)
-                .andWhere(function () {
-                    this.where(`${tables.ANTICIPOS_CLIENTE}.ANCL_ANULADO`, '!=', 'S')
-                        .orWhereNull(`${tables.ANTICIPOS_CLIENTE}.ANCL_ANULADO`);
-                })
-                .select(db.raw(`SUM(COALESCE(${tables.ANTICIPOS_CLIENTE}.ANCL_BASE, 0)) as "TOTAL"`))
-                .first();
-            return parseFloat(String(row?.TOTAL || '0'));
+            const habIdStr = idHabitacionOrMovim !== undefined ? String(idHabitacionOrMovim) : '';
+            const res = await this.getAbonos(habIdStr, tercNit);
+            return res.totalAbonado || 0;
         } catch (e) {
             return 0;
         }

@@ -678,7 +678,13 @@ export const Habitaciones = ({
                       <div
                         key={hab.id}
                         className={`room-card ${statusClass}-card ${isSelected ? 'room-card-selected' : ''}`}
-                        onClick={() => onOpenModal(hab)}
+                        onClick={() => {
+                          if (hab.estado === 'Inhabilitada') {
+                            alert(`⚠️ La Habitación ${hab.numero} está INHABILITADA.\n\nNo es posible ingresar a registrar reservas ni consumos en esta habitación.\n\nPara reactivarla, haz clic en el botón Editar (✏️) de esta habitación y cambia su estado a 'Disponible'.`);
+                            return;
+                          }
+                          onOpenModal(hab);
+                        }}
                       >
                         <div className="room-card-top-bar">
                           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
