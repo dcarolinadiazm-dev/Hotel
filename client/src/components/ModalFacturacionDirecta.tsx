@@ -153,7 +153,6 @@ export const ModalFacturacionDirecta: React.FC<ModalFacturacionDirectaProps> = (
   const [customDescripcion, setCustomDescripcion] = useState<string>('');
   const [customCantidad, setCustomCantidad] = useState<number>(1);
   const [customPrecio, setCustomPrecio] = useState<number>(0);
-  const [customDescuento, setCustomDescuento] = useState<number>(0);
   const [customUnidad, setCustomUnidad] = useState<string>('UNIDAD');
   const [customIvaPorc, setCustomIvaPorc] = useState<number>(19);
   const [customTaivCod, setCustomTaivCod] = useState<number>(6);
@@ -303,7 +302,6 @@ export const ModalFacturacionDirecta: React.FC<ModalFacturacionDirectaProps> = (
       if (precioEnLista) precioFinal = precioEnLista.precio;
     }
     setCustomPrecio(precioFinal);
-    setCustomDescuento(0);
     setCustomCantidad(1);
   };
 
@@ -347,7 +345,6 @@ export const ModalFacturacionDirecta: React.FC<ModalFacturacionDirectaProps> = (
     } else {
       setCustomDescripcion('');
       setCustomPrecio(0);
-      setCustomDescuento(0);
       setCustomCantidad(1);
       setCustomIvaPorc(0);
       setCustomTaivCod(0);
@@ -368,17 +365,14 @@ export const ModalFacturacionDirecta: React.FC<ModalFacturacionDirectaProps> = (
       return;
     }
 
-    const dto = Math.max(0, Number(customDescuento) || 0);
-    const dtoPorc = customPrecio > 0 ? (dto / customPrecio) * 100 : 0;
-
     const newItem: LineaCarrito = {
       id: `${Date.now()}-${Math.random().toString(36).substring(2, 5)}`,
       articulo: selectedArticuloCod || 'GEN-01',
       descripcion: customDescripcion.trim() || selectedArticuloCod,
       cantidad: customCantidad,
       precio: customPrecio,
-      descuento: dto,
-      dtoPorc,
+      descuento: 0,
+      dtoPorc: 0,
       ivaPorc: customIvaPorc,
       tiva: customTaivCod,
       lista: selectedLiprCod,
@@ -389,7 +383,6 @@ export const ModalFacturacionDirecta: React.FC<ModalFacturacionDirectaProps> = (
     setSelectedArticuloCod('');
     setCustomDescripcion('');
     setCustomPrecio(0);
-    setCustomDescuento(0);
     setCustomCantidad(1);
   };
 
@@ -999,18 +992,6 @@ export const ModalFacturacionDirecta: React.FC<ModalFacturacionDirectaProps> = (
                       </div>
 
                       <div className="modal-form-group flex-1">
-                        <label className="modal-form-label">Descuento Unit. ($):</label>
-                        <input
-                          type="number"
-                          className="modal-form-input"
-                          value={customDescuento || ''}
-                          onChange={(e) => setCustomDescuento(parseFloat(e.target.value) || 0)}
-                          placeholder="0"
-                          min="0"
-                        />
-                      </div>
-
-                      <div className="modal-form-group flex-1">
                         <label className="modal-form-label">Cantidad:</label>
                         <input
                           type="number"
@@ -1076,8 +1057,7 @@ export const ModalFacturacionDirecta: React.FC<ModalFacturacionDirectaProps> = (
                         </div>
                       ) : (
                         cartItems.map((item, idx) => {
-                          const neto = Math.max(0, item.precio - item.descuento);
-                          const subtotal = neto * item.cantidad;
+                          const subtotal = item.precio * item.cantidad;
 
                           return (
                             <div key={item.id} className="modal-cart-item-row-interactive">
@@ -1087,11 +1067,6 @@ export const ModalFacturacionDirecta: React.FC<ModalFacturacionDirectaProps> = (
                                 </span>
                                 <span className="item-unit-price">
                                   {formatMoney(item.precio)} c/u
-                                  {item.descuento > 0 && (
-                                    <span style={{ color: '#16a34a', fontWeight: 'bold', marginLeft: '6px' }}>
-                                      (-{formatMoney(item.descuento)})
-                                    </span>
-                                  )}
                                 </span>
                               </div>
 
