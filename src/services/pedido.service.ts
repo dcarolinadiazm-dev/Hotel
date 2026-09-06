@@ -865,7 +865,7 @@ export class PedidoService {
 
         const mensajeExito = `Factura de Venta generada exitosamente con número ${numDocGenerado}`;
 
-        // Dejar la habitación en estado 'Disponible' y limpiar notas/observaciones
+        // Dejar la habitación en estado 'Disponible' y limpiar notas/observaciones.
         await db(tables.HABITACION)
             .where('ID_HABITACION', habitacionId)
             .update({
@@ -873,7 +873,7 @@ export class PedidoService {
                 NOTAS: ''
             });
 
-        // Marcar el movimiento en HABITACION_MOVIM como Facturado y asignar ID_DOC y TIPO = 31
+        // Marcar el movimiento en HABITACION_MOVIM como Facturado y asignar ID_DOC y TIPO = 31.
         try {
             const activeMov = await db(tables.HABITACION_MOVIM)
                 .where('ID_HABITACION', String(habitacionId))
@@ -1194,9 +1194,9 @@ export class PedidoService {
             spResult = await db.raw('SELECT * FROM GRABE_DOCUMENTO_INV_WEB(?, ?)', [31, dinwId]);
         } catch (fbErr: any) {
             console.error('Error ejecutando GRABE_DOCUMENTO_INV_WEB en facturarDirecto:', fbErr.message);
-            await db(tables.DOC_INVENTARIO_DET_WEB).where('DINW_ID', dinwId).del().catch(() => {});
-            await db('DOC_INVENTARIO_PAGO_WEB').where('DINW_ID', dinwId).del().catch(() => {});
-            await db(tables.DOC_INVENTARIO_WEB).where('DINW_ID', dinwId).del().catch(() => {});
+            await db(tables.DOC_INVENTARIO_DET_WEB).where('DINW_ID', dinwId).del().catch(() => { });
+            await db('DOC_INVENTARIO_PAGO_WEB').where('DINW_ID', dinwId).del().catch(() => { });
+            await db(tables.DOC_INVENTARIO_WEB).where('DINW_ID', dinwId).del().catch(() => { });
             throw new Error(`Error en base de datos al facturar: ${fbErr.message}`);
         }
 
