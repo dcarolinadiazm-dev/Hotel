@@ -23,8 +23,10 @@ export const db = knex({
     client: knexFirebirdDialect as any,
     connection: dbOptions,
     pool: {
-        min: 2,
-        max: 10
+        min: 0,
+        max: 1,
+        acquireTimeoutMillis: 60000,
+        idleTimeoutMillis: 10000
     },
     wrapIdentifier: (value, origImpl) => {
         if (value === '*') return value;

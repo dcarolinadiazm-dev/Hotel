@@ -20,6 +20,8 @@ export interface ReservaFuturaItem {
   abonos: number;
   saldoPendiente: number;
   estadoReserva: string;
+  estadoFacturacion?: 'Facturado' | 'Pendiente' | string;
+  idDoc?: number;
   peweId?: number;
   observaciones?: string;
 }
@@ -47,6 +49,7 @@ export const ReporteReservasFuturas = ({
 }: ReporteReservasFuturasProps) => {
   const [reservas, setReservas] = useState<ReservaFuturaItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [cancellingId, setCancellingId] = useState<number | null>(null);
   const [localSidebarOpen, setLocalSidebarOpen] = useState(false);
 
   const sidebarOpen = controlledSidebarOpen !== undefined ? controlledSidebarOpen : localSidebarOpen;
@@ -64,6 +67,7 @@ export const ReporteReservasFuturas = ({
   const [fechaDesde, setFechaDesde] = useState(todayStr);
   const [fechaHasta, setFechaHasta] = useState('');
   const [selectedHabNumero, setSelectedHabNumero] = useState<string>('TODAS');
+  const [selectedEstado, setSelectedEstado] = useState<string>('TODOS');
   const [busquedaTexto, setBusquedaTexto] = useState<string>('');
 
   const fetchReservas = async () => {
@@ -92,6 +96,42 @@ export const ReporteReservasFuturas = ({
     }
   };
 
+  const handleCancelarReserva = async (reserva: ReservaFuturaItem) => {
+    if (reserva.abonos && reserva.abonos > 0) {
+      alert('No es posible cancelar la reserva debido a que tiene abonos registrados, por favor anule primero el abono');
+      return;
+    }
+
+    const confirmMsg = `¿Está seguro de que desea cancelar y anular la reserva de la Habitación #${reserva.habitacionNumero} (${reserva.huesped})?`;
+    if (!window.confirm(confirmMsg)) return;
+
+    try {
+      setCancellingId(reserva.idMovim);
+      const token = localStorage.getItem('hotel_token');
+      const res = await fetch(`/api/habitaciones/${reserva.habitacionId}/cancelar-reserva`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ idMovim: reserva.idMovim }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Error al cancelar la reserva');
+      }
+
+      alert('Reserva cancelada exitosamente.');
+      await fetchReservas();
+    } catch (err: any) {
+      console.error('Error al cancelar reserva:', err);
+      alert(`Error al cancelar: ${err.message || 'Error desconocido'}`);
+    } finally {
+      setCancellingId(null);
+    }
+  };
+
   useEffect(() => {
     fetchReservas();
   }, [fechaDesde, fechaHasta]);
@@ -104,6 +144,9 @@ export const ReporteReservasFuturas = ({
   // Filtrado en memoria
   const reservasFiltradas = reservas.filter((r) => {
     if (selectedHabNumero !== 'TODAS' && r.habitacionNumero !== selectedHabNumero) {
+      return false;
+    }
+    if (selectedEstado !== 'TODOS' && r.estadoFacturacion !== selectedEstado) {
       return false;
     }
     if (busquedaTexto.trim()) {
@@ -137,6 +180,7 @@ export const ReporteReservasFuturas = ({
       'Total Estadía': r.totalEstadia,
       'Abonos/Anticipos': r.abonos,
       'Saldo Pendiente': r.saldoPendiente,
+      'Estado': r.estadoFacturacion || 'Pendiente',
       'Borrador Web #': r.peweId || '',
       'Observaciones': r.observaciones || '',
     }));
@@ -426,6 +470,19 @@ export const ReporteReservasFuturas = ({
               </select>
             </div>
 
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <label style={{ fontSize: '12px', fontWeight: 700, color: '#475569' }}>Estado:</label>
+              <select
+                value={selectedEstado}
+                onChange={(e) => setSelectedEstado(e.target.value)}
+                style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '13px', background: '#fff' }}
+              >
+                <option value="TODOS">Todos los Estados</option>
+                <option value="Pendiente">● Pendientes</option>
+                <option value="Facturado">✓ Facturados</option>
+              </select>
+            </div>
+
             <div style={{ flex: 1, minWidth: '220px' }}>
               <input
                 type="text"
@@ -436,13 +493,14 @@ export const ReporteReservasFuturas = ({
               />
             </div>
 
-            {(fechaDesde !== todayStr || fechaHasta || selectedHabNumero !== 'TODAS' || busquedaTexto) && (
+            {(fechaDesde !== todayStr || fechaHasta || selectedHabNumero !== 'TODAS' || selectedEstado !== 'TODOS' || busquedaTexto) && (
               <button
                 type="button"
                 onClick={() => {
                   setFechaDesde(todayStr);
                   setFechaHasta('');
                   setSelectedHabNumero('TODAS');
+                  setSelectedEstado('TODOS');
                   setBusquedaTexto('');
                 }}
                 style={{ padding: '6px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', background: '#f8fafc', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}
@@ -476,13 +534,15 @@ export const ReporteReservasFuturas = ({
                     <th style={{ padding: '12px 14px', textAlign: 'right' }}>Total</th>
                     <th style={{ padding: '12px 14px', textAlign: 'right' }}>Abonos</th>
                     <th style={{ padding: '12px 14px', textAlign: 'right' }}>Saldo</th>
+                    <th style={{ padding: '12px 14px', textAlign: 'center', minWidth: '110px' }}>Estado</th>
+                    <th style={{ padding: '12px 14px', textAlign: 'center', width: '60px' }}>Acción</th>
                   </tr>
                 </thead>
                 <tbody>
                   {reservasFiltradas.map((r) => {
                     return (
                       <tr key={r.idMovim} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                        <td style={{ padding: '12px 14px' }}>
+                        <td style={{ padding: '12px 14px', verticalAlign: 'middle' }}>
                           <span style={{ background: '#e0e7ff', color: '#3730a3', padding: '3px 8px', borderRadius: '6px', fontWeight: 800 }}>
                             #{r.habitacionNumero}
                           </span>
@@ -490,7 +550,7 @@ export const ReporteReservasFuturas = ({
                             {r.habitacionTipo} · P{r.habitacionPiso}
                           </span>
                         </td>
-                        <td style={{ padding: '12px 14px' }}>
+                        <td style={{ padding: '12px 14px', verticalAlign: 'middle' }}>
                           <div style={{ fontWeight: 700, color: '#1e293b' }}>
                             👤 {r.huesped}
                           </div>
@@ -503,25 +563,117 @@ export const ReporteReservasFuturas = ({
                             </div>
                           )}
                         </td>
-                        <td style={{ padding: '12px 14px', color: '#1e293b', fontWeight: 600 }}>
+                        <td style={{ padding: '12px 14px', color: '#1e293b', fontWeight: 600, verticalAlign: 'middle' }}>
                           {formatFecha(r.fechaReservaTexto)}
                         </td>
-                        <td style={{ padding: '12px 14px', color: '#475569' }}>
+                        <td style={{ padding: '12px 14px', color: '#475569', verticalAlign: 'middle' }}>
                           {formatFecha(r.fechaSalidaTexto)}
                         </td>
-                        <td style={{ padding: '12px 14px', textAlign: 'center' }}>
+                        <td style={{ padding: '12px 14px', textAlign: 'center', verticalAlign: 'middle' }}>
                           <span style={{ background: '#f1f5f9', color: '#334155', padding: '2px 8px', borderRadius: '4px', fontWeight: 700 }}>
                             🌙 {r.noches}
                           </span>
                         </td>
-                        <td style={{ padding: '12px 14px', textAlign: 'right', fontWeight: 700, color: '#14532d' }}>
+                        <td style={{ padding: '12px 14px', textAlign: 'right', fontWeight: 700, color: '#14532d', verticalAlign: 'middle' }}>
                           ${r.totalEstadia.toLocaleString('es-CO')}
                         </td>
-                        <td style={{ padding: '12px 14px', textAlign: 'right', fontWeight: 700, color: '#047857' }}>
+                        <td style={{ padding: '12px 14px', textAlign: 'right', fontWeight: 700, color: '#047857', verticalAlign: 'middle' }}>
                           ${r.abonos.toLocaleString('es-CO')}
                         </td>
-                        <td style={{ padding: '12px 14px', textAlign: 'right', fontWeight: 700, color: r.saldoPendiente > 0 ? '#b45309' : '#64748b' }}>
+                        <td style={{ padding: '12px 14px', textAlign: 'right', fontWeight: 700, color: r.saldoPendiente > 0 ? '#b45309' : '#64748b', verticalAlign: 'middle' }}>
                           ${r.saldoPendiente.toLocaleString('es-CO')}
+                        </td>
+                        <td style={{ padding: '12px 14px', textAlign: 'center', verticalAlign: 'middle' }}>
+                          {r.estadoFacturacion === 'Facturado' ? (
+                            <span
+                              style={{
+                                background: '#dcfce7',
+                                color: '#15803d',
+                                border: '1px solid #86efac',
+                                padding: '4px 12px',
+                                borderRadius: '20px',
+                                fontWeight: 700,
+                                fontSize: '12px',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                gap: '4px',
+                                whiteSpace: 'nowrap',
+                              }}
+                            >
+                              ✓ Facturado
+                            </span>
+                          ) : (
+                            <span
+                              style={{
+                                background: '#fee2e2',
+                                color: '#dc2626',
+                                border: '1px solid #fca5a5',
+                                padding: '4px 12px',
+                                borderRadius: '20px',
+                                fontWeight: 700,
+                                fontSize: '12px',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                gap: '4px',
+                                whiteSpace: 'nowrap',
+                              }}
+                            >
+                              ● Pendiente
+                            </span>
+                          )}
+                        </td>
+                        <td style={{ padding: '12px 14px', textAlign: 'center', verticalAlign: 'middle' }}>
+                          {r.estadoFacturacion !== 'Facturado' ? (
+                            <button
+                              type="button"
+                              onClick={() => handleCancelarReserva(r)}
+                              disabled={cancellingId === r.idMovim}
+                              title="Cancelar y anular reservas"
+                              style={{
+                                width: '28px',
+                                height: '28px',
+                                borderRadius: '6px',
+                                border: '1px solid #fca5a5',
+                                background: '#ffffff',
+                                color: '#dc2626',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                cursor: cancellingId === r.idMovim ? 'not-allowed' : 'pointer',
+                                boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
+                                transition: 'all 0.15s ease-in-out',
+                                padding: 0,
+                                margin: '0 auto',
+                              }}
+                              onMouseEnter={(e) => {
+                                if (cancellingId !== r.idMovim) {
+                                  e.currentTarget.style.background = '#fee2e2';
+                                  e.currentTarget.style.borderColor = '#ef4444';
+                                  e.currentTarget.style.transform = 'scale(1.08)';
+                                }
+                              }}
+                              onMouseLeave={(e) => {
+                                if (cancellingId !== r.idMovim) {
+                                  e.currentTarget.style.background = '#ffffff';
+                                  e.currentTarget.style.borderColor = '#fca5a5';
+                                  e.currentTarget.style.transform = 'scale(1)';
+                                }
+                              }}
+                            >
+                              {cancellingId === r.idMovim ? (
+                                <span style={{ fontSize: '10px' }}>...</span>
+                              ) : (
+                                <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" strokeWidth="2.5" fill="none" strokeLinecap="round" strokeLinejoin="round">
+                                  <line x1="18" y1="6" x2="6" y2="18"></line>
+                                  <line x1="6" y1="6" x2="18" y2="18"></line>
+                                </svg>
+                              )}
+                            </button>
+                          ) : (
+                            <span style={{ color: '#cbd5e1', fontSize: '13px' }}>—</span>
+                          )}
                         </td>
                       </tr>
                     );

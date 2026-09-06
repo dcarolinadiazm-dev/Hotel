@@ -4,6 +4,7 @@ export interface ItemImpresion {
   item: number;
   articulo: string;
   descripcion: string;
+  obsItem?: string;
   referencia: string;
   cantidad: number;
   precioUnitario: number;
@@ -30,6 +31,8 @@ export interface DocumentoImpresion {
   habitacionNumero?: string;
   formaPago: string;
   formasPago?: Array<{ nombre: string; monto: number }>;
+  abonos?: Array<{ descripcion: string; monto: number }>;
+  totalAbonos?: number;
   observaciones?: string;
   items: ItemImpresion[];
   subtotal: number;
@@ -165,8 +168,10 @@ export const ModalImpresionPOS: React.FC<ModalImpresionPOSProps> = ({
             .pos-col-desc { width: 52%; text-align: left; }
             .pos-col-cant { width: 16%; text-align: center; white-space: nowrap; }
             .pos-col-total { width: 32%; text-align: right; white-space: nowrap; }
+            .pos-col-full { width: 100% !important; padding: 0.5px 0 !important; }
             .pos-item-desc { font-weight: 700; font-size: 11px; }
-            .pos-item-unit-calc { display: block; font-size: 9.5px; color: #333; }
+            .pos-item-subline { font-size: 11px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 240px; color: #000; line-height: 1.25; }
+            .pos-item-unit-calc { display: block; font-size: 9.5px; color: #333; line-height: 1.2; }
             .pos-totals-block { margin: 5px 0; font-size: 11.5px; }
             .pos-total-row { display: flex; justify-content: space-between; margin-bottom: 2.5px; }
             .pos-grand-total { font-size: 14px; font-weight: 900; }
@@ -196,8 +201,10 @@ export const ModalImpresionPOS: React.FC<ModalImpresionPOSProps> = ({
     }, 200);
   };
 
-  const formatMoney = (val?: number) => {
-    return '$' + Number(val || 0).toLocaleString('es-CO');
+  const formatMoney = (val?: number | string) => {
+    const num = typeof val === 'number' ? val : parseFloat(String(val || 0));
+    if (isNaN(num)) return '$ 0';
+    return '$ ' + Math.round(num).toLocaleString('es-CO');
   };
 
   return (
@@ -312,20 +319,88 @@ export const ModalImpresionPOS: React.FC<ModalImpresionPOSProps> = ({
                     </tr>
                   </thead>
                   <tbody>
-                    {doc.items.map((item, idx) => (
-                      <tr key={idx}>
-                        <td className="pos-col-desc">
-                          <div className="pos-item-desc">{item.descripcion}</div>
-                          {item.cantidad > 1 && (
-                            <small className="pos-item-unit-calc">
-                              {item.cantidad} x {formatMoney(item.precioUnitario)}
-                            </small>
+                    {doc.items.map((item, idx) => {
+                      const isHospedaje =
+                        /^H-[A-Z0-9]+/i.test(item.articulo) ||
+                        /^SERVICIO HOSPEDAJE/i.test(item.descripcion) ||
+                        /^HOSPEDAJE/i.test(item.descripcion);
+
+                      let mainDesc = item.descripcion;
+                      let subline = '';
+
+                      if (isHospedaje) {
+                        mainDesc = 'SERVICIO HOSPEDAJE';
+                        const habNum =
+                          doc.habitacionNumero ||
+                          item.referencia.replace(/^HAB-/i, '') ||
+                          item.articulo.replace(/^H-/i, '') ||
+                          '';
+                        const obs = (item.obsItem || '').trim();
+
+                        let extraObs = obs;
+                        if (!extraObs && item.descripcion.includes('-')) {
+                          const parts = item.descripcion.split('-');
+                          if (parts.length > 1) {
+                            extraObs = parts.slice(1).join('-').trim();
+                          }
+                        }
+
+                        const prefix = habNum ? `HABITACION ${habNum}` : 'HABITACION';
+                        if (extraObs) {
+                          const fullPrefix = `${prefix} - `;
+                          const maxChars = 34;
+                          const maxObs = Math.max(6, maxChars - fullPrefix.length);
+                          const trimmedObs =
+                            extraObs.length > maxObs
+                              ? extraObs.slice(0, maxObs - 1).trim() + '…'
+                              : extraObs;
+                          subline = `${fullPrefix}${trimmedObs}`;
+                        } else {
+                          subline = prefix;
+                        }
+                      } else {
+                        // Producto regular (ej. AGUA CRISTAL 600 ML)
+                        if (item.obsItem && mainDesc.endsWith(` - ${item.obsItem}`)) {
+                          mainDesc = mainDesc.slice(0, -(item.obsItem.length + 3)).trim();
+                        }
+                        if (item.obsItem && item.obsItem.trim()) {
+                          const obs = item.obsItem.trim();
+                          const maxChars = 34;
+                          subline =
+                            obs.length > maxChars ? obs.slice(0, maxChars - 1).trim() + '…' : obs;
+                        }
+                      }
+
+                      return (
+                        <React.Fragment key={idx}>
+                          <tr>
+                            <td className="pos-col-desc">
+                              <div className="pos-item-desc">{mainDesc}</div>
+                            </td>
+                            <td className="pos-col-cant">{item.cantidad}</td>
+                            <td className="pos-col-total bold">{formatMoney(item.total)}</td>
+                          </tr>
+                          {subline && (
+                            <tr className="pos-item-subline-row">
+                              <td colSpan={3} className="pos-col-full">
+                                <div className="pos-item-subline" title={item.obsItem || subline}>
+                                  {subline}
+                                </div>
+                              </td>
+                            </tr>
                           )}
-                        </td>
-                        <td className="pos-col-cant">{item.cantidad}</td>
-                        <td className="pos-col-total bold">{formatMoney(item.total)}</td>
-                      </tr>
-                    ))}
+                          {item.cantidad > 1 && (
+                            <tr className="pos-item-unit-row">
+                              <td colSpan={3} className="pos-col-full">
+                                <small className="pos-item-unit-calc">
+                                  {item.cantidad} x {formatMoney(item.precioUnitario)}
+                                </small>
+                              </td>
+                            </tr>
+                          )}
+                        </React.Fragment>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -351,10 +426,27 @@ export const ModalImpresionPOS: React.FC<ModalImpresionPOSProps> = ({
                 </div>
                 <div className="pos-divider-dashed"></div>
 
+                {/* Desglose de Abonos / Anticipos si existen */}
+                {doc.abonos && doc.abonos.length > 0 && (
+                  <div className="pos-payment-breakdown" style={{ marginTop: '4px' }}>
+                    <div className="pos-total-row">
+                      <span className="bold">ANTICIPOS / ABONOS APLICADOS:</span>
+                    </div>
+                    {doc.abonos.map((ab, i) => (
+                      <div key={i} className="pos-total-row" style={{ paddingLeft: '6px', fontSize: '9pt' }}>
+                        <span>• {ab.descripcion}:</span>
+                        <span className="bold">{formatMoney(ab.monto)}</span>
+                      </div>
+                    ))}
+                    <div className="pos-divider-dashed" style={{ margin: '3px 0' }}></div>
+                  </div>
+                )}
+
+                {/* Formas de Pago del Recibo de Caja */}
                 {doc.formasPago && doc.formasPago.length > 0 ? (
                   <div className="pos-payment-breakdown" style={{ marginTop: '4px' }}>
                     <div className="pos-total-row">
-                      <span className="bold">FORMAS DE PAGO:</span>
+                      <span className="bold">{doc.abonos && doc.abonos.length > 0 ? 'FORMAS DE PAGO (RECIBO DE CAJA):' : 'FORMAS DE PAGO:'}</span>
                     </div>
                     {doc.formasPago.map((fp, i) => (
                       <div key={i} className="pos-total-row" style={{ paddingLeft: '6px', fontSize: '9pt' }}>

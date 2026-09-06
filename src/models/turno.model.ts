@@ -56,6 +56,10 @@ export interface ITurnoResumenCierre {
     }>;
     totalVentasFacturadas: number;
     totalRecaudadoPagos: number;
+    totalAbonosTurno: number;
+    totalAbonosAntiguos: number;
+    totalAbonosCruzados?: number;
+    totalAbonosHabitaciones?: number;
     totalEfectivoEsperado: number; // Base + Efectivo recaudado
     facturasGeneradas: Array<{
         prefijo: string;

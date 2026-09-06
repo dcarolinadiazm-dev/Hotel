@@ -283,8 +283,10 @@ export const CarritoHabitacion = ({
   const totalItems = items.reduce((sum, item) => sum + item.cantidad, 0);
   const totalPagar = items.reduce((sum, item) => sum + item.subtotal, 0);
 
-  const formatMoney = (val: number) => {
-    return '$' + Number(val || 0).toLocaleString('es-CO');
+  const formatMoney = (val?: number | string) => {
+    const num = typeof val === 'number' ? val : parseFloat(String(val || 0));
+    if (isNaN(num)) return '$ 0';
+    return '$ ' + Math.round(num).toLocaleString('es-CO');
   };
 
   return (
@@ -386,13 +388,15 @@ export const CarritoHabitacion = ({
             <div className="add-product-field flex-1">
               <label className="field-label">Precio Unitario ($):</label>
               <input
-                type="number"
+                type="text"
+                inputMode="numeric"
                 className="add-product-input"
-                value={customPrecio}
-                onChange={(e) => setCustomPrecio(e.target.value)}
+                value={customPrecio ? Number(String(customPrecio).replace(/\D/g, '')).toLocaleString('es-CO') : ''}
+                onChange={(e) => {
+                  const raw = e.target.value.replace(/\D/g, '');
+                  setCustomPrecio(raw ? Number(raw).toLocaleString('es-CO') : '');
+                }}
                 placeholder="0"
-                min="0"
-                step="any"
               />
             </div>
 

@@ -124,8 +124,32 @@ export class TurnoService {
             throw new Error('No se encontró un turno activo para generar el resumen de Cierre Z.');
         }
 
-        const fechaApertura = new Date(turno.FECHA_APERTURA);
-        const fechaAperturaStr = fechaApertura.toISOString();
+        // Determinar límites del turno anterior para filtrar estrictamente este turno
+        // Consultar el MAX(FACTFIN) por prefijo a lo largo de TODOS los turnos cerrados anteriores
+        const maxPrevPerPref = await db(tables.TURNO_DET_FACTURAS)
+            .where('ID_TURNO', '<', turno.ID_TURNO)
+            .groupBy('PREF')
+            .select('PREF', db.raw('MAX(FACTFIN) as "MAX_FIN"'));
+
+        const prevLimits: { [pref: string]: number } = {};
+        for (const r of maxPrevPerPref) {
+            prevLimits[String(r.PREF).trim()] = parseInt(String(r.MAX_FIN), 10);
+        }
+
+        // Consultar prefijos activos en PREFIJOS (TIDO_COD = 31) para asegurar que todos los prefijos tengan límite
+        const allPrefs = await db(tables.PREFIJOS).where('TIDO_COD', 31).select('PREF_PRE').catch(() => []);
+        for (const p of allPrefs) {
+            const pr = String(p.PREF_PRE || '').trim();
+            if (pr && prevLimits[pr] === undefined) {
+                const maxF = await db('FACTURAS')
+                    .where('PREF_PRE', pr)
+                    .andWhere('FACT_FECHA', '<', turno.FECHA_APERTURA)
+                    .max(db.raw('CAST(FACT_NUMERO AS INTEGER) as "MAXN"'))
+                    .first()
+                    .catch(() => null);
+                prevLimits[pr] = parseInt(String(maxF?.MAXN || '0'), 10);
+            }
+        }
 
         // 1. Obtener todas las formas de pago configuradas
         const formasPagoRows = await db(tables.FORMAS_PAGO)
@@ -140,59 +164,174 @@ export class TurnoService {
             formasMap.set(parseInt(String(fp.FOPA_ID), 10), String(fp.FOPA_NOM || '').trim());
         }
 
-        // 2. Consultar recaudos de FACTURAS_CONTADO_PAGO generados durante este turno
-        const pagosFacturas = await db('FACTURAS_CONTADO_PAGO')
-            .join('FACTURAS', 'FACTURAS_CONTADO_PAGO.FCNT_ID', 'FACTURAS.FACT_ID')
-            .where('FACTURAS.FACT_FECHA', '>=', fechaApertura)
-            .andWhere(function () {
-                this.where('FACTURAS.FACT_ANULADO', '!=', 'S').orWhereNull('FACTURAS.FACT_ANULADO');
+        // 2. Facturas emitidas estrictamente en este turno
+        const facturasEmitidasList = await db('FACTURAS')
+            .where(function () {
+                let hasCondition = false;
+                for (const [pref, maxNum] of Object.entries(prevLimits)) {
+                    if (pref !== 'ANT' && pref !== 'RC') {
+                        hasCondition = true;
+                        this.orWhere(function () {
+                            this.where('PREF_PRE', pref).andWhere(db.raw('CAST(FACT_NUMERO AS INTEGER) > ?', [maxNum]));
+                        });
+                    }
+                }
+                if (!hasCondition) {
+                    this.where('FACT_FECHA', '>=', turno.FECHA_APERTURA);
+                }
             })
-            .select(
-                'FACTURAS_CONTADO_PAGO.FOPA_ID',
-                db.raw('SUM(COALESCE(FACTURAS_CONTADO_PAGO.FCNP_MONTO, 0)) as "TOTAL_MONTO"'),
-                db.raw('COUNT(*) as "CANT_TRANS"')
-            )
-            .groupBy('FACTURAS_CONTADO_PAGO.FOPA_ID');
+            .andWhere(function () {
+                this.where('FACT_ANULADO', '!=', 'S').orWhereNull('FACT_ANULADO');
+            })
+            .orderBy('FACT_ID', 'asc');
 
-        // 3. Consultar anticipos / recibos de caja (abonos) creados durante el turno
-        let pagosRecibos: any[] = [];
-        try {
-            pagosRecibos = await db(tables.RECIBOS_CAJA_PAGO)
-                .join(tables.RECIBOS_CAJA, `${tables.RECIBOS_CAJA_PAGO}.RECA_ID`, `${tables.RECIBOS_CAJA}.RECA_ID`)
-                .where(`${tables.RECIBOS_CAJA}.RECA_FECHA`, '>=', fechaApertura)
+        const factIds = facturasEmitidasList.map(f => f.FACT_ID);
+
+        // Agrupar facturas por prefijo
+        const factByPref: { [pref: string]: { ini: number; fin: number; cant: number; total: number } } = {};
+        for (const f of facturasEmitidasList) {
+            const pref = String(f.PREF_PRE || 'SETT').trim();
+            const num = parseInt(String(f.FACT_NUMERO || '0'), 10);
+            const tot = parseFloat(String(f.FACT_TOTAL || '0'));
+            if (!factByPref[pref]) {
+                factByPref[pref] = { ini: num, fin: num, cant: 0, total: 0 };
+            }
+            factByPref[pref].ini = Math.min(factByPref[pref].ini, num);
+            factByPref[pref].fin = Math.max(factByPref[pref].fin, num);
+            factByPref[pref].cant++;
+            factByPref[pref].total += tot;
+        }
+
+        const facturasGeneradas = Object.entries(factByPref).map(([pref, data]) => ({
+            prefijo: pref,
+            facturaInicial: data.ini,
+            facturaFinal: data.fin,
+            cantidad: data.cant,
+            total: Math.round(data.total * 100) / 100
+        }));
+
+        const totalVentasFacturadas = facturasGeneradas.reduce((acc, f) => acc + f.total, 0);
+
+        // Determinar límites de recibos y anticipos para separar los de este turno vs turnos anteriores
+        let maxPrevRecaId = prevLimits['RC'] || 0;
+        let maxPrevAnclId = prevLimits['ANT'] || 0;
+
+        if (!maxPrevRecaId) {
+            const prevTurnoRows = await db(tables.TURNO)
+                .where('ID_TURNO', '<', turno.ID_TURNO)
+                .where('ESTADO', 'Cerrado')
+                .orderBy('ID_TURNO', 'desc')
+                .first();
+            if (prevTurnoRows?.FECHA_CIERRE) {
+                const maxPrevReca = await db(tables.RECIBOS_CAJA)
+                    .where('RECA_FECHA', '<=', prevTurnoRows.FECHA_CIERRE)
+                    .max('RECA_ID as MAXR')
+                    .first();
+                maxPrevRecaId = parseInt(String(maxPrevReca?.MAXR || 0), 10);
+            } else {
+                const maxPrevReca = await db(tables.RECIBOS_CAJA)
+                    .where('RECA_FECHA', '<', turno.FECHA_APERTURA)
+                    .max('RECA_ID as MAXR')
+                    .first();
+                maxPrevRecaId = parseInt(String(maxPrevReca?.MAXR || 0), 10);
+            }
+        }
+
+        // 3. Consultar pagos directos de las facturas de este turno (FACTURAS_CONTADO_PAGO)
+        const pagosFacturas = factIds.length > 0
+            ? await db('FACTURAS_CONTADO_PAGO')
+                .whereIn('FCNT_ID', factIds)
                 .andWhere(function () {
-                    this.where(`${tables.RECIBOS_CAJA}.RECA_ANULADO`, '!=', 'S').orWhereNull(`${tables.RECIBOS_CAJA}.RECA_ANULADO`);
+                    this.where('FCNP_ANULADO', '!=', 'S').orWhereNull('FCNP_ANULADO');
                 })
-                .select(
-                    `${tables.RECIBOS_CAJA_PAGO}.FOPA_ID`,
-                    db.raw(`SUM(COALESCE(${tables.RECIBOS_CAJA_PAGO}.RCPA_MONTO, 0)) as "TOTAL_MONTO"`),
-                    db.raw('COUNT(*) as "CANT_TRANS"')
-                )
-                .groupBy(`${tables.RECIBOS_CAJA_PAGO}.FOPA_ID`);
-        } catch (e) {}
+            : [];
 
-        // Consolidar pagos por cada forma
+        // 4. Consultar abonos registrados dentro de este turno
+        const abonosRegistradosTurno = await db(tables.ANTICIPOS_CLIENTE)
+            .join(tables.RECIBOS_CAJA, `${tables.ANTICIPOS_CLIENTE}.RECA_ID`, `${tables.RECIBOS_CAJA}.RECA_ID`)
+            .where(function () {
+                this.where(`${tables.ANTICIPOS_CLIENTE}.ANCL_ANULADO`, '!=', 'S').orWhereNull(`${tables.ANTICIPOS_CLIENTE}.ANCL_ANULADO`);
+            })
+            .andWhere(function () {
+                this.where(`${tables.RECIBOS_CAJA}.RECA_ANULADO`, '!=', 'S').orWhereNull(`${tables.RECIBOS_CAJA}.RECA_ANULADO`);
+            })
+            .andWhere(function () {
+                if (maxPrevRecaId > 0) {
+                    this.where(`${tables.RECIBOS_CAJA}.RECA_ID`, '>', maxPrevRecaId);
+                } else if (maxPrevAnclId > 0) {
+                    this.where(`${tables.ANTICIPOS_CLIENTE}.ANCL_ID`, '>', maxPrevAnclId);
+                } else {
+                    this.where(`${tables.RECIBOS_CAJA}.RECA_FECHA`, '>=', turno.FECHA_APERTURA);
+                }
+            })
+            .select(`${tables.RECIBOS_CAJA}.RECA_ID`, `${tables.RECIBOS_CAJA}.RECA_MONTO`);
+
+        const totalAbonosTurno = Math.round(abonosRegistradosTurno.reduce((sum, a) => sum + parseFloat(String(a.RECA_MONTO || 0)), 0) * 100) / 100;
+
+        // Consultar formas de pago de los abonos registrados en este turno (RECIBOS_CAJA_PAGO)
+        const abonosRecaIds = abonosRegistradosTurno
+            .map(a => parseInt(String(a.RECA_ID || 0), 10))
+            .filter(id => id > 0);
+
+        const pagosAbonosTurno = abonosRecaIds.length > 0
+            ? await db(tables.RECIBOS_CAJA_PAGO)
+                .whereIn('RECA_ID', abonosRecaIds)
+                .andWhere(function () {
+                    this.where('RCPA_ANULADO', '!=', 'S').orWhereNull('RCPA_ANULADO');
+                })
+            : [];
+
+        // 5. Consultar abonos antiguos de otros turnos que NO se han facturado aún
+        const appliedAnclIdsQuery = db('APLICACION_CLIENTE_DETALLE')
+            .where('ACDE_TIPODOC', 45)
+            .andWhere(function () {
+                this.where('ACDE_ANULADO', '!=', 'S').orWhereNull('ACDE_ANULADO');
+            })
+            .select('ACDE_IDDOC');
+
+        const habsConAbono = await db(tables.HABITACION_MOVIM_ANTICIPOS)
+            .join(tables.ANTICIPOS_CLIENTE, `${tables.HABITACION_MOVIM_ANTICIPOS}.ANCL_ID`, `${tables.ANTICIPOS_CLIENTE}.ANCL_ID`)
+            .join(tables.RECIBOS_CAJA, `${tables.ANTICIPOS_CLIENTE}.RECA_ID`, `${tables.RECIBOS_CAJA}.RECA_ID`)
+            .where(function () {
+                this.where(`${tables.ANTICIPOS_CLIENTE}.ANCL_ANULADO`, '!=', 'S').orWhereNull(`${tables.ANTICIPOS_CLIENTE}.ANCL_ANULADO`);
+            })
+            .andWhere(function () {
+                this.where(`${tables.RECIBOS_CAJA}.RECA_ANULADO`, '!=', 'S').orWhereNull(`${tables.RECIBOS_CAJA}.RECA_ANULADO`);
+            })
+            .andWhere(function () {
+                if (maxPrevRecaId > 0) {
+                    this.where(`${tables.RECIBOS_CAJA}.RECA_ID`, '<=', maxPrevRecaId);
+                } else if (maxPrevAnclId > 0) {
+                    this.where(`${tables.ANTICIPOS_CLIENTE}.ANCL_ID`, '<=', maxPrevAnclId);
+                } else {
+                    this.where(`${tables.RECIBOS_CAJA}.RECA_FECHA`, '<', turno.FECHA_APERTURA);
+                }
+            })
+            .whereNotIn(`${tables.ANTICIPOS_CLIENTE}.ANCL_ID`, appliedAnclIdsQuery)
+            .select(`${tables.RECIBOS_CAJA}.RECA_MONTO`);
+
+        const totalAbonosAntiguos = Math.round(habsConAbono.reduce((sum, a) => sum + (parseFloat(String(a.RECA_MONTO || 0))), 0) * 100) / 100;
+
+        // Consolidar pagos por cada forma (facturas emitidas en el turno + abonos registrados en el turno)
         const pagosAcumulados = new Map<number, { total: number; cantidad: number }>();
 
         for (const pf of pagosFacturas) {
             const fopaId = parseInt(String(pf.FOPA_ID), 10);
-            const monto = parseFloat(String(pf.TOTAL_MONTO || '0'));
-            const cant = parseInt(String(pf.CANT_TRANS || '0'), 10);
+            const monto = parseFloat(String(pf.FCNP_MONTO || '0'));
             const actual = pagosAcumulados.get(fopaId) || { total: 0, cantidad: 0 };
             pagosAcumulados.set(fopaId, {
                 total: actual.total + monto,
-                cantidad: actual.cantidad + cant
+                cantidad: actual.cantidad + 1
             });
         }
 
-        for (const pr of pagosRecibos) {
-            const fopaId = parseInt(String(pr.FOPA_ID), 10);
-            const monto = parseFloat(String(pr.TOTAL_MONTO || '0'));
-            const cant = parseInt(String(pr.CANT_TRANS || '0'), 10);
+        for (const pa of pagosAbonosTurno) {
+            const fopaId = parseInt(String(pa.FOPA_ID), 10);
+            const monto = parseFloat(String(pa.RCPA_MONTO || '0'));
             const actual = pagosAcumulados.get(fopaId) || { total: 0, cantidad: 0 };
             pagosAcumulados.set(fopaId, {
                 total: actual.total + monto,
-                cantidad: actual.cantidad + cant
+                cantidad: actual.cantidad + 1
             });
         }
 
@@ -208,7 +347,7 @@ export class TurnoService {
             pagosPorForma.push({
                 formaPagoId: fopaId,
                 nombreForma: nom,
-                total: data.total,
+                total: Math.round(data.total * 100) / 100,
                 cantidadTransacciones: data.cantidad
             });
 
@@ -218,33 +357,11 @@ export class TurnoService {
             }
         }
 
-        // 4. Consultar facturas generadas por prefijo
-        const facturasEmitidas = await db('FACTURAS')
-            .where('FACT_FECHA', '>=', fechaApertura)
-            .andWhere(function () {
-                this.where('FACT_ANULADO', '!=', 'S').orWhereNull('FACT_ANULADO');
-            })
-            .select(
-                'PREF_PRE',
-                db.raw('MIN(CAST(FACT_NUMERO AS INTEGER)) as "FACT_INI"'),
-                db.raw('MAX(CAST(FACT_NUMERO AS INTEGER)) as "FACT_FIN"'),
-                db.raw('COUNT(*) as "CANT_FACT"'),
-                db.raw('SUM(COALESCE(FACT_TOTAL, 0)) as "TOTAL_FACT"')
-            )
-            .groupBy('PREF_PRE')
-            .orderBy('PREF_PRE', 'asc');
+        totalRecaudadoPagos = Math.round(totalRecaudadoPagos * 100) / 100;
+        totalEfectivoRecaudado = Math.round(totalEfectivoRecaudado * 100) / 100;
+        const totalEfectivoEsperado = Math.round((turno.BASE + totalEfectivoRecaudado) * 100) / 100;
 
-        const facturasGeneradas = facturasEmitidas.map((f: any) => ({
-            prefijo: String(f.PREF_PRE || 'SETT').trim(),
-            facturaInicial: parseInt(String(f.FACT_INI || '0'), 10),
-            facturaFinal: parseInt(String(f.FACT_FIN || '0'), 10),
-            cantidad: parseInt(String(f.CANT_FACT || '0'), 10),
-            total: parseFloat(String(f.TOTAL_FACT || '0'))
-        }));
-
-        const totalVentasFacturadas = facturasGeneradas.reduce((acc, f) => acc + f.total, 0);
-
-        // 5. Consultar estado actual de las habitaciones
+        // 6. Consultar estado actual de las habitaciones
         const habitaciones = await HabitacionService.getAllHabitaciones();
 
         let disponibles = 0;
@@ -268,7 +385,8 @@ export class TurnoService {
             };
         });
 
-        const totalEfectivoEsperado = turno.BASE + totalEfectivoRecaudado;
+        const totalReservasFuturas = habitaciones.reduce((sum, h) => sum + (h.totalReservasFuturas || 0), 0);
+        reservadas += totalReservasFuturas;
 
         return {
             turno: {
@@ -283,6 +401,8 @@ export class TurnoService {
             pagosPorForma,
             totalVentasFacturadas,
             totalRecaudadoPagos,
+            totalAbonosTurno,
+            totalAbonosAntiguos,
             totalEfectivoEsperado,
             facturasGeneradas,
             habitacionesEstado,
@@ -321,6 +441,17 @@ export class TurnoService {
         // 2. Grabar detalles de facturas en TURNO_DET_FACTURAS
         await db(tables.TURNO_DET_FACTURAS).where('ID_TURNO', idTurno).del();
 
+        // Consultar maximos históricos para no perder el consecutivo de prefijos que no tuvieron facturas en este turno
+        const maxPrevPerPref = await db(tables.TURNO_DET_FACTURAS)
+            .where('ID_TURNO', '<', idTurno)
+            .groupBy('PREF')
+            .select('PREF', db.raw('MAX(FACTFIN) as "MAX_FIN"'));
+
+        const prevLimits: { [pref: string]: number } = {};
+        for (const r of maxPrevPerPref) {
+            prevLimits[String(r.PREF).trim()] = parseInt(String(r.MAX_FIN), 10);
+        }
+
         let itemFact = 1;
         for (const f of resumen.facturasGeneradas) {
             await db(tables.TURNO_DET_FACTURAS).insert({
@@ -332,6 +463,53 @@ export class TurnoService {
                 CANTIDAD: f.cantidad,
                 TOTAL: f.total
             });
+        }
+
+        // Si algún prefijo de facturas no emitió en este turno, asegurar que conserve el FACTFIN histórico
+        for (const [pref, maxNum] of Object.entries(prevLimits)) {
+            if (pref !== 'ANT' && pref !== 'RC') {
+                const yaGrabado = resumen.facturasGeneradas.some(fg => fg.prefijo === pref);
+                if (!yaGrabado && maxNum > 0) {
+                    await db(tables.TURNO_DET_FACTURAS).insert({
+                        ID_TURNO: idTurno,
+                        ID_ITEM: itemFact++,
+                        PREF: pref,
+                        FACTINI: maxNum,
+                        FACTFIN: maxNum,
+                        CANTIDAD: 0,
+                        TOTAL: 0
+                    }).catch(() => {});
+                }
+            }
+        }
+
+        // Grabar tracking de recibos y anticipos para los siguientes turnos
+        const maxRecaRow = await db(tables.RECIBOS_CAJA).max('RECA_ID as MAXR').first().catch(() => null);
+        const maxCurrentRecaId = parseInt(String(maxRecaRow?.MAXR || '0'), 10);
+        if (maxCurrentRecaId > 0) {
+            await db(tables.TURNO_DET_FACTURAS).insert({
+                ID_TURNO: idTurno,
+                ID_ITEM: itemFact++,
+                PREF: 'RC',
+                FACTINI: maxCurrentRecaId,
+                FACTFIN: maxCurrentRecaId,
+                CANTIDAD: 0,
+                TOTAL: resumen.totalRecaudadoPagos
+            }).catch(() => {});
+        }
+
+        const maxAnclRow = await db(tables.ANTICIPOS_CLIENTE).max('ANCL_ID as MAXA').first().catch(() => null);
+        const maxCurrentAnclId = parseInt(String(maxAnclRow?.MAXA || '0'), 10);
+        if (maxCurrentAnclId > 0) {
+            await db(tables.TURNO_DET_FACTURAS).insert({
+                ID_TURNO: idTurno,
+                ID_ITEM: itemFact++,
+                PREF: 'ANT',
+                FACTINI: maxCurrentAnclId,
+                FACTFIN: maxCurrentAnclId,
+                CANTIDAD: 0,
+                TOTAL: resumen.totalAbonosTurno
+            }).catch(() => {});
         }
 
         // 3. Grabar estado de habitaciones en TURNO_DET_HABITACIONES
@@ -478,6 +656,8 @@ export class TurnoService {
             pagosPorForma,
             totalVentasFacturadas,
             totalRecaudadoPagos,
+            totalAbonosTurno: 0,
+            totalAbonosAntiguos: 0,
             totalEfectivoEsperado,
             facturasGeneradas,
             habitacionesEstado,

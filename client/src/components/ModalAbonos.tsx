@@ -33,6 +33,7 @@ interface ModalAbonosProps {
   habitacionNumero: string;
   huesped: string;
   documento: string;
+  totalFacturado?: number;
   onClose: () => void;
   onAbonoRegistrado?: () => void;
 }
@@ -42,6 +43,7 @@ export const ModalAbonos: React.FC<ModalAbonosProps> = ({
   habitacionNumero,
   huesped,
   documento,
+  totalFacturado,
   onClose,
   onAbonoRegistrado,
 }) => {
@@ -108,12 +110,10 @@ export const ModalAbonos: React.FC<ModalAbonosProps> = ({
 
   const selectedForma = formasPago.find((f) => f.id === selectedFopaId);
 
-  const formatMoney = (val: number) => {
-    return new Intl.NumberFormat('es-CO', {
-      style: 'currency',
-      currency: 'COP',
-      maximumFractionDigits: 0,
-    }).format(val || 0);
+  const formatMoney = (val?: number | string) => {
+    const num = typeof val === 'number' ? val : parseFloat(String(val || 0));
+    if (isNaN(num)) return '$ 0';
+    return `$ ${Math.round(num).toLocaleString('es-CO')}`;
   };
 
   const formatDate = (dateStr: string) => {
@@ -130,6 +130,10 @@ export const ModalAbonos: React.FC<ModalAbonosProps> = ({
     }
   };
 
+  const saldoPendiente = totalFacturado !== undefined && totalFacturado > 0
+    ? Math.max(0, totalFacturado - totalAbonado)
+    : undefined;
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const cleanMonto = parseFloat(monto.replace(/\./g, '').replace(/,/g, ''));
@@ -144,6 +148,25 @@ export const ModalAbonos: React.FC<ModalAbonosProps> = ({
         message: 'La reserva no tiene un documento/NIT de cliente registrado.',
       });
       return;
+    }
+
+    // Validación de que el abono no supere lo facturado
+    if (totalFacturado !== undefined && totalFacturado > 0) {
+      if (cleanMonto > totalFacturado) {
+        setFeedback({
+          type: 'error',
+          message: `El monto del abono (${formatMoney(cleanMonto)}) no puede ser mayor al total facturado de la reserva (${formatMoney(totalFacturado)}).`
+        });
+        return;
+      }
+      if (totalAbonado + cleanMonto > totalFacturado) {
+        const saldo = Math.max(0, totalFacturado - totalAbonado);
+        setFeedback({
+          type: 'error',
+          message: `El abono de ${formatMoney(cleanMonto)} supera el saldo pendiente de la reserva (${formatMoney(saldo)}). El total acumulado de abonos no puede superar el valor facturado (${formatMoney(totalFacturado)}).`
+        });
+        return;
+      }
     }
 
     setSaving(true);
@@ -272,16 +295,81 @@ export const ModalAbonos: React.FC<ModalAbonosProps> = ({
               <span>➕</span> Registrar Nuevo Abono
             </h3>
 
+            {totalFacturado !== undefined && totalFacturado > 0 && (
+              <div
+                className="abono-resumen-facturado-box"
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: '1fr 1fr 1fr',
+                  gap: '10px',
+                  background: '#f8fafc',
+                  border: '1px solid #e2e8f0',
+                  borderRadius: '8px',
+                  padding: '10px 14px',
+                  marginTop: '10px',
+                  textAlign: 'center',
+                }}
+              >
+                <div>
+                  <span style={{ fontSize: '11px', color: '#64748b', display: 'block' }}>Total Facturado / Reserva</span>
+                  <strong style={{ fontSize: '13.5px', color: '#1e293b' }}>{formatMoney(totalFacturado)}</strong>
+                </div>
+                <div>
+                  <span style={{ fontSize: '11px', color: '#64748b', display: 'block' }}>Total Abonado</span>
+                  <strong style={{ fontSize: '13.5px', color: '#16a34a' }}>{formatMoney(totalAbonado)}</strong>
+                </div>
+                <div>
+                  <span style={{ fontSize: '11px', color: '#64748b', display: 'block' }}>Saldo Pendiente</span>
+                  <strong
+                    style={{
+                      fontSize: '13.5px',
+                      color: (saldoPendiente ?? 0) <= 0 ? '#16a34a' : '#2563eb',
+                    }}
+                  >
+                    {formatMoney(saldoPendiente ?? 0)}
+                  </strong>
+                </div>
+              </div>
+            )}
+
+            {saldoPendiente !== undefined && saldoPendiente <= 0 && (
+              <div
+                style={{
+                  background: '#dcfce7',
+                  color: '#15803d',
+                  padding: '8px 12px',
+                  borderRadius: '6px',
+                  fontSize: '12px',
+                  fontWeight: 600,
+                  marginTop: '10px',
+                }}
+              >
+                ✅ Esta reserva ya se encuentra cubierta al 100% por los abonos registrados.
+              </div>
+            )}
+
             <div className="abono-inputs-row">
               <div className="modal-form-group flex-1">
                 <label className="modal-form-label">Monto del Abono ($) *:</label>
                 <input
-                  type="number"
+                  type="text"
+                  inputMode="numeric"
                   className="modal-form-input abono-monto-input"
-                  placeholder="Ej: 50.000"
+                  placeholder={
+                    saldoPendiente !== undefined
+                      ? `Máx: $ ${saldoPendiente.toLocaleString('es-CO')}`
+                      : 'Ej: 50.000'
+                  }
                   value={monto}
-                  onChange={(e) => setMonto(e.target.value)}
-                  min="1"
+                  onChange={(e) => {
+                    const raw = e.target.value.replace(/\D/g, '');
+                    if (!raw) {
+                      setMonto('');
+                      return;
+                    }
+                    setMonto(Number(raw).toLocaleString('es-CO'));
+                  }}
+                  disabled={saldoPendiente !== undefined && saldoPendiente <= 0}
                   required
                   autoFocus
                 />
@@ -332,7 +420,7 @@ export const ModalAbonos: React.FC<ModalAbonosProps> = ({
               <button
                 type="submit"
                 className="btn-modal-save-abono"
-                disabled={saving || loading || !monto}
+                disabled={saving || loading || !monto || (saldoPendiente !== undefined && saldoPendiente <= 0)}
               >
                 {saving ? 'Guardando en Firebird...' : '💾 Registrar Abono'}
               </button>

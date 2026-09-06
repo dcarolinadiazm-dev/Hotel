@@ -18,6 +18,8 @@ export interface ResumenCierreZData {
   }>;
   totalVentasFacturadas: number;
   totalRecaudadoPagos: number;
+  totalAbonosTurno?: number;
+  totalAbonosAntiguos?: number;
   totalEfectivoEsperado: number;
   facturasGeneradas: Array<{
     prefijo: string;
@@ -221,6 +223,14 @@ export const ModalImpresionCierreZ: React.FC<ModalImpresionCierreZProps> = ({
                 <span className="pos-label">TOTAL RECAUDOS:</span>
                 <span className="pos-value bold">${data.totalRecaudadoPagos.toLocaleString('es-CO')}</span>
               </div>
+              <div className="pos-info-row">
+                <span className="pos-label">ABONOS DEL TURNO:</span>
+                <span className="pos-value bold">${(data.totalAbonosTurno || 0).toLocaleString('es-CO')}</span>
+              </div>
+              <div className="pos-info-row">
+                <span className="pos-label">ABONOS ANTIGUOS:</span>
+                <span className="pos-value bold">${(data.totalAbonosAntiguos || 0).toLocaleString('es-CO')}</span>
+              </div>
               <div className="pos-divider-dashed" />
               <div className="pos-info-row" style={{ fontSize: '12.5px', marginTop: '3px' }}>
                 <span className="pos-label">EFECTIVO ESPERADO:</span>
@@ -256,6 +266,21 @@ export const ModalImpresionCierreZ: React.FC<ModalImpresionCierreZProps> = ({
                     </tr>
                   ))}
                 </tbody>
+                <tfoot>
+                  {(() => {
+                    const totalTransacciones = (data.pagosPorForma || []).reduce((acc, p) => acc + (Number(p.cantidadTransacciones) || 0), 0);
+                    const totalVentas = (data.pagosPorForma || []).reduce((acc, p) => acc + (Number(p.total) || 0), 0);
+                    return (
+                      <tr style={{ borderTop: '1px dashed #000', fontWeight: 'bold' }}>
+                        <td style={{ textAlign: 'left' }}>TOTAL VENTAS</td>
+                        <td style={{ textAlign: 'center' }}>{totalTransacciones}</td>
+                        <td style={{ textAlign: 'right' }}>
+                          ${totalVentas.toLocaleString('es-CO')}
+                        </td>
+                      </tr>
+                    );
+                  })()}
+                </tfoot>
               </table>
             </div>
 

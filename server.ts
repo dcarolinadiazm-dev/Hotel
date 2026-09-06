@@ -1,4 +1,5 @@
 require('./scripts/setup_bindings.js');
+require('./scripts/error_handler.js');
 
 import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
@@ -43,12 +44,20 @@ app.use((req: Request, res: Response, next: NextFunction) => {
     res.status(404).send('Frontend no compilado. Ejecute: npm run client:build');
 });
 
-// Manejador global de errores
+// Manejador global de errores Express
 app.use((err: any, req: Request, res: Response, next: NextFunction) => {
-    console.error('💥 Error no controlado en el servidor:', err);
+    console.error('💥 Error no controlado en la ruta Express:', err);
     res.status(err.status || 500).json({
         error: err.message || 'Error interno del servidor'
     });
+});
+
+// Manejadores a nivel de proceso para evitar caídas por desconexiones o resets de socket
+process.on('uncaughtException', (err: any) => {
+    console.error('💥 Uncaught Exception en el servidor:', err?.message || err);
+});
+process.on('unhandledRejection', (reason: any) => {
+    console.error('💥 Unhandled Rejection en el servidor:', reason?.message || reason);
 });
 
 import { HabitacionService } from './src/services/habitacion.service';

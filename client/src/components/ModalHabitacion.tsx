@@ -86,6 +86,15 @@ export const ModalHabitacion = ({
   const [processingAction, setProcessingAction] = useState<string | null>(null);
   const [actionFeedback, setActionFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
+  useEffect(() => {
+    if (actionFeedback) {
+      const timer = setTimeout(() => {
+        setActionFeedback(null);
+      }, 4000);
+      return () => clearTimeout(timer);
+    }
+  }, [actionFeedback]);
+
   // Múltiples reservas de la habitación
   const [movimientos, setMovimientos] = useState<MovimientoReserva[]>([]);
   const [selectedMovimId, setSelectedMovimId] = useState<number | 'NUEVA' | null>(null);
@@ -937,13 +946,17 @@ export const ModalHabitacion = ({
       return;
     }
     const defaultFp = formasPago[0]?.id || 1;
-    setLineasPago([
-      {
-        id: Date.now(),
-        formaPagoId: defaultFp,
-        monto: totalPagar,
-      },
-    ]);
+    if (totalPagar <= 0 && totalAbonos > 0) {
+      setLineasPago([]);
+    } else {
+      setLineasPago([
+        {
+          id: Date.now(),
+          formaPagoId: defaultFp,
+          monto: totalPagar,
+        },
+      ]);
+    }
     if (prefijosFactura.length > 0 && !selectedPrefijo) {
       const active = prefijosFactura.find((p) => p.activo);
       setSelectedPrefijo(active ? active.prefijo : prefijosFactura[0].prefijo);
@@ -986,6 +999,7 @@ export const ModalHabitacion = ({
         });
         if (onHabitacionUpdated) onHabitacionUpdated();
         await fetchRoomDetails();
+        onClose();
       } else {
         alert(data.error || 'Error al cancelar la reserva');
       }
@@ -1003,9 +1017,11 @@ export const ModalHabitacion = ({
     setConfirmModal({
       isOpen: true,
       type: 'CANCELAR_RESERVA',
-      title: '¿Confirmar Cancelación de Reserva?',
-      message: `¿Estás seguro de que deseas cancelar la reserva ${guestInfo} en la Habitación ${habitacion.numero}?`,
-      details: 'Se anulará el pedido web activo de esta reserva y se anularán los anticipos y recibos de caja asociados en el sistema.',
+      title: '¿Confirmar Cancelación de Reserva / Limpiar Habitación?',
+      message: `¿Estás seguro de que deseas cancelar la reserva ${guestInfo} en la Habitación ${habitacion.numero} y dejarla disponible?`,
+      details: totalAbonos && totalAbonos > 0
+        ? `Se anularán los borradores web y se liberarán/anularán los abonos vinculados ($${totalAbonos.toLocaleString()}).`
+        : 'Se anulará el borrador web activo y se liberará la habitación.',
       confirmText: 'Sí, Cancelar Reserva',
       confirmButtonClass: 'btn-confirm-danger',
       onConfirm: executeCancelarReserva,
@@ -1072,15 +1088,20 @@ export const ModalHabitacion = ({
   const diferenciaPagos = totalPagar - totalPagosAsignados;
   const esTotalCuadrado = Math.abs(diferenciaPagos) < 1;
 
-  const formatMoney = (val: number) => {
-    return '$' + Number(val || 0).toLocaleString('es-CO');
+  const formatMoney = (val?: number | string) => {
+    const num = typeof val === 'number' ? val : parseFloat(String(val || 0));
+    if (isNaN(num)) return '$ 0';
+    return '$ ' + Math.round(num).toLocaleString('es-CO');
   };
 
 
+  const todayStr = (() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  })();
+
   const isReservaParaHoy = (() => {
     if (!fechaReserva) return false;
-    const now = new Date();
-    const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
     return String(fechaReserva).split('T')[0] <= todayStr;
   })();
 
@@ -1089,14 +1110,21 @@ export const ModalHabitacion = ({
   const hasFechaEntrada = Boolean(fechaReserva && fechaReserva.trim() !== '');
   const hasFechaSalida = Boolean(fechaSalida && fechaSalida.trim() !== '');
   const hasPrecioNoche = Number(precioNoche || 0) > 0;
+  const isFechaEntradaValida = Boolean(
+    selectedMovimId !== 'NUEVA' ||
+    !fechaReserva ||
+    fechaReserva.split('T')[0] >= todayStr
+  );
 
-  const isFormValid = hasHuesped && hasFechaEntrada && hasFechaSalida && hasPrecioNoche;
+  const isFormValid = hasHuesped && hasFechaEntrada && hasFechaSalida && hasPrecioNoche && isFechaEntradaValida;
 
   let validationReason = '';
   if (!hasHuesped) {
     validationReason = 'Debes seleccionar un Huésped / Cliente';
   } else if (!hasFechaEntrada) {
     validationReason = 'Debes registrar la Fecha y hora de entrada';
+  } else if (!isFechaEntradaValida && selectedMovimId === 'NUEVA') {
+    validationReason = 'La Fecha de entrada no puede ser anterior al día actual';
   } else if (!hasFechaSalida) {
     validationReason = 'Debes registrar la Fecha y hora de salida';
   } else if (!hasPrecioNoche) {
@@ -1104,25 +1132,86 @@ export const ModalHabitacion = ({
   }
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal-card-dialog modal-card-large" onClick={(e) => e.stopPropagation()}>
+    <div className="modal-backdrop">
+      <div className="modal-card-dialog modal-card-large" onClick={(e) => e.stopPropagation()} style={{ position: 'relative' }}>
+        {/* Overlay de Carga durante Facturación */}
+        {processingAction && (
+          <div style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(15, 23, 42, 0.78)',
+            zIndex: 99999,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            borderRadius: '16px',
+            color: '#ffffff',
+            backdropFilter: 'blur(3px)'
+          }}>
+            <div style={{
+              width: '48px',
+              height: '48px',
+              border: '4px solid rgba(255,255,255,0.2)',
+              borderTopColor: '#38bdf8',
+              borderRadius: '50%',
+              animation: 'spin 0.8s linear infinite',
+              marginBottom: '16px'
+            }} />
+            <h3 style={{ margin: '0 0 6px 0', fontSize: '18px', fontWeight: 800 }}>Procesando Facturación...</h3>
+            <p style={{ margin: 0, fontSize: '13px', color: '#cbd5e1' }}>Por favor espere mientras se graba la factura y se sincroniza la contabilidad en Firebird.</p>
+          </div>
+        )}
+
         {/* Header del Modal */}
         <div className="modal-dialog-header">
-          <div className="header-title-box">
-            <h2 className="modal-dialog-title">
-              Gestión y Carrito de la Reserva - Habitación {habitacion.numero}
-            </h2>
-            {peweId && (
-              <span className="badge-pewe-modal" title="Documento de Inventario / Remisión Web Vinculada">
-                📋 Remisión Web #{peweId}
-              </span>
-            )}
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', flex: 1 }}>
+            <div className="header-title-box">
+              <h2 className="modal-dialog-title" style={{ margin: 0 }}>
+                Gestión y Carrito de la Reserva - Habitación {habitacion.numero}
+              </h2>
+              {peweId && (
+                <span className="badge-pewe-modal" title="Documento de Inventario / Remisión Web Vinculada">
+                  📋 Remisión Web #{peweId}
+                </span>
+              )}
+            </div>
+            <div style={{ fontFamily: '"Arial Now", Arial, sans-serif', fontSize: '11px', color: '#475569', marginTop: '3px', textAlign: 'left' }}>
+              <strong style={{ fontFamily: '"Arial Now", Arial, sans-serif', fontWeight: 700, color: '#1e293b' }}>
+                Características / Tipo:{' '}
+              </strong>
+              <span>{caracteristicas || habitacion.caracteristicas || habitacion.tipo || 'SENCILLA'}</span>
+            </div>
           </div>
           <button className="btn-modal-close-x" onClick={onClose} title="Cerrar ventana">
             ✕
           </button>
-
         </div>
+
+        {/* Notificación Flotante Centrada en Medio del Modal */}
+        {actionFeedback && (
+          <div className={`modal-toast-center ${actionFeedback.type}`}>
+            <div className="modal-toast-center-content">
+              <div className="modal-toast-center-icon">
+                {actionFeedback.type === 'success' ? '✓' : '⚠️'}
+              </div>
+              <div className="modal-toast-center-text">
+                {actionFeedback.message.replace(/^[✅❌⚠️🎉🔍📋]+\s*/, '') || actionFeedback.message}
+              </div>
+            </div>
+            <button
+              type="button"
+              className="modal-toast-center-close"
+              onClick={() => setActionFeedback(null)}
+              title="Cerrar notificación"
+            >
+              ✕
+            </button>
+          </div>
+        )}
 
         {loading ? (
           <div className="modal-loading">
@@ -1131,14 +1220,6 @@ export const ModalHabitacion = ({
           </div>
         ) : (
           <div className="modal-dialog-body">
-            {actionFeedback && (
-              <div className={`modal-action-feedback ${actionFeedback.type}`}>
-                <span>{actionFeedback.message}</span>
-                <button className="btn-close-feedback" onClick={() => setActionFeedback(null)}>✕</button>
-              </div>
-            )}
-
-
             {/* Tira visual de Agenda de Reservas de la Habitación */}
             <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '12px 14px', marginBottom: '16px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: (movimientos.length > 0 || selectedMovimId === 'NUEVA') ? '10px' : '0' }}>
@@ -1545,21 +1626,38 @@ export const ModalHabitacion = ({
                 {/* 3. Fechas de Entrada y Salida con Calendario y Selector de Horas */}
                 <div className="modal-form-row">
                   <div className="modal-form-group flex-1">
-                    <label className="modal-form-label">📅 Fecha y hora de entrada:</label>
+                    <label className="modal-form-label">
+                      📅 Fecha y hora de entrada:
+                      {estado === 'Ocupada' && (
+                        <span style={{ fontSize: '11px', color: '#dc2626', marginLeft: '6px', fontWeight: 700 }}>
+                          (Inhabilitada - Habitación Ocupada)
+                        </span>
+                      )}
+                    </label>
                     <input
                       type="datetime-local"
                       className="modal-form-input modal-datetime-picker"
                       value={fechaReserva}
+                      disabled={estado === 'Ocupada'}
+                      min={selectedMovimId === 'NUEVA' ? `${todayStr}T00:00` : undefined}
+                      style={estado === 'Ocupada' ? { backgroundColor: '#f1f5f9', cursor: 'not-allowed', color: '#64748b', borderColor: '#cbd5e1' } : {}}
+                      title={estado === 'Ocupada' ? 'La fecha de entrada está inhabilitada porque la habitación ya está ocupada' : undefined}
                       onChange={(e) => {
                         const val = e.target.value;
+                        const currNow = new Date();
+                        const currToday = `${currNow.getFullYear()}-${String(currNow.getMonth() + 1).padStart(2, '0')}-${String(currNow.getDate()).padStart(2, '0')}`;
+                        if (selectedMovimId === 'NUEVA' && val && val.split('T')[0] < currToday) {
+                          alert('⚠️ No es posible seleccionar una fecha de entrada anterior al día actual para una nueva reserva.');
+                          const defaultVal = getCurrentDatetimeLocal(0);
+                          setFechaReserva(defaultVal);
+                          setFechaSalida(getDefaultFechaSalida(defaultVal, 1));
+                          return;
+                        }
                         setFechaReserva(val);
                         if (val) {
                           setFechaSalida(getDefaultFechaSalida(val, 1));
-
-                          const now = new Date();
-                          const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
                           const fDate = val.split('T')[0];
-                          if (fDate > todayStr) {
+                          if (fDate > currToday) {
                             setEstado('Reservada');
                           } else {
                             setEstado('Ocupada');
@@ -1568,7 +1666,11 @@ export const ModalHabitacion = ({
                       }}
                     />
                     {fechaReserva && (
-                      isReservaParaHoy ? (
+                      estado === 'Ocupada' ? (
+                        <span style={{ display: 'block', marginTop: '4px', fontSize: '11px', color: '#64748b', fontWeight: 600 }}>
+                          🔒 Habitación ocupada: La fecha de entrada no se puede modificar.
+                        </span>
+                      ) : isReservaParaHoy ? (
                         <span style={{ display: 'block', marginTop: '4px', fontSize: '11px', color: '#dc2626', fontWeight: 700 }}>
                           ⚡ Inicia hoy: Al guardar quedará en estado <strong>OCUPADA</strong>.
                         </span>
@@ -1691,19 +1793,6 @@ export const ModalHabitacion = ({
                   </div>
                 )}
 
-                {/* 5. Características / Tipo */}
-                <div className="modal-form-group">
-                  <label className="modal-form-label">Características / Tipo:</label>
-                  <input
-                    type="text"
-                    className="modal-form-input readonly-input-field"
-                    value={caracteristicas || habitacion.tipo || 'SENCILLA'}
-                    disabled
-                    readOnly
-                    title="Las características y tipo se configuran desde la edición de la habitación"
-                  />
-                </div>
-
               </div>
 
               {/* Columna Derecha: Carrito y Pedido de la Habitación */}
@@ -1823,10 +1912,14 @@ export const ModalHabitacion = ({
                         <div className="modal-form-group flex-1">
                           <label className="modal-form-label">Precio ($):</label>
                           <input
-                            type="number"
+                            type="text"
+                            inputMode="numeric"
                             className="modal-form-input"
-                            value={customPrecio}
-                            onChange={(e) => setCustomPrecio(e.target.value)}
+                            value={customPrecio ? Number(String(customPrecio).replace(/\D/g, '')).toLocaleString('es-CO') : ''}
+                            onChange={(e) => {
+                              const raw = e.target.value.replace(/\D/g, '');
+                              setCustomPrecio(raw ? Number(raw).toLocaleString('es-CO') : '');
+                            }}
                             placeholder="0"
                           />
                         </div>
@@ -1843,7 +1936,16 @@ export const ModalHabitacion = ({
                         </div>
                       </div>
 
-                      <button type="submit" className="btn-modal-add-item">
+                      <button
+                        type="submit"
+                        className="btn-modal-add-item"
+                        disabled={!customDescripcion.trim() || Number(customPrecio || 0) <= 0 || Number(customCantidad || 0) <= 0}
+                        title={
+                          Number(customPrecio || 0) <= 0
+                            ? 'El precio del artículo debe ser mayor a cero ($0) para agregar al carrito'
+                            : 'Agregar producto al carrito'
+                        }
+                      >
                         + Agregar al Carrito
                       </button>
                     </form>
@@ -1977,22 +2079,22 @@ export const ModalHabitacion = ({
             </div>
 
             <div className="footer-buttons-group">
-              {/* Botón Cancelar Reserva */}
-              {(estado === 'Reservada' || Boolean(peweId)) ? (
+              {/* Botón Cancelar Reserva: Disponible para habitaciones reservadas, ocupadas o con movimiento activo */}
+              {(estado === 'Reservada' || estado === 'Ocupada' || Boolean(peweId) || (movimientos && movimientos.length > 0)) && (
                 <button
                   type="button"
                   className="btn-modal-cancel-reservation"
                   onClick={requestCancelarReserva}
                   disabled={saving || cancelling}
-                  title="Anular la reserva y dejar la habitación disponible"
+                  title="Anular la reserva u ocupación y dejar la habitación disponible"
                 >
                   {cancelling ? 'Cancelando...' : '🚫 Cancelar reserva'}
                 </button>
-              ) : (
-                <button type="button" className="btn-modal-close-action" onClick={onClose} disabled={saving}>
-                  Cerrar
-                </button>
               )}
+
+              <button type="button" className="btn-modal-close-action" onClick={onClose} disabled={saving || cancelling}>
+                Cerrar
+              </button>
 
               {/* Botón Abonos */}
               {(() => {
@@ -2067,105 +2169,116 @@ export const ModalHabitacion = ({
                   </select>
                 </div>
 
-                {/* Formas de Pago Múltiples */}
-                <div className="formas-pago-container">
-                  <div className="formas-pago-header-row">
-                    <label className="factura-modal-label">
-                      💳 Formas de Pago ({lineasPago.length}):
-                    </label>
-                    <button
-                      type="button"
-                      className="btn-add-forma-pago"
-                      onClick={() => {
-                        const yaAsignado = lineasPago.reduce((acc, l) => acc + (Number(l.monto) || 0), 0);
-                        const pendiente = Math.max(0, totalPagar - yaAsignado);
-                        setLineasPago([
-                          ...lineasPago,
-                          {
-                            id: Date.now(),
-                            formaPagoId: formasPago[0]?.id || 1,
-                            monto: pendiente,
-                          },
-                        ]);
-                      }}
-                    >
-                      ➕ Agregar forma de pago
-                    </button>
+                {/* Formas de Pago o Mensaje de Abonos Previos */}
+                {totalPagar <= 0 && totalAbonos > 0 ? (
+                  <div style={{ background: '#e8f5e9', border: '1px solid #a5d6a7', borderRadius: '8px', padding: '14px', marginTop: '10px' }}>
+                    <div style={{ color: '#2e7d32', fontWeight: 'bold', fontSize: '14px', marginBottom: '4px' }}>
+                      💳 Cubierto 100% con Abonos / Anticipos Previos
+                    </div>
+                    <div style={{ color: '#388e3c', fontSize: '13px', lineHeight: '1.4' }}>
+                      El valor facturado ({formatMoney(totalReserva)}) está totalmente cancelado mediante los abonos registrados previamente ({formatMoney(totalAbonos)}). La factura se emitirá sin registrar nuevas formas de pago para no duplicar el recibo de caja.
+                    </div>
                   </div>
+                ) : (
+                  <div className="formas-pago-container">
+                    <div className="formas-pago-header-row">
+                      <label className="factura-modal-label">
+                        💳 Formas de Pago ({lineasPago.length}):
+                      </label>
+                      <button
+                        type="button"
+                        className="btn-add-forma-pago"
+                        onClick={() => {
+                          const yaAsignado = lineasPago.reduce((acc, l) => acc + (Number(l.monto) || 0), 0);
+                          const pendiente = Math.max(0, totalPagar - yaAsignado);
+                          setLineasPago([
+                            ...lineasPago,
+                            {
+                              id: Date.now(),
+                              formaPagoId: formasPago[0]?.id || 1,
+                              monto: pendiente,
+                            },
+                          ]);
+                        }}
+                      >
+                        ➕ Agregar forma de pago
+                      </button>
+                    </div>
 
-                  <div className="lineas-pago-list">
-                    {lineasPago.map((linea, index) => (
-                      <div key={linea.id} className="linea-pago-row">
-                        <span className="linea-pago-num">#{index + 1}</span>
-                        <select
-                          className="select-forma-pago-item"
-                          value={linea.formaPagoId}
-                          onChange={(e) => {
-                            const val = parseInt(e.target.value, 10);
-                            setLineasPago(lineasPago.map((l) => (l.id === linea.id ? { ...l, formaPagoId: val } : l)));
-                          }}
-                        >
-                          {formasPago.map((fp) => (
-                            <option key={fp.id} value={fp.id}>
-                              {fp.nombre}
-                            </option>
-                          ))}
-                        </select>
-
-                        <div className="input-monto-pago-wrapper">
-                          <span className="currency-prefix">$</span>
-                          <input
-                            type="number"
-                            min="0"
-                            step="100"
-                            className="input-monto-pago"
-                            placeholder="0"
-                            value={linea.monto === 0 ? '' : linea.monto}
+                    <div className="lineas-pago-list">
+                      {lineasPago.map((linea, index) => (
+                        <div key={linea.id} className="linea-pago-row">
+                          <span className="linea-pago-num">#{index + 1}</span>
+                          <select
+                            className="select-forma-pago-item"
+                            value={linea.formaPagoId}
                             onChange={(e) => {
-                              const val = parseFloat(e.target.value) || 0;
-                              setLineasPago(lineasPago.map((l) => (l.id === linea.id ? { ...l, monto: val } : l)));
+                              const val = parseInt(e.target.value, 10);
+                              setLineasPago(lineasPago.map((l) => (l.id === linea.id ? { ...l, formaPagoId: val } : l)));
                             }}
-                          />
-                        </div>
-
-                        {lineasPago.length > 1 ? (
-                          <button
-                            type="button"
-                            className="btn-remove-linea-pago"
-                            onClick={() => setLineasPago(lineasPago.filter((l) => l.id !== linea.id))}
-                            title="Eliminar forma de pago"
                           >
-                            🗑️
-                          </button>
-                        ) : (
-                          <div></div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
+                            {formasPago.map((fp) => (
+                              <option key={fp.id} value={fp.id}>
+                                {fp.nombre}
+                              </option>
+                            ))}
+                          </select>
 
-                  {/* Tarjeta de Balance */}
-                  <div className={`pago-balance-card ${esTotalCuadrado ? 'balance-ok' : 'balance-mismatch'}`}>
-                    <div className="balance-item">
-                      <span>Total Factura:</span>
-                      <strong>{formatMoney(totalPagar)}</strong>
+                          <div className="input-monto-pago-wrapper">
+                            <span className="currency-prefix">$</span>
+                            <input
+                              type="text"
+                              inputMode="numeric"
+                              className="input-monto-pago"
+                              placeholder="0"
+                              value={linea.monto ? Number(linea.monto).toLocaleString('es-CO') : ''}
+                              onChange={(e) => {
+                                const raw = e.target.value.replace(/\D/g, '');
+                                const val = raw ? parseFloat(raw) : 0;
+                                setLineasPago(lineasPago.map((l) => (l.id === linea.id ? { ...l, monto: val } : l)));
+                              }}
+                            />
+                          </div>
+
+                          {lineasPago.length > 1 ? (
+                            <button
+                              type="button"
+                              className="btn-remove-linea-pago"
+                              onClick={() => setLineasPago(lineasPago.filter((l) => l.id !== linea.id))}
+                              title="Eliminar forma de pago"
+                            >
+                              🗑️
+                            </button>
+                          ) : (
+                            <div></div>
+                          )}
+                        </div>
+                      ))}
                     </div>
-                    <div className="balance-item">
-                      <span>Total Pagos:</span>
-                      <strong>{formatMoney(totalPagosAsignados)}</strong>
-                    </div>
-                    <div className="balance-item">
-                      <span>Balance:</span>
-                      <strong>
-                        {esTotalCuadrado
-                          ? '✅ Cuadrado exacto'
-                          : diferenciaPagos > 0
-                            ? `⚠️ Faltan ${formatMoney(diferenciaPagos)}`
-                            : `⚠️ Excede en ${formatMoney(Math.abs(diferenciaPagos))}`}
-                      </strong>
+
+                    {/* Tarjeta de Balance */}
+                    <div className={`pago-balance-card ${esTotalCuadrado ? 'balance-ok' : 'balance-mismatch'}`}>
+                      <div className="balance-item">
+                        <span>Total Factura:</span>
+                        <strong>{formatMoney(totalPagar)}</strong>
+                      </div>
+                      <div className="balance-item">
+                        <span>Total Pagos:</span>
+                        <strong>{formatMoney(totalPagosAsignados)}</strong>
+                      </div>
+                      <div className="balance-item">
+                        <span>Balance:</span>
+                        <strong>
+                          {esTotalCuadrado
+                            ? '✅ Cuadrado exacto'
+                            : diferenciaPagos > 0
+                              ? `⚠️ Faltan ${formatMoney(diferenciaPagos)}`
+                              : `⚠️ Excede en ${formatMoney(Math.abs(diferenciaPagos))}`}
+                        </strong>
+                      </div>
                     </div>
                   </div>
-                </div>
+                )}
               </div>
             )}
 
@@ -2198,7 +2311,7 @@ export const ModalHabitacion = ({
                 disabled={
                   cancelling ||
                   processingAction !== null ||
-                  (confirmModal.type === 'FACTURAR' && (!esTotalCuadrado || lineasPago.length === 0))
+                  (confirmModal.type === 'FACTURAR' && totalPagar > 0 && (!esTotalCuadrado || lineasPago.length === 0))
                 }
               >
                 {cancelling || processingAction !== null
@@ -2216,6 +2329,7 @@ export const ModalHabitacion = ({
           habitacionNumero={habitacion.numero}
           huesped={huesped}
           documento={documento}
+          totalFacturado={totalReserva}
           onClose={() => setShowModalAbonos(false)}
           onAbonoRegistrado={() => {
             refreshAbonosTotal(documento);

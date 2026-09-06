@@ -151,31 +151,45 @@ export const ModalCierreZ: React.FC<ModalCierreZProps> = ({
               </div>
 
               {/* Tarjetas de Totales */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px', marginBottom: '20px' }}>
-                <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '10px', padding: '14px' }}>
-                  <span style={{ fontSize: '12px', fontWeight: 600, color: '#1e40af' }}>💵 Base Inicial</span>
-                  <div style={{ fontSize: '20px', fontWeight: 800, color: '#1e3a8a', marginTop: '4px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '10px', marginBottom: '20px' }}>
+                <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '10px', padding: '12px' }}>
+                  <span style={{ fontSize: '11px', fontWeight: 600, color: '#1e40af' }}>💵 Base Inicial</span>
+                  <div style={{ fontSize: '17px', fontWeight: 800, color: '#1e3a8a', marginTop: '4px' }}>
                     ${resumen.turno.base.toLocaleString('es-CO')}
                   </div>
                 </div>
 
-                <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '10px', padding: '14px' }}>
-                  <span style={{ fontSize: '12px', fontWeight: 600, color: '#166534' }}>🧾 Total Facturado</span>
-                  <div style={{ fontSize: '20px', fontWeight: 800, color: '#14532d', marginTop: '4px' }}>
+                <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '10px', padding: '12px' }}>
+                  <span style={{ fontSize: '11px', fontWeight: 600, color: '#166534' }}>🧾 Total Facturado</span>
+                  <div style={{ fontSize: '17px', fontWeight: 800, color: '#14532d', marginTop: '4px' }}>
                     ${resumen.totalVentasFacturadas.toLocaleString('es-CO')}
                   </div>
                 </div>
 
-                <div style={{ background: '#faf5ff', border: '1px solid #e9d5ff', borderRadius: '10px', padding: '14px' }}>
-                  <span style={{ fontSize: '12px', fontWeight: 600, color: '#6b21a8' }}>💳 Total Recaudos</span>
-                  <div style={{ fontSize: '20px', fontWeight: 800, color: '#581c87', marginTop: '4px' }}>
+                <div style={{ background: '#faf5ff', border: '1px solid #e9d5ff', borderRadius: '10px', padding: '12px' }}>
+                  <span style={{ fontSize: '11px', fontWeight: 600, color: '#6b21a8' }}>💳 Total Recaudos</span>
+                  <div style={{ fontSize: '17px', fontWeight: 800, color: '#581c87', marginTop: '4px' }}>
                     ${resumen.totalRecaudadoPagos.toLocaleString('es-CO')}
                   </div>
                 </div>
 
-                <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '10px', padding: '14px' }}>
-                  <span style={{ fontSize: '12px', fontWeight: 600, color: '#92400e' }}>💰 Efectivo Esperado</span>
-                  <div style={{ fontSize: '20px', fontWeight: 800, color: '#b45309', marginTop: '4px' }}>
+                <div style={{ background: '#f0fdfa', border: '1px solid #99f6e4', borderRadius: '10px', padding: '12px' }}>
+                  <span style={{ fontSize: '11px', fontWeight: 600, color: '#0f766e' }}>📥 Abonos del Turno</span>
+                  <div style={{ fontSize: '17px', fontWeight: 800, color: '#115e59', marginTop: '4px' }}>
+                    ${(resumen.totalAbonosTurno || 0).toLocaleString('es-CO')}
+                  </div>
+                </div>
+
+                <div style={{ background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: '10px', padding: '12px' }}>
+                  <span style={{ fontSize: '11px', fontWeight: 600, color: '#c2410c' }}>⏳ Abonos Antiguos</span>
+                  <div style={{ fontSize: '17px', fontWeight: 800, color: '#9a3412', marginTop: '4px' }}>
+                    ${(resumen.totalAbonosAntiguos || 0).toLocaleString('es-CO')}
+                  </div>
+                </div>
+
+                <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '10px', padding: '12px' }}>
+                  <span style={{ fontSize: '11px', fontWeight: 600, color: '#92400e' }}>💰 Efectivo Esperado</span>
+                  <div style={{ fontSize: '17px', fontWeight: 800, color: '#b45309', marginTop: '4px' }}>
                     ${resumen.totalEfectivoEsperado.toLocaleString('es-CO')}
                   </div>
                 </div>
@@ -210,6 +224,25 @@ export const ModalCierreZ: React.FC<ModalCierreZProps> = ({
                         </tr>
                       ))}
                     </tbody>
+                    <tfoot>
+                      {(() => {
+                        const totalTransacciones = (resumen.pagosPorForma || []).reduce((acc, p) => acc + (Number(p.cantidadTransacciones) || 0), 0);
+                        const totalVentas = (resumen.pagosPorForma || []).reduce((acc, p) => acc + (Number(p.total) || 0), 0);
+                        return (
+                          <tr style={{ background: '#f8fafc', borderTop: '2px solid #cbd5e1', fontWeight: 800 }}>
+                            <td style={{ padding: '9px 12px', color: '#0f172a', fontWeight: 800 }}>
+                              Total Ventas
+                            </td>
+                            <td style={{ padding: '9px 12px', textAlign: 'center', color: '#334155', fontWeight: 700 }}>
+                              {totalTransacciones}
+                            </td>
+                            <td style={{ padding: '9px 12px', textAlign: 'right', fontWeight: 800, color: '#047857', fontSize: '14px' }}>
+                              ${totalVentas.toLocaleString('es-CO')}
+                            </td>
+                          </tr>
+                        );
+                      })()}
+                    </tfoot>
                   </table>
                 </div>
               </div>

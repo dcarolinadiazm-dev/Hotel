@@ -47,8 +47,7 @@ export class HabitacionService {
                 const isOccupiedToday = activeMovs.some(m => {
                     if (!m.FECHA_RESERVA) return false;
                     const fRes = String(m.FECHA_RESERVA).split('T')[0];
-                    const fSal = m.FECHA_SALIDA ? String(m.FECHA_SALIDA).split('T')[0] : '';
-                    return fRes <= todayStr && (!fSal || fSal >= todayStr);
+                    return fRes <= todayStr;
                 });
 
                 if (isOccupiedToday) {
@@ -109,13 +108,10 @@ export class HabitacionService {
                 return fRes > todayStr;
             }).length;
 
-            // Movimiento activo de hoy (si existe)
-            const todayMov = allMovs.find(m => {
-                if (!m.FECHA_RESERVA) return false;
-                const fRes = String(m.FECHA_RESERVA).split('T')[0];
-                const fSal = m.FECHA_SALIDA ? String(m.FECHA_SALIDA).split('T')[0] : '';
-                return fRes <= todayStr && (!fSal || fSal >= todayStr);
-            });
+            // Movimiento activo en curso (el que ya inició: FECHA_RESERVA <= todayStr)
+            const currentStayMov = allMovs
+                .filter(m => String(m.FECHA_RESERVA).split('T')[0] <= todayStr)
+                .sort((a, b) => new Date(b.FECHA_RESERVA).getTime() - new Date(a.FECHA_RESERVA).getTime())[0];
 
             // Consultar datos de TODOS los movimientos de la habitación para permitir búsqueda por cualquier huésped/reserva
             const allHuespedesList: string[] = [];
@@ -150,8 +146,8 @@ export class HabitacionService {
                 }
             }
 
-            // Seleccionar movimiento activo (priorizando el de hoy, o la primera reserva activa)
-            const activeMov = todayMov || allMovs[0] || null;
+            // Seleccionar movimiento activo (priorizando el hospedaje en curso, o la primera reserva activa)
+            const activeMov = currentStayMov || allMovs[0] || null;
 
             let activeDinwId = (activeMov?.DINW_ID || activeMov?.PEWE_ID || activeMov?.ID_DOC || activeMov?.PEDI_ID) ? parseInt(String(activeMov.DINW_ID || activeMov.PEWE_ID || activeMov.ID_DOC || activeMov.PEDI_ID), 10) : undefined;
             let huesped = '';
@@ -181,7 +177,7 @@ export class HabitacionService {
                         const obsMatch = String(dinwRow.DINW_OBS).split('-');
                         if (obsMatch.length > 1) huesped = obsMatch[1].trim();
                     }
-                } else if (!todayMov) {
+                } else if (!currentStayMov) {
                     // Si no es de hoy pero hay dinwId en la reserva
                     activeDinwId = undefined;
                 }
@@ -845,6 +841,21 @@ export class HabitacionService {
                 .update({ ESTADO: 'Cancelado' });
         }
 
+
+        // Forzar limpieza del estado y notas de la habitación si ya no tiene movimientos activos
+        const remainingActive = await db(tables.HABITACION_MOVIM)
+            .where('ID_HABITACION', id)
+            .andWhere(function () {
+                this.where('ESTADO', 'Activo').orWhereNull('ESTADO');
+            })
+            .select('ID_MOVIM');
+
+        if (remainingActive.length === 0) {
+            await db(tables.HABITACION)
+                .where('ID_HABITACION', id)
+                .update({ ESTADO: 'Disponible', NOTAS: '' });
+        }
+
         await this.syncHabitacionesEstadoAutomatico();
 
         return { success: true, message: 'Reserva cancelada correctamente, anticipos anulados y habitación sincronizada.' };
@@ -987,10 +998,8 @@ export class HabitacionService {
             .leftJoin(tables.DOC_INVENTARIO_WEB, `${tables.HABITACION_MOVIM}.DINW_ID`, '=', `${tables.DOC_INVENTARIO_WEB}.DINW_ID`)
             .leftJoin(tables.TERCEROS, `${tables.DOC_INVENTARIO_WEB}.DINW_NIT`, '=', `${tables.TERCEROS}.TERC_NIT`)
             .where(function () {
-                this.where(`${tables.HABITACION_MOVIM}.ESTADO`, 'Activo').orWhereNull(`${tables.HABITACION_MOVIM}.ESTADO`);
-            })
-            .andWhere(function () {
-                this.whereNull(`${tables.DOC_INVENTARIO_WEB}.DINW_IDDOC`).orWhere(`${tables.DOC_INVENTARIO_WEB}.DINW_IDDOC`, 0);
+                this.whereIn(`${tables.HABITACION_MOVIM}.ESTADO`, ['Activo', 'Reservada', 'Ocupada', 'Facturado'])
+                    .orWhereNull(`${tables.HABITACION_MOVIM}.ESTADO`);
             })
             .andWhere(function () {
                 this.whereNull(`${tables.DOC_INVENTARIO_WEB}.DINW_ANULADO`).orWhere(`${tables.DOC_INVENTARIO_WEB}.DINW_ANULADO`, '!=', 'S');
@@ -1001,6 +1010,7 @@ export class HabitacionService {
                 `${tables.HABITACION_MOVIM}.FECHA_RESERVA`,
                 `${tables.HABITACION_MOVIM}.FECHA_SALIDA`,
                 `${tables.HABITACION_MOVIM}.DINW_ID`,
+                `${tables.HABITACION_MOVIM}.ID_DOC`,
                 `${tables.HABITACION_MOVIM}.ESTADO as MOV_ESTADO`,
                 `${tables.HABITACION}.NUMERO as HAB_NUMERO`,
                 `${tables.HABITACION}.TIPO as HAB_TIPO`,
@@ -1008,6 +1018,7 @@ export class HabitacionService {
                 `${tables.HABITACION}.ARTI_COD as HAB_ARTI_COD`,
                 db.raw(`COALESCE(${tables.PRECIOS_ARTICULO}.PRAR_FIJO, ${tables.ARTICULO}.ARTI_PRECIO, 0) as "HAB_PRECIO"`),
                 `${tables.DOC_INVENTARIO_WEB}.DINW_NIT`,
+                `${tables.DOC_INVENTARIO_WEB}.DINW_IDDOC`,
                 `${tables.DOC_INVENTARIO_WEB}.DINW_TOTAL`,
                 `${tables.DOC_INVENTARIO_WEB}.DINW_OBS`,
                 `${tables.TERCEROS}.TERC_NOM`,
@@ -1065,6 +1076,13 @@ export class HabitacionService {
                 estadoReserva = 'En Curso';
             }
 
+            const isFacturado = Boolean(
+                (r.ID_DOC && parseInt(String(r.ID_DOC), 10) > 0) ||
+                (r.DINW_IDDOC && parseInt(String(r.DINW_IDDOC), 10) > 0) ||
+                (r.MOV_ESTADO && String(r.MOV_ESTADO).trim().toLowerCase() === 'facturado')
+            );
+            const estadoFacturacion = isFacturado ? 'Facturado' : 'Pendiente';
+
             results.push({
                 idMovim: r.ID_MOVIM,
                 habitacionId: String(r.ID_HABITACION).trim(),
@@ -1084,6 +1102,8 @@ export class HabitacionService {
                 abonos,
                 saldoPendiente,
                 estadoReserva,
+                estadoFacturacion,
+                idDoc: r.ID_DOC || r.DINW_IDDOC || undefined,
                 peweId: dinwId,
                 observaciones: r.DINW_OBS ? String(r.DINW_OBS).trim() : ''
             });

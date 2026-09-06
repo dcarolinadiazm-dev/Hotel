@@ -1049,6 +1049,32 @@
   color: #dc2626;
 }
 
+.status-vencida {
+  color: #ea580c !important;
+}
+
+.room-card.status-vencida-card {
+  background: linear-gradient(180deg, #fff7ed 0%, #ffffff 100%) !important;
+  border: 2px solid #ea580c !important;
+  box-shadow: 0 0 0 2px rgba(234, 88, 12, 0.2), 0 4px 14px rgba(194, 65, 12, 0.15) !important;
+  animation: pulse-vencida-card 2.5s infinite ease-in-out;
+}
+
+@keyframes pulse-vencida-card {
+  0%, 100% {
+    border-color: #ea580c;
+    box-shadow: 0 0 0 2px rgba(234, 88, 12, 0.25), 0 4px 12px rgba(194, 65, 12, 0.15);
+  }
+  50% {
+    border-color: #f97316;
+    box-shadow: 0 0 0 4px rgba(249, 115, 22, 0.35), 0 6px 18px rgba(249, 115, 22, 0.25);
+  }
+}
+
+.room-bed-icon-box.status-vencida {
+  color: #ea580c !important;
+}
+
 .room-status-label {
   font-size: 14.5px;
   font-weight: 700;
@@ -1748,6 +1774,7 @@
 }
 
 .modal-card-dialog {
+  position: relative;
   background: #ffffff;
   border-radius: 18px;
   width: 100%;
@@ -1758,6 +1785,111 @@
   flex-direction: column;
   overflow: hidden;
   animation: scaleUp 0.22s ease-out;
+}
+
+/* Notificación Flotante Centrada en Medio del Modal */
+@keyframes modalToastPopCenter {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -42%) scale(0.92);
+  }
+  100% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+
+.modal-toast-center {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-width: 320px;
+  max-width: 540px;
+  padding: 16px 20px;
+  border-radius: 14px;
+  box-shadow: 0 20px 45px -8px rgba(0, 0, 0, 0.35), 0 0 0 1px rgba(0, 0, 0, 0.05);
+  animation: modalToastPopCenter 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  pointer-events: auto;
+}
+
+.modal-toast-center.success {
+  background: #ffffff;
+  border: 1.5px solid #10b981;
+  color: #065f46;
+  box-shadow: 0 20px 45px -8px rgba(16, 185, 129, 0.25), 0 8px 24px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(16, 185, 129, 0.2);
+}
+
+.modal-toast-center.error {
+  background: #ffffff;
+  border: 1.5px solid #ef4444;
+  color: #991b1b;
+  box-shadow: 0 20px 45px -8px rgba(239, 68, 68, 0.25), 0 8px 24px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(239, 68, 68, 0.2);
+}
+
+.modal-toast-center-content {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+}
+
+.modal-toast-center-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  font-weight: 800;
+  flex-shrink: 0;
+}
+
+.modal-toast-center.success .modal-toast-center-icon {
+  background: #dcfce7;
+  color: #15803d;
+  border: 1px solid #86efac;
+}
+
+.modal-toast-center.error .modal-toast-center-icon {
+  background: #fee2e2;
+  color: #b91c1c;
+  border: 1px solid #fca5a5;
+}
+
+.modal-toast-center-text {
+  font-size: 13.5px;
+  font-weight: 700;
+  line-height: 1.35;
+  color: #1e293b;
+}
+
+.modal-toast-center-close {
+  background: transparent;
+  border: none;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #64748b;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all 0.15s ease;
+}
+
+.modal-toast-center-close:hover {
+  background: #f1f5f9;
+  color: #0f172a;
 }
 
 .modal-card-large {
@@ -1918,8 +2050,15 @@
   transition: background 0.2s;
 }
 
-.btn-modal-add-item:hover {
+.btn-modal-add-item:hover:not(:disabled) {
   background-color: #0849b3;
+}
+
+.btn-modal-add-item:disabled {
+  background-color: #94a3b8;
+  color: #f1f5f9;
+  cursor: not-allowed;
+  opacity: 0.65;
 }
 
 .modal-cart-items-wrapper {
@@ -3951,15 +4090,32 @@
   text-align: right;
 }
 
+.pos-col-full {
+  width: 100% !important;
+  padding: 0.5px 0 !important;
+}
+
 .pos-item-desc {
   font-weight: 700;
   font-size: 11.5px;
+}
+
+.pos-item-subline {
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 240px;
+  color: #000000;
+  line-height: 1.25;
 }
 
 .pos-item-unit-calc {
   display: block;
   font-size: 10px;
   color: #333333;
+  line-height: 1.2;
 }
 
 /* Bloque de Totales */

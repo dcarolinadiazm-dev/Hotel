@@ -203,6 +203,50 @@ export const Habitaciones = ({
     (h) => h.estado.toLowerCase().trim() === 'ocupada'
   );
 
+  const [, setCurrentTimestamp] = useState(Date.now());
+  useEffect(() => {
+    const timer = setInterval(() => setCurrentTimestamp(Date.now()), 30000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const isCheckOutVencido = (hab: Habitacion): boolean => {
+    const estadoNorm = (hab.estado || '').toLowerCase().trim();
+    if (estadoNorm !== 'ocupada' || !hab.fechaSalida) return false;
+    try {
+      let cleanStr = String(hab.fechaSalida).trim();
+      if (cleanStr.includes(' ') && !cleanStr.includes('T')) {
+        cleanStr = cleanStr.replace(' ', 'T');
+      }
+      if (cleanStr.length === 10 && cleanStr.includes('-')) {
+        cleanStr += 'T13:00:00';
+      }
+      const fSalida = new Date(cleanStr);
+      if (isNaN(fSalida.getTime())) return false;
+      const now = new Date();
+      return now.getTime() >= fSalida.getTime();
+    } catch {
+      return false;
+    }
+  };
+
+  const formatHoraSalida = (val?: string) => {
+    if (!val) return '';
+    try {
+      let cleanStr = String(val).trim();
+      if (cleanStr.includes(' ') && !cleanStr.includes('T')) {
+        cleanStr = cleanStr.replace(' ', 'T');
+      }
+      if (cleanStr.length === 10 && cleanStr.includes('-')) {
+        cleanStr += 'T13:00:00';
+      }
+      const d = new Date(cleanStr);
+      if (isNaN(d.getTime())) return '';
+      return d.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', hour12: true });
+    } catch {
+      return '';
+    }
+  };
+
   const getStatusClass = (estado: string) => {
     const norm = estado.toLowerCase().trim();
     if (norm === 'disponible') return 'status-disponible';
@@ -667,6 +711,7 @@ export const Habitaciones = ({
               {!loading && !error && habitacionesFiltradas.length > 0 && (
                 <div className="rooms-cards-grid">
                   {habitacionesFiltradas.map((hab) => {
+                    const isVencida = isCheckOutVencido(hab);
                     const statusClass = getStatusClass(hab.estado);
                     const isReservada = hab.estado === 'Reservada';
                     const isOcupada = hab.estado === 'Ocupada';
@@ -677,7 +722,7 @@ export const Habitaciones = ({
                     return (
                       <div
                         key={hab.id}
-                        className={`room-card ${statusClass}-card ${isSelected ? 'room-card-selected' : ''}`}
+                        className={`room-card ${statusClass}-card ${isVencida ? 'status-vencida-card' : ''} ${isSelected ? 'room-card-selected' : ''}`}
                         onClick={() => {
                           if (hab.estado === 'Inhabilitada') {
                             alert(`⚠️ La Habitación ${hab.numero} está INHABILITADA.\n\nNo es posible ingresar a registrar reservas ni consumos en esta habitación.\n\nPara reactivarla, haz clic en el botón Editar (✏️) de esta habitación y cambia su estado a 'Disponible'.`);
@@ -732,7 +777,7 @@ export const Habitaciones = ({
                         <h3 className="room-card-number">{hab.numero}</h3>
 
                         {/* Icono de Cama con color de estado */}
-                        <div className={`room-bed-icon-box ${statusClass}`}>
+                        <div className={`room-bed-icon-box ${isVencida ? 'status-vencida' : statusClass}`}>
                           <svg viewBox="0 0 64 64" fill="currentColor" className="bed-svg">
                             <path d="M6 22H12V46H6V22Z" />
                             <path d="M52 32H58V46H52V32Z" />
@@ -745,9 +790,20 @@ export const Habitaciones = ({
                         </div>
 
                         {/* Texto de Estado */}
-                        <span className={`room-status-label ${statusClass}`}>
-                          {hab.estado}
-                        </span>
+                        {isVencida ? (
+                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px', margin: '2px 0 6px 0' }}>
+                            <span className="room-status-label status-vencida" style={{ color: '#c2410c', fontWeight: 800, margin: 0, fontSize: '13px' }}>
+                              ⚠️ Desocupar
+                            </span>
+                            <span style={{ fontSize: '10px', background: '#ffedd5', color: '#9a3412', border: '1px solid #fdba74', padding: '1px 6px', borderRadius: '4px', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '2px' }}>
+                              ⏰ Salida: {formatHoraSalida(hab.fechaSalida) || 'Cumplida'}
+                            </span>
+                          </div>
+                        ) : (
+                          <span className={`room-status-label ${statusClass}`}>
+                            {hab.estado}
+                          </span>
+                        )}
 
                         {/* Detalle Huésped o Código de Artículo y Precio de Lista */}
                         <div className="room-extra-info">

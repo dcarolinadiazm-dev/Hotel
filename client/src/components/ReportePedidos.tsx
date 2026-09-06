@@ -90,8 +90,10 @@ export const ReportePedidos = ({
     fetchReporte();
   }, []);
 
-  const formatMoney = (val: number) => {
-    return '$' + Number(val || 0).toLocaleString('es-CO');
+  const formatMoney = (val?: number | string) => {
+    const num = typeof val === 'number' ? val : parseFloat(String(val || 0));
+    if (isNaN(num)) return '$ 0';
+    return '$ ' + Math.round(num).toLocaleString('es-CO');
   };
 
   const handleExportExcel = () => {

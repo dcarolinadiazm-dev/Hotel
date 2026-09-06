@@ -117,9 +117,10 @@ export const ReporteCartera: React.FC<ReporteCarteraProps> = ({
     fetchCartera();
   }, [fechaCorte]);
 
-  const formatMoney = (val?: number) => {
+  const formatMoney = (val?: number | string) => {
     const num = Math.round(Number(val || 0));
-    return '$' + num.toLocaleString('es-CO');
+    if (isNaN(num)) return '$ 0';
+    return '$ ' + num.toLocaleString('es-CO');
   };
 
   // Clientes filtrados en frontend para búsqueda instantánea reactiva

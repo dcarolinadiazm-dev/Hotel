@@ -3,6 +3,8 @@ import { tables } from '../utils/tables';
 import { TerceroService } from './tercero.service';
 import { ArticuloService } from './articulo.service';
 import { sanitizeText, truncateToBytes } from '../utils/text.utils';
+import { ContabilidadService } from './contabilidad.service';
+import { AbonoService } from './abono.service';
 
 export class PedidoService {
     // Obtener Punto de Venta y Bodega activos
@@ -112,7 +114,7 @@ export class PedidoService {
                 })
                 .first();
             if (prefRow?.PREF_PRE) pref = String(prefRow.PREF_PRE).trim();
-        } catch (e) {}
+        } catch (e) { }
 
         const { ptvtId, bodeCod } = await this.getDefaultPuntoVentaAndBodega();
         const obsString = sanitizeText(`Hospedaje Habitacion ${habNumero} - ${clienteNom}`);
@@ -604,7 +606,7 @@ export class PedidoService {
                     TERC_CLIE: 'S',
                     TERC_ESTADO: 'A'
                 });
-            } catch (e) {}
+            } catch (e) { }
         }
         await TerceroService.ensureCliente(clienteNit);
 
@@ -709,7 +711,7 @@ export class PedidoService {
 
         // Preparar caja y formas de pago en DOC_INVENTARIO_PAGO_WEB antes de llamar al SP
         try {
-            await db('DOC_INVENTARIO_PAGO_WEB').where('DINW_ID', dinwId).del().catch(() => {});
+            await db('DOC_INVENTARIO_PAGO_WEB').where('DINW_ID', dinwId).del().catch(() => { });
             if (listaPagos && listaPagos.length > 0) {
                 let cajaId = 1;
                 let codbco = '';
@@ -718,7 +720,7 @@ export class PedidoService {
                     if (ptvt?.CAJA_ID) cajaId = parseInt(String(ptvt.CAJA_ID), 10);
                     const cajaRow = await db('CAJAS').where('CAJA_ID', cajaId).first();
                     if (cajaRow?.CAJA_FPBCO) codbco = String(cajaRow.CAJA_FPBCO).trim();
-                } catch (e) {}
+                } catch (e) { }
 
                 for (let i = 0; i < listaPagos.length; i++) {
                     const p = listaPagos[i];
@@ -783,18 +785,21 @@ export class PedidoService {
         if (idGenerado) {
             try {
                 try {
-                    const subtotalFactura = Math.round((totalDoc - totalIva) * 100) / 100;
-                    await db('FACTURAS')
-                        .where('FACT_ID', idGenerado)
-                        .update({
-                            FACT_FECHA: nowFecha,
-                            FACT_VENCE: nowFecha,
-                            FACT_TOTAL: totalDoc,
-                            FACT_IVAMONTO: totalIva,
-                            FACT_SUBTOTAL: subtotalFactura,
-                            FACT_FORMAP: primaryFopaId,
-                            FACT_OBS: Buffer.from(obsString, 'utf-8')
-                        });
+                    const curFact = await db('FACTURAS').where('FACT_ID', idGenerado).first();
+                    if (curFact && (Math.abs(Number(curFact.FACT_TOTAL) - totalDoc) > 0.01 || curFact.FACT_FORMAP !== primaryFopaId)) {
+                        const subtotalFactura = Math.round((totalDoc - totalIva) * 100) / 100;
+                        await db('FACTURAS')
+                            .where('FACT_ID', idGenerado)
+                            .update({
+                                FACT_FECHA: nowFecha,
+                                FACT_VENCE: nowFecha,
+                                FACT_TOTAL: totalDoc,
+                                FACT_IVAMONTO: totalIva,
+                                FACT_SUBTOTAL: subtotalFactura,
+                                FACT_FORMAP: primaryFopaId,
+                                FACT_OBS: Buffer.from(obsString, 'utf-8')
+                            });
+                    }
                 } catch (factHeaderErr: any) {
                     console.warn('Aviso actualizando encabezado de FACTURAS (ya grabado por SP):', factHeaderErr.message);
                 }
@@ -823,7 +828,7 @@ export class PedidoService {
                             FADE_BASE: baseItem
                         };
                         if (sd.DIWD_OBS && String(sd.DIWD_OBS).trim()) {
-                            updateObj.FADE_OBS = sanitizeText(String(sd.DIWD_OBS).trim());
+                            updateObj.FADE_OBS = Buffer.from(sanitizeText(String(sd.DIWD_OBS).trim()), 'utf8');
                         }
 
                         await db('FACTURAS_DETALLE')
@@ -834,8 +839,25 @@ export class PedidoService {
                     console.warn('Aviso sincronizando FADE_DTOPORC/FADE_DTOMONTO/FADE_TOTAL/FADE_OBS:', dtoErr.message);
                 }
 
-                // Garantizar sincronización exacta de formas de pago en FACTURAS_CONTADO_PAGO
+                // 1. Contabilizar la Factura de Venta generada
+                console.log(`[FACTURACION-PASO-13] Contabilizando Factura de Venta ID ${idGenerado} (${prefijo})...`);
+                await ContabilidadService.contabilizarFactura(idGenerado, prefijo);
+
+                // 2. Garantizar sincronización exacta de formas de pago en FACTURAS_CONTADO_PAGO y RECIBOS_CAJA_PAGO
                 await PedidoService.syncFacturaPagos(idGenerado, listaPagos);
+
+                // 3. Obtener abonos para sincronizar
+                const abonosResult = await AbonoService.getAbonos(habitacionId, clienteNit);
+                const abonosList = abonosResult?.abonos || [];
+
+                // 4. Sincronizar el Recibo de Caja y Aplicación de Anticipos si hay abonos disponibles
+                if (abonosList && abonosList.length > 0) {
+                    console.log(`[FACTURACION-PASO-14] Sincronizando Recibo de Caja y Aplicación de Anticipos...`);
+                    await PedidoService.syncReciboCajaFactura(idGenerado, totalDoc, abonosList, listaPagos, prefijo);
+                } else {
+                    console.log(`[FACTURACION-PASO-14] Contabilizando Recibo de Caja generado con la factura...`);
+                    await PedidoService.contabilizarReciboDeFactura(idGenerado, prefijo);
+                }
             } catch (syncErr: any) {
                 console.error('Error procesando factura generada:', syncErr.message);
             }
@@ -974,6 +996,33 @@ export class PedidoService {
         const obsTexto = observacionesParam && observacionesParam.trim() ? observacionesParam.trim() : `Venta Directa - ${nom}`;
         const obsString = sanitizeText(obsTexto);
 
+        // Validar existencias de los artículos que controlan inventario (Punto 3)
+        for (const it of items) {
+            try {
+                const artRow = await db('ARTICULO')
+                    .where('ARTI_COD', it.articulo)
+                    .select('ARTI_EXIST', 'ARTI_ENSAMBLE', 'ARTI_DES')
+                    .first();
+
+                if (artRow && artRow.ARTI_EXIST !== 'N' && artRow.ARTI_ENSAMBLE !== 'S') {
+                    const resEx = await db.raw('SELECT * FROM EXISTENCIA_BODEGA(?, ?, ?)', [it.articulo, new Date(), '1']);
+                    const exRows = resEx.rows || (Array.isArray(resEx) ? resEx : [resEx]);
+                    const existen = parseFloat(String(exRows[0]?.EXISTENCIA ?? exRows[0]?.existencia ?? exRows[0]?.EXISTEN ?? 0));
+                    const reserva = parseFloat(String(exRows[0]?.RESERVADO ?? exRows[0]?.reservado ?? exRows[0]?.RESERVA ?? 0));
+                    const disponible = existen - reserva;
+
+                    if (disponible < it.cantidad) {
+                        const artNom = String(artRow.ARTI_DES || it.descripcion || it.articulo).trim();
+                        throw new Error(`Existencias insuficientes para el producto "${artNom}" (Código: ${it.articulo}). Cantidad solicitada: ${it.cantidad}, disponible en bodega: ${disponible}`);
+                    }
+                }
+            } catch (exErr: any) {
+                if (exErr.message && exErr.message.includes('Existencias insuficientes')) {
+                    throw exErr;
+                }
+            }
+        }
+
         // Calcular totales
         let totalBase = 0;
         let totalIva = 0;
@@ -1086,7 +1135,7 @@ export class PedidoService {
 
         // Preparar caja y formas de pago en DOC_INVENTARIO_PAGO_WEB antes de llamar al SP
         try {
-            await db('DOC_INVENTARIO_PAGO_WEB').where('DINW_ID', dinwId).del().catch(() => {});
+            await db('DOC_INVENTARIO_PAGO_WEB').where('DINW_ID', dinwId).del().catch(() => { });
             if (listaPagos && listaPagos.length > 0) {
                 let cajaId2 = 1;
                 let codbco2 = '';
@@ -1095,7 +1144,7 @@ export class PedidoService {
                     if (ptvt?.CAJA_ID) cajaId2 = parseInt(String(ptvt.CAJA_ID), 10);
                     const cajaRow = await db('CAJAS').where('CAJA_ID', cajaId2).first();
                     if (cajaRow?.CAJA_FPBCO) codbco2 = String(cajaRow.CAJA_FPBCO).trim();
-                } catch (e) {}
+                } catch (e) { }
 
                 for (let i = 0; i < listaPagos.length; i++) {
                     const p = listaPagos[i];
@@ -1140,7 +1189,17 @@ export class PedidoService {
         }
 
         // 3. Ejecutar procedimiento almacenado GRABE_DOCUMENTO_INV_WEB(31, ID)
-        const spResult = await db.raw('SELECT * FROM GRABE_DOCUMENTO_INV_WEB(?, ?)', [31, dinwId]);
+        let spResult: any;
+        try {
+            spResult = await db.raw('SELECT * FROM GRABE_DOCUMENTO_INV_WEB(?, ?)', [31, dinwId]);
+        } catch (fbErr: any) {
+            console.error('Error ejecutando GRABE_DOCUMENTO_INV_WEB en facturarDirecto:', fbErr.message);
+            await db(tables.DOC_INVENTARIO_DET_WEB).where('DINW_ID', dinwId).del().catch(() => {});
+            await db('DOC_INVENTARIO_PAGO_WEB').where('DINW_ID', dinwId).del().catch(() => {});
+            await db(tables.DOC_INVENTARIO_WEB).where('DINW_ID', dinwId).del().catch(() => {});
+            throw new Error(`Error en base de datos al facturar: ${fbErr.message}`);
+        }
+
         const resultRow = spResult.rows ? spResult.rows[0] : (Array.isArray(spResult) ? spResult[0] : spResult);
 
         let idGenerado = resultRow?.IDDOC || resultRow?.iddoc || resultRow?.Iddoc || (Array.isArray(resultRow) ? resultRow[0] : null);
@@ -1156,23 +1215,30 @@ export class PedidoService {
             throw new Error(`Error en GRABE_DOCUMENTO_INV_WEB de Firebird (Código de error: ${nError})`);
         }
 
+        if (!idGenerado) {
+            throw new Error(`No fue posible generar la factura de venta en Firebird.`);
+        }
+
         // 4. Sincronizar FACTURAS, FACTURAS_DETALLE y FACTURAS_CONTADO_PAGO
         if (idGenerado) {
             try {
                 try {
-                    const nowFecha = new Date();
-                    const subtotalFactura = Math.round((totalDoc - totalIva) * 100) / 100;
-                    await db('FACTURAS')
-                        .where('FACT_ID', idGenerado)
-                        .update({
-                            FACT_FECHA: nowFecha,
-                            FACT_VENCE: nowFecha,
-                            FACT_TOTAL: totalDoc,
-                            FACT_IVAMONTO: totalIva,
-                            FACT_SUBTOTAL: subtotalFactura,
-                            FACT_FORMAP: primaryFopaId,
-                            FACT_OBS: Buffer.from(obsString, 'utf-8')
-                        });
+                    const curFact = await db('FACTURAS').where('FACT_ID', idGenerado).first();
+                    if (curFact && (Math.abs(Number(curFact.FACT_TOTAL) - totalDoc) > 0.01 || curFact.FACT_FORMAP !== primaryFopaId)) {
+                        const nowFecha = new Date();
+                        const subtotalFactura = Math.round((totalDoc - totalIva) * 100) / 100;
+                        await db('FACTURAS')
+                            .where('FACT_ID', idGenerado)
+                            .update({
+                                FACT_FECHA: nowFecha,
+                                FACT_VENCE: nowFecha,
+                                FACT_TOTAL: totalDoc,
+                                FACT_IVAMONTO: totalIva,
+                                FACT_SUBTOTAL: subtotalFactura,
+                                FACT_FORMAP: primaryFopaId,
+                                FACT_OBS: Buffer.from(obsString, 'utf-8')
+                            });
+                    }
                 } catch (factHeaderErr: any) {
                     console.warn('Aviso actualizando encabezado de FACTURAS (directo):', factHeaderErr.message);
                 }
@@ -1191,8 +1257,17 @@ export class PedidoService {
                             FADE_BASE: baseItem
                         });
                 }
-                // Garantizar sincronización exacta de formas de pago en FACTURAS_CONTADO_PAGO
+
+                // 1. Contabilizar la Factura de Venta POS generada
+                console.log(`[FACTURA-POS-PASO-7] Contabilizando Factura de Venta POS ID ${idGenerado} (${prefijo})...`);
+                await ContabilidadService.contabilizarFactura(idGenerado, prefijo);
+
+                // 2. Garantizar sincronización exacta de formas de pago en FACTURAS_CONTADO_PAGO
                 await PedidoService.syncFacturaPagos(idGenerado, listaPagos);
+
+                // 3. Sincronizar y Contabilizar el Recibo de Caja de la Factura POS
+                console.log(`[FACTURA-POS-PASO-8] Contabilizando Recibo de Caja de la Factura POS...`);
+                await PedidoService.contabilizarReciboDeFactura(idGenerado, prefijo);
             } catch (syncErr: any) {
                 console.error('Error sincronizando facturarDirecto:', syncErr.message);
             }
@@ -1603,6 +1678,7 @@ export class PedidoService {
             subtotal = Math.round((totalPagar - ivaTotal) * 100) / 100;
         }
 
+        // 1. Obtener formas de pago de la factura / recibo de caja
         let pagosList: Array<{ nombre: string; monto: number }> = [];
         if (isFactura) {
             try {
@@ -1621,11 +1697,116 @@ export class PedidoService {
             } catch (e: any) {
                 console.warn('Aviso cargando formas de pago de FACTURAS_CONTADO_PAGO:', e.message);
             }
+
+            // Fallback: si no hay registros en FACTURAS_CONTADO_PAGO, consultar RECIBOS_CAJA_PAGO
+            if (pagosList.length === 0) {
+                try {
+                    const rcRow = await db('RECIBOS_CAJA_DETALLE')
+                        .where({ RCDE_TIPODOC: 31, RCDE_IDDOC: idDoc, RCDE_ANULADO: 'N' })
+                        .select('RECA_ID')
+                        .first();
+                    if (rcRow?.RECA_ID) {
+                        const rcPagos = await db('RECIBOS_CAJA_PAGO as P')
+                            .join('FORMAS_PAGO as F', 'P.FOPA_ID', 'F.FOPA_ID')
+                            .where('P.RECA_ID', rcRow.RECA_ID)
+                            .andWhere(function () {
+                                this.where('P.RCPA_ANULADO', '!=', 'S').orWhereNull('P.RCPA_ANULADO');
+                            })
+                            .orderBy('P.RCPA_ITEM', 'asc')
+                            .select('F.FOPA_NOM as nombre', 'P.RCPA_MONTO as monto');
+                        if (rcPagos && rcPagos.length > 0) {
+                            pagosList = rcPagos.map((p: any) => ({
+                                nombre: String(p.nombre || p.NOMBRE || 'EFECTIVO').trim(),
+                                monto: parseFloat(String(p.monto || 0))
+                            }));
+                        }
+                    }
+                } catch (rcErr: any) {
+                    console.warn('Aviso consultando RECIBOS_CAJA_PAGO para impresion:', rcErr.message);
+                }
+            }
         }
 
-        if (pagosList.length === 1 && pagosList[0].monto < totalPagar) {
+        // 2. Obtener abonos / anticipos aplicados a esta factura
+        let abonosList: Array<{ descripcion: string; monto: number }> = [];
+        try {
+            // A. A través de APLICACION_CLIENTE_DETALLE (Tipo 31 y Tipo 45 en el mismo APCL_ID)
+            const apclRows = await db(tables.APLICACION_CLIENTE_DETALLE)
+                .where({ ACDE_TIPODOC: 31, ACDE_IDDOC: idDoc })
+                .andWhere(function () {
+                    this.where('ACDE_ANULADO', '!=', 'S').orWhereNull('ACDE_ANULADO');
+                })
+                .select('APCL_ID');
+
+            if (apclRows && apclRows.length > 0) {
+                const apclIds = Array.from(new Set(apclRows.map((r: any) => r.APCL_ID)));
+                const abonoDets = await db(`${tables.APLICACION_CLIENTE_DETALLE} as AD`)
+                    .leftJoin(`${tables.ANTICIPOS_CLIENTE} as AC`, 'AD.ACDE_IDDOC', 'AC.ANCL_ID')
+                    .whereIn('AD.APCL_ID', apclIds)
+                    .andWhere('AD.ACDE_TIPODOC', 45)
+                    .andWhere(function () {
+                        this.where('AD.ACDE_ANULADO', '!=', 'S').orWhereNull('AD.ACDE_ANULADO');
+                    })
+                    .select('AD.ACDE_PREFIJO', 'AD.ACDE_NUMERO', 'AD.ACDE_APLICADO', 'AC.ANCL_CONC');
+
+                for (const ad of abonoDets) {
+                    const montoAbono = Math.abs(parseFloat(String(ad.ACDE_APLICADO || 0)));
+                    if (montoAbono > 0) {
+                        const prefA = String(ad.ACDE_PREFIJO || '0000').trim();
+                        const numA = String(ad.ACDE_NUMERO || '').trim();
+                        const concA = ad.ANCL_CONC ? String(ad.ANCL_CONC).trim() : '';
+                        abonosList.push({
+                            descripcion: concA ? `Abono (${prefA}-${numA}: ${concA})` : `Abono / Anticipo (${prefA}-${numA})`,
+                            monto: montoAbono
+                        });
+                    }
+                }
+            }
+
+            // B. Si no encontró en APLICACION_CLIENTE_DETALLE, buscar en HABITACION_MOVIM vinculados a esta factura
+            if (abonosList.length === 0) {
+                const movs = await db(tables.HABITACION_MOVIM)
+                    .where({ ID_DOC: idDoc, TIPO: 31 })
+                    .select('ID_MOVIM');
+
+                for (const m of movs) {
+                    const movAnts = await db(tables.HABITACION_MOVIM_ANTICIPOS)
+                        .join(tables.ANTICIPOS_CLIENTE, `${tables.HABITACION_MOVIM_ANTICIPOS}.ANCL_ID`, `${tables.ANTICIPOS_CLIENTE}.ANCL_ID`)
+                        .where(`${tables.HABITACION_MOVIM_ANTICIPOS}.ID_MOVIM`, m.ID_MOVIM)
+                        .andWhere(function () {
+                            this.where(`${tables.ANTICIPOS_CLIENTE}.ANCL_ANULADO`, '!=', 'S')
+                                .orWhereNull(`${tables.ANTICIPOS_CLIENTE}.ANCL_ANULADO`);
+                        })
+                        .select(
+                            `${tables.ANTICIPOS_CLIENTE}.PREF_PRE as ANCL_PREF`,
+                            `${tables.ANTICIPOS_CLIENTE}.ANCL_NUMERO`,
+                            `${tables.ANTICIPOS_CLIENTE}.ANCL_BASE`,
+                            `${tables.ANTICIPOS_CLIENTE}.ANCL_CONC`
+                        );
+
+                    for (const ma of movAnts) {
+                        const mAbono = parseFloat(String(ma.ANCL_BASE || 0));
+                        if (mAbono > 0) {
+                            const pA = String(ma.ANCL_PREF || '0000').trim();
+                            const nA = String(ma.ANCL_NUMERO || '').trim();
+                            const cA = ma.ANCL_CONC ? String(ma.ANCL_CONC).trim() : '';
+                            abonosList.push({
+                                descripcion: cA ? `Abono (${pA}-${nA}: ${cA})` : `Abono / Anticipo (${pA}-${nA})`,
+                                monto: mAbono
+                            });
+                        }
+                    }
+                }
+            }
+        } catch (abErr: any) {
+            console.warn('Aviso cargando abonos para impresion:', abErr.message);
+        }
+
+        const totalAbonos = abonosList.reduce((acc, a) => acc + (a.monto || 0), 0);
+
+        if (pagosList.length === 1 && abonosList.length === 0 && pagosList[0].monto < totalPagar) {
             pagosList[0].monto = totalPagar;
-        } else if (pagosList.length === 0) {
+        } else if (pagosList.length === 0 && abonosList.length === 0) {
             pagosList = [{ nombre: formaPagoStr || 'EFECTIVO', monto: totalPagar }];
         }
 
@@ -1657,6 +1838,8 @@ export class PedidoService {
             habitacionNumero,
             formaPago: cleanStr(formaPagoFinalStr),
             formasPago: pagosList,
+            abonos: abonosList,
+            totalAbonos,
             observaciones: cleanStr(obsBuffer),
             items,
             subtotal,
@@ -1670,7 +1853,9 @@ export class PedidoService {
         formaPagoId?: number,
         prefijoParam?: string,
         pagosParam?: Array<{ formaPagoId: number; monto: number }>,
-        observacionesParam?: string
+        observacionesParam?: string,
+        clienteNitParam?: string,
+        clienteNomParam?: string
     ) {
         if (!habitacionesIds || !Array.isArray(habitacionesIds) || habitacionesIds.length === 0) {
             throw new Error('Debe seleccionar al menos una habitación para facturar');
@@ -1694,30 +1879,31 @@ export class PedidoService {
         }
 
         // Obtener cliente del primer registro o de sus movimientos activos
-        let nit = '800003122';
-        let nombreCliente = 'Huésped General';
+        let nit = clienteNitParam || '800003122';
+        let nombreCliente = clienteNomParam || 'Huésped General';
 
-        for (const h of habs) {
-            if (h.DOCUMENTO && String(h.DOCUMENTO).trim()) {
-                nit = String(h.DOCUMENTO).trim();
-                nombreCliente = String(h.HUESPED || '').trim() || nombreCliente;
-                break;
-            }
-        }
-
-        if (nit === '800003122') {
+        if (!clienteNitParam) {
             for (const h of habs) {
-                const mov = await db(tables.HABITACION_MOVIM)
-                    .where('ID_HABITACION', String(h.ID_HABITACION))
-                    .andWhere(function () {
-                        this.where('ESTADO', 'Activo').orWhereNull('ESTADO');
-                    })
-                    .orderBy('ID_MOVIM', 'desc')
-                    .first();
-                if (mov?.DOCUMENTO && String(mov.DOCUMENTO).trim()) {
-                    nit = String(mov.DOCUMENTO).trim();
-                    nombreCliente = String(mov.HUESPED || '').trim() || nombreCliente;
+                if (h.DOCUMENTO && String(h.DOCUMENTO).trim()) {
+                    nit = String(h.DOCUMENTO).trim();
+                    nombreCliente = String(h.HUESPED || '').trim() || nombreCliente;
                     break;
+                }
+            }
+            if (nit === '800003122') {
+                for (const h of habs) {
+                    const mov = await db(tables.HABITACION_MOVIM)
+                        .where('ID_HABITACION', String(h.ID_HABITACION))
+                        .andWhere(function () {
+                            this.where('ESTADO', 'Activo').orWhereNull('ESTADO');
+                        })
+                        .orderBy('ID_MOVIM', 'desc')
+                        .first();
+                    if (mov?.DOCUMENTO && String(mov.DOCUMENTO).trim()) {
+                        nit = String(mov.DOCUMENTO).trim();
+                        nombreCliente = String(mov.HUESPED || '').trim() || nombreCliente;
+                        break;
+                    }
                 }
             }
         }
@@ -1732,7 +1918,7 @@ export class PedidoService {
                     TERC_CLIE: 'S',
                     TERC_ESTADO: 'A'
                 });
-            } catch (e) {}
+            } catch (e) { }
         }
         await TerceroService.ensureCliente(nit);
 
@@ -1756,7 +1942,7 @@ export class PedidoService {
                 if (ptvt.PTVT_NUM) ptVta = parseInt(String(ptvt.PTVT_NUM), 10) || 1;
                 if (ptvt.BODE_COD) bodega = String(ptvt.BODE_COD).trim() || '1';
             }
-        } catch (e) {}
+        } catch (e) { }
 
         const maxDinw = await db(tables.DOC_INVENTARIO_WEB).max('DINW_ID as MAXID').first();
         const masterDinwId = (parseInt(String(maxDinw?.MAXID || '0'), 10) || 0) + 1;
@@ -1772,7 +1958,7 @@ export class PedidoService {
                     })
                     .first();
                 if (prefRow?.PREF_PRE) prefijo = String(prefRow.PREF_PRE).trim();
-            } catch (e) {}
+            } catch (e) { }
         }
         if (!prefijo) prefijo = 'SETT';
 
@@ -1926,13 +2112,13 @@ export class PedidoService {
                 DIWD_TRANSMIT: 'N'
             });
         }
-        
+
         // Garantizar que los consecutivos de Facturas y Recibos de Caja estén sincronizados
         await PedidoService.syncConsecutivos(prefijo);
 
         // Preparar caja y formas de pago en DOC_INVENTARIO_PAGO_WEB antes de llamar al SP
         try {
-            await db('DOC_INVENTARIO_PAGO_WEB').where('DINW_ID', masterDinwId).del().catch(() => {});
+            await db('DOC_INVENTARIO_PAGO_WEB').where('DINW_ID', masterDinwId).del().catch(() => { });
             if (listaPagos && listaPagos.length > 0) {
                 let cajaId3 = 1;
                 let codbco3 = '';
@@ -1941,7 +2127,7 @@ export class PedidoService {
                     if (ptvt?.CAJA_ID) cajaId3 = parseInt(String(ptvt.CAJA_ID), 10);
                     const cajaRow = await db('CAJAS').where('CAJA_ID', cajaId3).first();
                     if (cajaRow?.CAJA_FPBCO) codbco3 = String(cajaRow.CAJA_FPBCO).trim();
-                } catch (e) {}
+                } catch (e) { }
 
                 for (let i = 0; i < listaPagos.length; i++) {
                     const p = listaPagos[i];
@@ -2006,19 +2192,22 @@ export class PedidoService {
         if (idGenerado) {
             try {
                 try {
-                    const nowFecha = new Date();
-                    const subtotalFactura = Math.round((totalDoc - totalIva) * 100) / 100;
-                    await db('FACTURAS')
-                        .where('FACT_ID', idGenerado)
-                        .update({
-                            FACT_FECHA: nowFecha,
-                            FACT_VENCE: nowFecha,
-                            FACT_TOTAL: totalDoc,
-                            FACT_IVAMONTO: totalIva,
-                            FACT_SUBTOTAL: subtotalFactura,
-                            FACT_FORMAP: primaryFopaId,
-                            FACT_OBS: Buffer.from(obsGeneral, 'utf-8')
-                        });
+                    const curFact = await db('FACTURAS').where('FACT_ID', idGenerado).first();
+                    if (curFact && (Math.abs(Number(curFact.FACT_TOTAL) - totalDoc) > 0.01 || curFact.FACT_FORMAP !== primaryFopaId)) {
+                        const nowFecha = new Date();
+                        const subtotalFactura = Math.round((totalDoc - totalIva) * 100) / 100;
+                        await db('FACTURAS')
+                            .where('FACT_ID', idGenerado)
+                            .update({
+                                FACT_FECHA: nowFecha,
+                                FACT_VENCE: nowFecha,
+                                FACT_TOTAL: totalDoc,
+                                FACT_IVAMONTO: totalIva,
+                                FACT_SUBTOTAL: subtotalFactura,
+                                FACT_FORMAP: primaryFopaId,
+                                FACT_OBS: Buffer.from(obsGeneral, 'utf-8')
+                            });
+                    }
                 } catch (factHeaderErr: any) {
                     console.warn('Aviso actualizando encabezado de FACTURAS (multiples):', factHeaderErr.message);
                 }
@@ -2048,16 +2237,45 @@ export class PedidoService {
                             FADE_BASE: baseItem
                         };
                         if (sd.DIWD_OBS && String(sd.DIWD_OBS).trim()) {
-                            updateObj.FADE_OBS = sanitizeText(String(sd.DIWD_OBS).trim());
+                            updateObj.FADE_OBS = Buffer.from(sanitizeText(String(sd.DIWD_OBS).trim()), 'utf8');
                         }
 
                         await db('FACTURAS_DETALLE')
                             .where({ FACT_ID: idGenerado, FADE_ITEM: sd.DIWD_ITEM })
                             .update(updateObj);
                     }
-                } catch (dtoErr: any) {}
-                // Garantizar sincronización exacta de formas de pago en FACTURAS_CONTADO_PAGO
+                } catch (dtoErr: any) { }
+
+                // 1. Contabilizar la Factura de Venta consolidada
+                console.log(`[FACTURACION-MULTI] Contabilizando Factura de Venta ID ${idGenerado} (${prefijo})...`);
+                await ContabilidadService.contabilizarFactura(idGenerado, prefijo);
+
+                // 2. Garantizar sincronización exacta de formas de pago en FACTURAS_CONTADO_PAGO y RECIBOS_CAJA_PAGO
                 await PedidoService.syncFacturaPagos(idGenerado, listaPagos);
+
+                // 3. Obtener abonos para sincronizar de todas las habitaciones consolidadas
+                let abonosList: any[] = [];
+                for (const hab of habitacionesIds) {
+                    const abResult = await AbonoService.getAbonos(String(hab), nit);
+                    if (abResult?.abonos?.length > 0) {
+                        abonosList = abonosList.concat(abResult.abonos);
+                    }
+                }
+                const seenAnclIds = new Set<number>();
+                abonosList = abonosList.filter(a => {
+                    if (!a.anclId || seenAnclIds.has(a.anclId)) return false;
+                    seenAnclIds.add(a.anclId);
+                    return true;
+                });
+
+                // 4. Sincronizar el Recibo de Caja y Aplicación de Anticipos si hay abonos disponibles
+                if (abonosList && abonosList.length > 0) {
+                    console.log(`[FACTURACION-MULTI] Sincronizando Recibo de Caja y Aplicación de Anticipos (${abonosList.length} abonos)...`);
+                    await PedidoService.syncReciboCajaFactura(idGenerado, totalDoc, abonosList, listaPagos, prefijo);
+                } else {
+                    console.log(`[FACTURACION-MULTI] Contabilizando Recibo de Caja generado...`);
+                    await PedidoService.contabilizarReciboDeFactura(idGenerado, prefijo);
+                }
             } catch (syncErr: any) {
                 console.error('Error procesando factura múltiple:', syncErr.message);
             }
@@ -2091,7 +2309,7 @@ export class PedidoService {
                             ESTADO: 'Facturado'
                         });
                 }
-            } catch (e: any) {}
+            } catch (e: any) { }
         }
 
         // Anular los borradores individuales previos para evitar duplicidades
@@ -2103,7 +2321,7 @@ export class PedidoService {
                         DINW_ANULADO: 'S',
                         DINW_OBS: `Consolidado en Factura Master #${masterDinwId}`
                     });
-            } catch (e) {}
+            } catch (e) { }
         }
 
         return {
@@ -2116,7 +2334,21 @@ export class PedidoService {
         };
     }
 
-    // Sincronizar fielmente las formas de pago en FACTURAS_CONTADO_PAGO
+    static async contabilizarReciboDeFactura(factId: number, factPref: string) {
+        try {
+            const row = await db('RECIBOS_CAJA_DETALLE')
+                .where({ RCDE_TIPODOC: 31, RCDE_IDDOC: factId, RCDE_ANULADO: 'N' })
+                .select('RECA_ID')
+                .first();
+            if (row && row.RECA_ID) {
+                await ContabilidadService.contabilizarReciboCartera(row.RECA_ID, factPref);
+            }
+        } catch (e: any) {
+            console.error('[RECIBO_CAJA] Error en contabilizarReciboDeFactura:', e.message);
+        }
+    }
+
+    // Sincronizar fielmente las formas de pago en FACTURAS_CONTADO_PAGO y RECIBOS_CAJA_PAGO
     static async syncFacturaPagos(idDoc: number, listaPagos: Array<{ formaPagoId: number; monto: number }>) {
         if (!idDoc || !listaPagos || listaPagos.length === 0) return;
 
@@ -2127,56 +2359,238 @@ export class PedidoService {
                     Math.abs(parseFloat(String(row.FCNP_MONTO)) - listaPagos[idx].monto) < 1;
             });
 
-            if (matches) return;
+            const totalPagos = listaPagos.reduce((acc, p) => acc + (parseFloat(String(p.monto)) || 0), 0);
 
-            console.log(`[PAGOS] Ajustando formas de pago en FACTURAS_CONTADO_PAGO para Factura ID ${idDoc}. Formas enviadas: ${listaPagos.length}, en BD: ${existing.length}`);
+            if (!matches) {
+                console.log(`[PAGOS] Ajustando formas de pago en FACTURAS_CONTADO_PAGO para Factura ID ${idDoc}. Formas enviadas: ${listaPagos.length}, en BD: ${existing.length}`);
 
-            // Obtener datos de caja y banco
-            let cajaId = 1;
-            let codbco = '';
-            try {
-                const ptvt = await db('PUNTO_VENTA').first();
-                if (ptvt?.CAJA_ID) cajaId = parseInt(String(ptvt.CAJA_ID), 10);
-                const cajaRow = await db('CAJAS').where('CAJA_ID', cajaId).first();
-                if (cajaRow?.CAJA_FPBCO) codbco = String(cajaRow.CAJA_FPBCO).trim();
-            } catch (e) {}
+                // Obtener datos de caja y banco
+                let cajaId = 1;
+                let codbco = '';
+                try {
+                    const ptvt = await db('PUNTO_VENTA').first();
+                    if (ptvt?.CAJA_ID) cajaId = parseInt(String(ptvt.CAJA_ID), 10);
+                    const cajaRow = await db('CAJAS').where('CAJA_ID', cajaId).first();
+                    if (cajaRow?.CAJA_FPBCO) codbco = String(cajaRow.CAJA_FPBCO).trim();
+                } catch (e) { }
 
-            const nowFecha = new Date();
+                const nowFecha = new Date();
 
-            // Eliminar registros incompletos o desactualizados
-            await db('FACTURAS_CONTADO_PAGO').where('FCNT_ID', idDoc).del();
+                // Eliminar registros incompletos o desactualizados
+                await db('FACTURAS_CONTADO_PAGO').where('FCNT_ID', idDoc).del();
 
-            for (let i = 0; i < listaPagos.length; i++) {
-                const p = listaPagos[i];
-                const isEfectivo = p.formaPagoId === 1;
-                let numBco = '';
-                if (!isEfectivo && codbco) {
-                    try {
-                        const maxRcpa = await db('RECIBOS_CAJA_PAGO')
-                            .where({ RCPA_BANCO: codbco, RCPA_CUENTA: '9999' })
-                            .max('RCPA_NUMERO as MAXN')
-                            .first();
-                        numBco = String((parseInt(String(maxRcpa?.MAXN || '0'), 10) || 0) + 1 + i).padStart(6, '0');
-                    } catch (e) {
-                        numBco = '000001';
+                for (let i = 0; i < listaPagos.length; i++) {
+                    const p = listaPagos[i];
+                    const isEfectivo = p.formaPagoId === 1;
+                    let numBco = '';
+                    if (!isEfectivo && codbco) {
+                        try {
+                            const maxRcpa = await db('RECIBOS_CAJA_PAGO')
+                                .where({ RCPA_BANCO: codbco, RCPA_CUENTA: '9999' })
+                                .max('RCPA_NUMERO as MAXN')
+                                .first();
+                            numBco = String((parseInt(String(maxRcpa?.MAXN || '0'), 10) || 0) + 1 + i).padStart(6, '0');
+                        } catch (e) {
+                            numBco = '000001';
+                        }
                     }
-                }
 
-                await db('FACTURAS_CONTADO_PAGO').insert({
-                    FCNT_ID: idDoc,
-                    FCNP_ITEM: i + 1,
-                    FOPA_ID: p.formaPagoId,
-                    FCNP_BANCO: isEfectivo ? '' : codbco,
-                    FCNP_CUENTA: isEfectivo ? '' : '9999',
-                    FCNP_NUMERO: isEfectivo ? '' : numBco,
-                    FCNP_FECHA: nowFecha,
-                    FCNP_MONTO: p.monto,
-                    FCNP_ANULADO: 'N',
-                    FCNP_CERRADO: 'N'
-                });
+                    await db('FACTURAS_CONTADO_PAGO').insert({
+                        FCNT_ID: idDoc,
+                        FCNP_ITEM: i + 1,
+                        FOPA_ID: p.formaPagoId,
+                        FCNP_BANCO: isEfectivo ? '' : codbco,
+                        FCNP_CUENTA: isEfectivo ? '' : '9999',
+                        FCNP_NUMERO: isEfectivo ? '' : numBco,
+                        FCNP_FECHA: nowFecha,
+                        FCNP_MONTO: p.monto,
+                        FCNP_ANULADO: 'N',
+                        FCNP_CERRADO: 'N'
+                    });
+                }
+            }
+
+            // Sincronizar el recibo de caja de contado con el total exacto de las formas de pago
+            const rcdRow = await db('RECIBOS_CAJA_DETALLE')
+                .where({ RCDE_TIPODOC: 31, RCDE_IDDOC: idDoc, RCDE_ANULADO: 'N' })
+                .first();
+            if (rcdRow && rcdRow.RECA_ID && totalPagos > 0) {
+                await db('RECIBOS_CAJA').where('RECA_ID', rcdRow.RECA_ID).update({ RECA_MONTO: totalPagos }).catch(() => { });
+                await db('RECIBOS_CAJA_DETALLE').where({ RECA_ID: rcdRow.RECA_ID, RCDE_TIPODOC: 31, RCDE_IDDOC: idDoc }).update({ RCDE_ABONO: totalPagos }).catch(() => { });
+                await db('SALDOS_DOC_CARTERA').where({ SDCA_TIPOREF: 31, SDCA_IDREF: idDoc }).update({ SDCA_ABONO: totalPagos }).catch(() => { });
             }
         } catch (err: any) {
             console.warn('[PAGOS] Aviso en syncFacturaPagos:', err.message);
+        }
+    }
+
+    static async syncReciboCajaFactura(idDoc: number, totalDoc: number, abonosList: Array<any>, listaPagos: Array<any>, factPref: string = '0000') {
+        if (!idDoc || !abonosList || abonosList.length === 0) return;
+
+        try {
+            const factRow = await db('FACTURAS').where('FACT_ID', idDoc).first();
+            if (!factRow) return;
+
+            const factNum = String(factRow.FACT_NUMERO || '').trim();
+            const clienteNit = String(factRow.TERC_NIT || '').trim();
+            const cobrCod = parseInt(String(factRow.COBR_COD || '1'), 10);
+            const nowFecha = new Date();
+            const totalAbonos = abonosList.reduce((acc, a) => acc + (parseFloat(String(a.monto)) || 0), 0);
+            const montoAplicarTotal = Math.min(totalDoc, totalAbonos);
+
+            let saldoPagado = totalDoc - montoAplicarTotal;
+            if (saldoPagado < 0) saldoPagado = 0;
+
+            const recaIdRow = await db('RECIBOS_CAJA_DETALLE')
+                .where({ RCDE_TIPODOC: 31, RCDE_IDDOC: idDoc, RCDE_ANULADO: 'N' })
+                .select('RECA_ID')
+                .first();
+            const recaId = parseInt(String(recaIdRow?.RECA_ID || '0'), 10);
+
+            // PASO A: Ajustar el Recibo de Caja de Contado y Cartera ANTES de aplicar los anticipos
+            // para que SALDOS_DOC_CARTERA refleje el saldo pendiente exacto y no genere DOCUMENTO_ABONO_MAYOR
+            if (recaId) {
+                if (saldoPagado <= 0) {
+                    await db('RECIBOS_CAJA_DETALLE').where('RECA_ID', recaId).del().catch(() => { });
+                    await db('RECIBOS_CAJA_PAGO').where('RECA_ID', recaId).del().catch(() => { });
+                    await db('RECIBOS_CAJA').where('RECA_ID', recaId).update({ RECA_MONTO: 0, RECA_ANULADO: 'S' }).catch(() => { });
+                    await db('SALDOS_DOC_CARTERA').where({ SDCA_TIPOREF: 31, SDCA_IDREF: idDoc }).update({ SDCA_ABONO: 0 }).catch(() => { });
+                } else {
+                    await db('RECIBOS_CAJA').where('RECA_ID', recaId).update({ RECA_MONTO: saldoPagado }).catch(() => { });
+                    await db('RECIBOS_CAJA_DETALLE').where({ RECA_ID: recaId, RCDE_TIPODOC: 31, RCDE_IDDOC: idDoc }).update({ RCDE_ABONO: saldoPagado }).catch(() => { });
+                    await db('SALDOS_DOC_CARTERA').where({ SDCA_TIPOREF: 31, SDCA_IDREF: idDoc }).update({ SDCA_ABONO: saldoPagado }).catch(() => { });
+                }
+            }
+
+            // PASO B: REGISTRO DE APLICACION DE CLIENTE (TIDO_COD = 43)
+            if (montoAplicarTotal > 0) {
+                // Obtener ID para APLICACION_CLIENTE usando generador ID_APLICACLIE
+                const genApclRes = await db.raw('SELECT GEN_ID(id_aplicaclie, 1) AS VAL FROM RDB$DATABASE').catch(async () => {
+                    const maxApcl = await db(tables.APLICACION_CLIENTE).max('APCL_ID as MAXID').first();
+                    return { rows: [{ VAL: (parseInt(String(maxApcl?.MAXID || '0'), 10) || 0) + 1 }] };
+                });
+                const apclRows = genApclRes.rows ? genApclRes.rows : (Array.isArray(genApclRes) ? genApclRes : [genApclRes]);
+                const apclId = parseInt(String(apclRows[0]?.VAL ?? apclRows[0]?.val ?? 0), 10);
+
+                // Obtener prefijo y consecutivo para TIDO_COD = 43 usando el prefijo de la factura (FE -> FE, 0000 -> 0000)
+                const prefApcl = (await db(tables.PREFIJOS).where({ TIDO_COD: 43, PREF_PRE: factPref }).first().catch(() => null))
+                    || (await db(tables.PREFIJOS).where('TIDO_COD', 43).first().catch(() => null));
+                const prefPreApcl = String(prefApcl?.PREF_PRE || factPref || '0000').trim();
+                const maxApclNumRow = await db(tables.APLICACION_CLIENTE).where('PREF_PRE', prefPreApcl).max('APCL_NUMERO as MAXN').first();
+                const maxApclNumVal = parseInt(String(maxApclNumRow?.MAXN || '0'), 10) || 0;
+                const curApclNum = parseInt(String(prefApcl?.PREF_ACTUAL || '1'), 10) || 1;
+                const finalApclNum = Math.max(maxApclNumVal + 1, curApclNum);
+                const apclNumero = String(finalApclNum).padStart(6, '0');
+                const nextApclActual = String(finalApclNum + 1).padStart(6, '0');
+
+                await db(tables.PREFIJOS)
+                    .where({ TIDO_COD: 43, PREF_PRE: prefPreApcl })
+                    .update({ PREF_ACTUAL: nextApclActual });
+
+                // Insertar Encabezado de APLICACION_CLIENTE
+                await db(tables.APLICACION_CLIENTE).insert({
+                    APCL_ID: apclId,
+                    TERC_NIT: clienteNit,
+                    TIDO_COD: 43,
+                    PREF_PRE: prefPreApcl,
+                    APCL_NUMERO: apclNumero,
+                    APCL_FECHA: nowFecha,
+                    APCL_CONCEPTO: Buffer.from(truncateToBytes(`Cruce Abonos Factura ${factPref}-${factNum}`, 55), 'utf8'),
+                    APCL_OBS: null,
+                    APCL_ANULADO: 'N',
+                    APCL_TRANSMIT: 'N',
+                    COBR_COD: cobrCod,
+                    APCL_USUARIO: 'SYSDBA',
+                    APCL_SUCURSAL: '01',
+                    NUMOK: 'S',
+                    APCL_TRM: 1,
+                    APCL_MONEDA: null
+                });
+
+                // Insertar Detalles en APLICACION_CLIENTE_DETALLE:
+                // 1. Cada Abono aplicado (ACDE_TIPODOC = 45, ACDE_APLICADO = -monto)
+                let itemApcl = 1;
+                let restantePorAplicar = montoAplicarTotal;
+
+                for (const ab of abonosList) {
+                    const abonoMonto = parseFloat(String(ab.monto || 0));
+                    const aplicadoEsteAbono = Math.min(abonoMonto, restantePorAplicar);
+                    if (aplicadoEsteAbono <= 0) continue;
+                    restantePorAplicar -= aplicadoEsteAbono;
+
+                    const anclPref = String(ab.anclPrefRaw || (ab.anclNumero && ab.anclNumero.includes('-') ? ab.anclNumero.split('-')[0] : '0000')).trim();
+                    const anclNum = String(ab.anclNumRaw || (ab.anclNumero && ab.anclNumero.includes('-') ? ab.anclNumero.split('-')[1] : ab.anclNumero)).trim();
+                    const anclIdVal = parseInt(String(ab.anclId), 10) || 0;
+
+                    // Asegurar que el NIT del anticipo coincida con el NIT de la factura para cumplir integridad en Firebird
+                    if (anclIdVal > 0 && clienteNit) {
+                        await db(tables.ANTICIPOS_CLIENTE)
+                            .where('ANCL_ID', anclIdVal)
+                            .update({ TERC_NIT: clienteNit })
+                            .catch(() => { });
+                    }
+
+                    await db(tables.APLICACION_CLIENTE_DETALLE).insert({
+                        APCL_ID: apclId,
+                        ACDE_ITEM: itemApcl++,
+                        ACDE_TIPODOC: 45, // ANTICIPOS_CLIENTE
+                        ACDE_IDDOC: anclIdVal,
+                        ACDE_PREFIJO: anclPref || '0000',
+                        ACDE_NUMERO: anclNum.trim().slice(-8).padStart(8, '0'),
+                        ACDE_APLICADO: -Math.abs(aplicadoEsteAbono), // NEGATIVO
+                        ACDE_RTFTE: 0,
+                        ACDE_RTIVA: 0,
+                        ACDE_RTICA: 0,
+                        ACDE_ANULADO: 'N',
+                        ACDE_TRANSMIT: 'N',
+                        ACDE_DIFCAMBIO: 0,
+                        ACDE_RCREE: 0,
+                        ACDE_SUCURSAL: '01'
+                    }).catch((e: any) => console.warn('Aviso insertando abono en APLICACION_CLIENTE_DETALLE:', e.message));
+                }
+
+                // 2. Factura de Venta aplicada (ACDE_TIPODOC = 31, ACDE_APLICADO = +montoAplicarTotal)
+                await db(tables.APLICACION_CLIENTE_DETALLE).insert({
+                    APCL_ID: apclId,
+                    ACDE_ITEM: itemApcl++,
+                    ACDE_TIPODOC: 31, // FACTURAS
+                    ACDE_IDDOC: idDoc,
+                    ACDE_PREFIJO: factPref || '0000',
+                    ACDE_NUMERO: factNum.trim().slice(-8).padStart(8, '0'),
+                    ACDE_APLICADO: Math.abs(montoAplicarTotal), // POSITIVO
+                    ACDE_RTFTE: 0,
+                    ACDE_RTIVA: 0,
+                    ACDE_RTICA: 0,
+                    ACDE_ANULADO: 'N',
+                    ACDE_TRANSMIT: 'N',
+                    ACDE_DIFCAMBIO: 0,
+                    ACDE_RCREE: 0,
+                    ACDE_SUCURSAL: '01'
+                }).catch((e: any) => console.warn('Aviso insertando factura en APLICACION_CLIENTE_DETALLE:', e.message));
+
+                // Actualizar encabezados de los recibos de caja de los abonos cruzados
+                for (const ab of abonosList) {
+                    const abonoConc = Buffer.from(truncateToBytes(`Cruce Ab. ${ab.anclPrefRaw || '0000'}-${ab.anclNumRaw || '0'} con Fact ${factPref}-${factNum}`, 80), 'utf8');
+                    if (ab.recaIdAbono) {
+                        await db('RECIBOS_CAJA').where('RECA_ID', ab.recaIdAbono).update({
+                            RECA_CONC: abonoConc,
+                            RECA_NOMTERC: Buffer.from(sanitizeText(String(factRow?.FACT_NOMCLIENTE || factRow?.FACT_NOMTERC || 'CLIENTE').trim()), 'utf8')
+                        }).catch(() => { });
+                    }
+                }
+
+                // Contabilizar la Aplicación de Cliente recién creada usando el prefijo de la factura (FE -> ID 5, 0000 -> ID 4)
+                await ContabilidadService.contabilizarAplicacionCliente(apclId, factPref);
+            }
+
+            // PASO C: Si hay recibo de caja de contado y quedó con saldo pagado, contabilizarlo
+            if (recaId && saldoPagado > 0) {
+                await PedidoService.contabilizarReciboDeFactura(idDoc, factPref);
+            }
+
+            console.log(`[RECIBO_CAJA] Recibo de caja y aplicación sincronizados para Factura ${factPref}-${factNum}: Abonos aplicados $${montoAplicarTotal}, Saldo pagado en RC $${saldoPagado}`);
+        } catch (err: any) {
+            console.warn('[RECIBO_CAJA] Error en syncReciboCajaFactura:', err.message);
         }
     }
 }

@@ -32,6 +32,7 @@ export class PedidoController {
     // POST /api/pedidos/enviar-facturar
     static async enviarAFacturar(req: Request, res: Response) {
         const { habitacionId, peweId, formaPagoId, prefijo, pagos, observaciones } = req.body;
+        console.log(`[HTTP-REQUEST] POST /api/pedidos/enviar-facturar recibido para habitacionId: ${habitacionId}, peweId: ${peweId}, prefijo: ${prefijo}`);
         if (!habitacionId) {
             return res.status(400).json({ error: 'habitacionId es requerido' });
         }
@@ -46,6 +47,7 @@ export class PedidoController {
                 pagos,
                 observaciones ? String(observaciones).trim() : undefined
             );
+            console.log(`[HTTP-RESPONSE] POST /api/pedidos/enviar-facturar completado exitosamente:`, resultado);
             res.json(resultado);
         } catch (error: any) {
             console.error('Error en PedidoController.enviarAFacturar:', error.message);
@@ -55,18 +57,24 @@ export class PedidoController {
 
     // POST /api/pedidos/enviar-facturar-multiples
     static async enviarAFacturarMultiples(req: Request, res: Response) {
-        const { habitacionesIds, formaPagoId, prefijo, pagos, observaciones } = req.body;
+        const { habitacionesIds, formaPagoId, prefijo, pagos, observaciones, clienteNit, clienteNom, nit, nombreCliente } = req.body;
+        console.log(`[HTTP-REQUEST] POST /api/pedidos/enviar-facturar-multiples recibido para habitaciones: ${habitacionesIds}, prefijo: ${prefijo || 'default'}`);
         if (!habitacionesIds || !Array.isArray(habitacionesIds) || habitacionesIds.length === 0) {
             return res.status(400).json({ error: 'Debe proporcionar una lista de IDs de habitaciones' });
         }
 
         try {
+            const finalNit = nit || clienteNit ? String(nit || clienteNit).trim() : undefined;
+            const finalNom = nombreCliente || clienteNom ? String(nombreCliente || clienteNom).trim() : undefined;
+
             const resultado = await PedidoService.enviarAFacturarMultiples(
                 habitacionesIds.map(String),
                 formaPagoId ? parseInt(String(formaPagoId), 10) : undefined,
                 prefijo ? String(prefijo).trim() : undefined,
                 pagos,
-                observaciones ? String(observaciones).trim() : undefined
+                observaciones ? String(observaciones).trim() : undefined,
+                finalNit,
+                finalNom
             );
             res.json(resultado);
         } catch (error: any) {
@@ -78,6 +86,7 @@ export class PedidoController {
     // POST /api/pedidos/facturar-directo
     static async facturarDirecto(req: Request, res: Response) {
         const { clienteNit, clienteNom, items, formaPagoId, prefijo, pagos, observaciones } = req.body;
+        console.log(`[HTTP-REQUEST] POST /api/pedidos/facturar-directo recibido para cliente: ${clienteNit || 'General'}, items: ${items?.length || 0}, prefijo: ${prefijo || 'default'}`);
         if (!items || !Array.isArray(items) || items.length === 0) {
             return res.status(400).json({ error: 'El carrito no contiene productos para facturar' });
         }
@@ -92,10 +101,11 @@ export class PedidoController {
                 pagos,
                 observaciones ? String(observaciones).trim() : undefined
             );
+            console.log(`[HTTP-RESPONSE] POST /api/pedidos/facturar-directo completado exitosamente:`, resultado);
             res.json(resultado);
         } catch (error: any) {
             console.error('Error en PedidoController.facturarDirecto:', error.message);
-            res.status(500).json({ error: error.message || 'Error al facturar productos' });
+            res.status(400).json({ error: error.message || 'Error al facturar productos' });
         }
     }
 

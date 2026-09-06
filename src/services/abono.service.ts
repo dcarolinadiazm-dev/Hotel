@@ -1,6 +1,7 @@
 import { db } from '../config/knex.config';
 import { tables } from '../utils/tables';
 import { sanitizeText, truncateToBytes } from '../utils/text.utils';
+import { ContabilidadService } from './contabilidad.service';
 
 export interface RegistrarAbonoPayload {
     idHabitacion: string;
@@ -48,10 +49,21 @@ export class AbonoService {
     static async getAbonos(idHabitacion: string, tercNit?: string) {
         const habNum = String(idHabitacion).trim();
 
+        const habRow = await db(tables.HABITACION)
+            .where('ID_HABITACION', habNum)
+            .orWhere('NUMERO', habNum)
+            .first()
+            .catch(() => null);
+
+        const idHab = habRow?.ID_HABITACION ? String(habRow.ID_HABITACION).trim() : habNum;
+        const numHab = habRow?.NUMERO ? String(habRow.NUMERO).trim() : habNum;
+
         // 1. Buscar si hay movimiento activo en HABITACION_MOVIM
         const activeMov = await db(tables.HABITACION_MOVIM)
             .where(function () {
-                this.where('ID_HABITACION', habNum)
+                this.where('ID_HABITACION', idHab)
+                    .orWhere('ID_HABITACION', habNum)
+                    .orWhere('ID_HABITACION', numHab)
                     .orWhere('ID_MOVIM', habNum)
                     .orWhere('DINW_ID', habNum);
             })
@@ -62,12 +74,23 @@ export class AbonoService {
                     .orWhere('ESTADO', 'Reservada');
             })
             .orderBy('ID_MOVIM', 'desc')
-            .first();
+            .first()
+            .catch(() => null);
 
         let rowsMap = new Map<number, any>();
 
+        // IDs de anticipos que ya fueron cruzados en APLICACION_CLIENTE
+        const appliedAnclIds = await db(tables.APLICACION_CLIENTE_DETALLE)
+            .where('ACDE_TIPODOC', 45)
+            .andWhere(function () {
+                this.where('ACDE_ANULADO', '!=', 'S').orWhereNull('ACDE_ANULADO');
+            })
+            .select('ACDE_IDDOC')
+            .then((res: any[]) => new Set(res.map((r: any) => parseInt(String(r.ACDE_IDDOC || 0), 10))))
+            .catch(() => new Set<number>());
+
         if (activeMov && activeMov.ID_MOVIM) {
-            // Filtrar EXCLUSIVAMENTE los anticipos vinculados a ESTA reserva específica en HABITACION_MOVIM_ANTICIPOS
+            // Filtrar EXCLUSIVAMENTE los anticipos vinculados a ESTA reserva activa en HABITACION_MOVIM_ANTICIPOS
             const movRows = await db(tables.HABITACION_MOVIM_ANTICIPOS)
                 .join(tables.ANTICIPOS_CLIENTE, `${tables.HABITACION_MOVIM_ANTICIPOS}.ANCL_ID`, `${tables.ANTICIPOS_CLIENTE}.ANCL_ID`)
                 .leftJoin(tables.RECIBOS_CAJA, `${tables.ANTICIPOS_CLIENTE}.RECA_ID`, `${tables.RECIBOS_CAJA}.RECA_ID`)
@@ -107,55 +130,9 @@ export class AbonoService {
                 .orderBy(`${tables.HABITACION_MOVIM_ANTICIPOS}.ITEM_ID`, 'asc');
 
             for (const r of movRows) {
-                if (r.ANCL_ID) rowsMap.set(r.ANCL_ID, r);
-            }
-        }
-
-        if (tercNit && String(tercNit).trim().length > 0) {
-            // Buscar anticipos por NIT del cliente para esta habitación
-            const nitClean = String(tercNit).trim();
-            const fallbackRows = await db(tables.ANTICIPOS_CLIENTE)
-                .leftJoin(tables.RECIBOS_CAJA, `${tables.ANTICIPOS_CLIENTE}.RECA_ID`, `${tables.RECIBOS_CAJA}.RECA_ID`)
-                .leftJoin(tables.RECIBOS_CAJA_PAGO, `${tables.RECIBOS_CAJA}.RECA_ID`, `${tables.RECIBOS_CAJA_PAGO}.RECA_ID`)
-                .leftJoin(tables.FORMAS_PAGO, `${tables.RECIBOS_CAJA_PAGO}.FOPA_ID`, `${tables.FORMAS_PAGO}.FOPA_ID`)
-                .where(`${tables.ANTICIPOS_CLIENTE}.TERC_NIT`, nitClean)
-                .andWhere(function () {
-                    this.where(`${tables.ANTICIPOS_CLIENTE}.ANCL_CONC`, 'like', `%HABITACION ${habNum}%`)
-                        .orWhere(`${tables.ANTICIPOS_CLIENTE}.ANCL_CONC`, 'like', `%HAB ${habNum}%`)
-                        .orWhere(`${tables.ANTICIPOS_CLIENTE}.ANCL_CONC`, 'like', `%HAB.${habNum}%`);
-                })
-                .andWhere(function () {
-                    this.where(`${tables.ANTICIPOS_CLIENTE}.ANCL_ANULADO`, '!=', 'S')
-                        .orWhereNull(`${tables.ANTICIPOS_CLIENTE}.ANCL_ANULADO`);
-                })
-                .andWhere(function () {
-                    this.where(`${tables.RECIBOS_CAJA}.RECA_ANULADO`, '!=', 'S')
-                        .orWhereNull(`${tables.RECIBOS_CAJA}.RECA_ANULADO`);
-                })
-                .select(
-                    `${tables.ANTICIPOS_CLIENTE}.ANCL_ID`,
-                    `${tables.ANTICIPOS_CLIENTE}.PREF_PRE as ANCL_PREF`,
-                    `${tables.ANTICIPOS_CLIENTE}.ANCL_NUMERO`,
-                    `${tables.ANTICIPOS_CLIENTE}.ANCL_FECHA`,
-                    `${tables.ANTICIPOS_CLIENTE}.ANCL_BASE`,
-                    `${tables.ANTICIPOS_CLIENTE}.ANCL_CONC`,
-                    `${tables.ANTICIPOS_CLIENTE}.ANCL_ANULADO`,
-                    `${tables.RECIBOS_CAJA}.RECA_ID`,
-                    `${tables.RECIBOS_CAJA}.PREF_PRE as RECA_PREF`,
-                    `${tables.RECIBOS_CAJA}.RECA_NUMERO`,
-                    `${tables.RECIBOS_CAJA}.TERC_NIT`,
-                    `${tables.RECIBOS_CAJA}.RECA_NOMTERC`,
-                    `${tables.RECIBOS_CAJA_PAGO}.FOPA_ID`,
-                    `${tables.FORMAS_PAGO}.FOPA_NOM`,
-                    `${tables.RECIBOS_CAJA_PAGO}.RCPA_BANCO`,
-                    `${tables.RECIBOS_CAJA_PAGO}.RCPA_CUENTA`,
-                    `${tables.RECIBOS_CAJA_PAGO}.RCPA_NUMERO`
-                )
-                .orderBy(`${tables.ANTICIPOS_CLIENTE}.ANCL_ID`, 'desc');
-
-            for (const r of fallbackRows) {
-                if (r.ANCL_ID && !rowsMap.has(r.ANCL_ID)) {
-                    rowsMap.set(r.ANCL_ID, r);
+                const anclIdVal = parseInt(String(r.ANCL_ID || 0), 10);
+                if (anclIdVal && !appliedAnclIds.has(anclIdVal)) {
+                    rowsMap.set(anclIdVal, r);
                 }
             }
         }
@@ -185,6 +162,8 @@ export class AbonoService {
             return {
                 itemId,
                 anclId,
+                anclPrefRaw: String(anclPref).trim(),
+                anclNumRaw: String(anclNumero).trim(),
                 anclNumero: `${String(anclPref).trim()}-${String(anclNumero).trim()}`,
                 recaId,
                 recaNumero: recaNumero ? `${String(recaPref).trim()}-${String(recaNumero).trim()}` : '',
@@ -250,6 +229,61 @@ export class AbonoService {
             throw new Error('Forma de pago no encontrada en Firebird.');
         }
 
+        // Validar que el abono no exceda el total facturado / valor de la reserva
+        try {
+            const habNum = String(idHabitacion).trim();
+            const activeMov = await db(tables.HABITACION_MOVIM)
+                .where(function () {
+                    this.where('ID_HABITACION', habNum)
+                        .orWhere('ID_MOVIM', habNum)
+                        .orWhere('DINW_ID', habNum);
+                })
+                .andWhere(function () {
+                    this.where('ESTADO', 'Activo')
+                        .orWhereNull('ESTADO')
+                        .orWhere('ESTADO', 'Ocupada')
+                        .orWhere('ESTADO', 'Reservada');
+                })
+                .orderBy('ID_MOVIM', 'desc')
+                .first();
+
+            let totalReserva = 0;
+            if (activeMov && activeMov.DINW_ID) {
+                const dets = await db(tables.DOC_INVENTARIO_DET_WEB)
+                    .where('DINW_ID', activeMov.DINW_ID)
+                    .andWhere(function () {
+                        this.where('DIWD_ANULADO', '!=', 'S').orWhereNull('DIWD_ANULADO');
+                    })
+                    .select('DIWD_TOTAL', 'DIWD_CANT', 'DIWD_PRUNIT');
+
+                totalReserva = dets.reduce((sum: number, d: any) => {
+                    const cant = parseFloat(String(d.DIWD_CANT || '1'));
+                    const prunit = parseFloat(String(d.DIWD_PRUNIT || '0'));
+                    const tot = d.DIWD_TOTAL !== undefined && d.DIWD_TOTAL !== null ? parseFloat(String(d.DIWD_TOTAL)) : (cant * prunit);
+                    return sum + (isNaN(tot) ? 0 : tot);
+                }, 0);
+            }
+
+            if (totalReserva > 0) {
+                const abonosRes = await this.getAbonos(idHabitacion, tercNit);
+                const totalAbonadoPrevio = abonosRes.totalAbonado || 0;
+
+                if (montoNum > totalReserva) {
+                    throw new Error(`El monto del abono ($${montoNum.toLocaleString('es-CO')}) no puede ser mayor al total facturado de la reserva ($${totalReserva.toLocaleString('es-CO')}).`);
+                }
+
+                if (totalAbonadoPrevio + montoNum > totalReserva) {
+                    const saldoPendiente = Math.max(0, totalReserva - totalAbonadoPrevio);
+                    throw new Error(`El abono de $${montoNum.toLocaleString('es-CO')} excede el saldo pendiente ($${saldoPendiente.toLocaleString('es-CO')}). El total de abonos no puede superar el valor facturado ($${totalReserva.toLocaleString('es-CO')}).`);
+                }
+            }
+        } catch (valErr: any) {
+            if (valErr.message && valErr.message.includes('abono')) {
+                throw valErr;
+            }
+            console.warn('Aviso validando total facturado en registrarAbono:', valErr.message);
+        }
+
         const esConsigna = String(fp.FOPA_CONSIGNA || 'N').trim() === 'S';
         let rcpaBanco = '';
         let rcpaCuenta = '';
@@ -282,9 +316,10 @@ export class AbonoService {
         const anclRows = genAnclRes.rows ? genAnclRes.rows : (Array.isArray(genAnclRes) ? genAnclRes : [genAnclRes]);
         const anclId = parseInt(String(anclRows[0]?.VAL ?? anclRows[0]?.val ?? 0), 10);
 
-        // Consecutivo para RECIBOS_CAJA (TIDO_COD = 61)
-        const prefReca = await db(tables.PREFIJOS).where('TIDO_COD', 61).first();
-        const prefPreReca = String(prefReca?.PREF_PRE || '0000').trim();
+        // Consecutivo para RECIBOS_CAJA de Abono (TIDO_COD = 61, prefijo 'ANT')
+        const prefReca = (await db(tables.PREFIJOS).where({ TIDO_COD: 61, PREF_PRE: 'ANT' }).first().catch(() => null))
+            || (await db(tables.PREFIJOS).where('TIDO_COD', 61).first().catch(() => null));
+        const prefPreReca = String(prefReca?.PREF_PRE || 'ANT').trim();
         const maxRecaRow = await db(tables.RECIBOS_CAJA).where('PREF_PRE', prefPreReca).max('RECA_NUMERO as MAXR').first();
         const maxRecaVal = parseInt(String(maxRecaRow?.MAXR || '0'), 10) || 0;
         const curRecaNum = parseInt(String(prefReca?.PREF_ACTUAL || '1'), 10) || 1;
@@ -293,7 +328,8 @@ export class AbonoService {
         const nextRecaActual = String(finalRecaNum + 1).padStart(6, '0');
 
         // Consecutivo para ANTICIPOS_CLIENTE (TIDO_COD = 45)
-        const prefAncl = await db(tables.PREFIJOS).where('TIDO_COD', 45).first();
+        const prefAncl = (await db(tables.PREFIJOS).where({ TIDO_COD: 45, PREF_PRE: 'ANT' }).first().catch(() => null))
+            || (await db(tables.PREFIJOS).where('TIDO_COD', 45).first().catch(() => null));
         const prefPreAncl = String(prefAncl?.PREF_PRE || '0000').trim();
         const maxAnclRow = await db(tables.ANTICIPOS_CLIENTE).where('PREF_PRE', prefPreAncl).max('ANCL_NUMERO as MAXA').first();
         const maxAnclVal = parseInt(String(maxAnclRow?.MAXA || '0'), 10) || 0;
@@ -382,7 +418,7 @@ export class AbonoService {
             ANCL_ANULADO: 'N',
             ANCL_TRANSMIT: 'N',
             COBR_COD: 1,
-            RECA_ID: recaId,
+            RECA_ID: 0,
             ANCL_USUARIO: usuario || 'SYSDBA',
             ANCL_SUCURSAL: '01',
             NUMOK: 'S',
@@ -417,8 +453,20 @@ export class AbonoService {
         // 5. Registrar en HABITACION_MOVIM_ANTICIPOS vinculando la reserva activa
         let itemIdRegistrado = 1;
         try {
-            const activeMov = await db(tables.HABITACION_MOVIM)
+            const habRow = await db(tables.HABITACION)
                 .where('ID_HABITACION', idHabitacion)
+                .orWhere('NUMERO', idHabitacion)
+                .first()
+                .catch(() => null);
+            const idHab = habRow?.ID_HABITACION ? String(habRow.ID_HABITACION).trim() : String(idHabitacion).trim();
+            const numHab = habRow?.NUMERO ? String(habRow.NUMERO).trim() : String(idHabitacion).trim();
+
+            const activeMov = await db(tables.HABITACION_MOVIM)
+                .where(function () {
+                    this.where('ID_HABITACION', idHab)
+                        .orWhere('ID_HABITACION', idHabitacion)
+                        .orWhere('ID_HABITACION', numHab);
+                })
                 .andWhere(function () {
                     this.where('ESTADO', 'Activo')
                         .orWhereNull('ESTADO')
@@ -456,6 +504,8 @@ export class AbonoService {
         } catch (e) {
             console.warn('Aviso al insertar en HABITACION_MOVIM_ANTICIPOS:', e);
         }
+
+        // Nota: Los abonos se registran con prefijo ANT y no se contabilizan (se contabiliza luego la factura/aplicación)
 
         return {
             success: true,

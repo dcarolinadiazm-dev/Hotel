@@ -98,8 +98,8 @@ export const calculaDigitoVerificacion = (nit: string): string => {
 
 const formatMoney = (amount: number | string | undefined): string => {
   const num = typeof amount === 'number' ? amount : parseFloat(String(amount || 0));
-  if (isNaN(num)) return '$0';
-  return `$${Math.round(num).toLocaleString('es-CO')}`;
+  if (isNaN(num)) return '$ 0';
+  return `$ ${Math.round(num).toLocaleString('es-CO')}`;
 };
 
 export const ModalFacturacionDirecta: React.FC<ModalFacturacionDirectaProps> = ({
@@ -360,8 +360,8 @@ export const ModalFacturacionDirecta: React.FC<ModalFacturacionDirectaProps> = (
       alert('La cantidad debe ser mayor a 0');
       return;
     }
-    if (customPrecio < 0) {
-      alert('El precio no puede ser negativo');
+    if (customPrecio <= 0) {
+      alert('El precio del artículo debe ser mayor a cero ($0). No se pueden agregar productos con precio en cero.');
       return;
     }
 
@@ -626,12 +626,44 @@ export const ModalFacturacionDirecta: React.FC<ModalFacturacionDirectaProps> = (
 
   return (
     <>
-      <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal-backdrop">
         <div
           className="modal-card-dialog modal-card-large"
           onClick={(e) => e.stopPropagation()}
-          style={{ maxHeight: '92vh', display: 'flex', flexDirection: 'column' }}
+          style={{ maxHeight: '92vh', display: 'flex', flexDirection: 'column', position: 'relative' }}
         >
+          {/* Overlay de Carga durante Facturación Directa */}
+          {processing && (
+            <div style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              backgroundColor: 'rgba(15, 23, 42, 0.78)',
+              zIndex: 99999,
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              borderRadius: '16px',
+              color: '#ffffff',
+              backdropFilter: 'blur(3px)'
+            }}>
+              <div style={{
+                width: '48px',
+                height: '48px',
+                border: '4px solid rgba(255,255,255,0.2)',
+                borderTopColor: '#38bdf8',
+                borderRadius: '50%',
+                animation: 'spin 0.8s linear infinite',
+                marginBottom: '16px'
+              }} />
+              <h3 style={{ margin: '0 0 6px 0', fontSize: '18px', fontWeight: 800 }}>Generando Factura Directa...</h3>
+              <p style={{ margin: 0, fontSize: '13px', color: '#cbd5e1' }}>Por favor espere mientras se graba la venta y se sincroniza la contabilidad en Firebird.</p>
+            </div>
+          )}
+
           {/* Header del Modal */}
           <div className="modal-dialog-header">
             <div className="header-title-box">
@@ -982,12 +1014,15 @@ export const ModalFacturacionDirecta: React.FC<ModalFacturacionDirectaProps> = (
                       <div className="modal-form-group flex-1">
                         <label className="modal-form-label">Precio Unit. ($):</label>
                         <input
-                          type="number"
+                          type="text"
+                          inputMode="numeric"
                           className="modal-form-input"
-                          value={customPrecio || ''}
-                          onChange={(e) => setCustomPrecio(parseFloat(e.target.value) || 0)}
+                          value={customPrecio ? Number(customPrecio).toLocaleString('es-CO') : ''}
+                          onChange={(e) => {
+                            const raw = e.target.value.replace(/\D/g, '');
+                            setCustomPrecio(raw ? parseInt(raw, 10) : 0);
+                          }}
                           placeholder="0"
-                          min="0"
                         />
                       </div>
 
@@ -1007,6 +1042,12 @@ export const ModalFacturacionDirecta: React.FC<ModalFacturacionDirectaProps> = (
                       type="button"
                       className="btn-modal-add-item"
                       onClick={handleAddItemToCart}
+                      disabled={(!selectedArticuloCod && !customDescripcion.trim()) || Number(customPrecio || 0) <= 0 || Number(customCantidad || 0) <= 0}
+                      title={
+                        Number(customPrecio || 0) <= 0
+                          ? 'El precio del artículo debe ser mayor a cero ($0) para agregar al carrito'
+                          : 'Agregar producto al carrito'
+                      }
                       style={{ marginTop: '4px' }}
                     >
                       ➕ Agregar Producto al Carrito
@@ -1205,11 +1246,15 @@ export const ModalFacturacionDirecta: React.FC<ModalFacturacionDirectaProps> = (
                       <div className="input-monto-pago-wrapper">
                         <span className="currency-prefix">$</span>
                         <input
-                          type="number"
+                          type="text"
+                          inputMode="numeric"
                           className="input-monto-pago"
                           placeholder="0"
-                          value={linea.monto === 0 ? '' : linea.monto}
-                          onChange={(e) => handleUpdateLineaPago(linea.id, 'monto', e.target.value)}
+                          value={linea.monto ? Number(linea.monto).toLocaleString('es-CO') : ''}
+                          onChange={(e) => {
+                            const raw = e.target.value.replace(/\D/g, '');
+                            handleUpdateLineaPago(linea.id, 'monto', raw ? parseFloat(raw) : 0);
+                          }}
                         />
                       </div>
 
