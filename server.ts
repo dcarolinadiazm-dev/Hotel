@@ -62,7 +62,7 @@ process.on('unhandledRejection', (reason: any) => {
 import { HabitacionService } from './src/services/habitacion.service';
 
 // Iniciar Servidor
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
     console.log(`====================================================`);
     console.log(`🚀 SERVIDOR HOTEL INICIADO`);
     console.log(`📡 URL Sistema / API: http://localhost:${PORT}`);
@@ -77,3 +77,8 @@ app.listen(PORT, () => {
         HabitacionService.syncHabitacionesEstadoAutomatico().catch(() => {});
     }, 5 * 60 * 1000);
 });
+
+// Configurar timeouts HTTP generosos para evitar ECONNRESET en peticiones complejas
+server.keepAliveTimeout = 65000;
+server.headersTimeout = 66000;
+server.timeout = 120000;

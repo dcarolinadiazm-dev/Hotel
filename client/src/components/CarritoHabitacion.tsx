@@ -240,7 +240,7 @@ export const CarritoHabitacion = ({
       return;
     }
 
-    if (!window.confirm(`¿Confirmas enviar a facturar el pedido de la Habitación ${habitacion.numero} ejecutando el procedimiento GRABE_PEDIDO_APP?`)) {
+    if (!window.confirm(`¿Confirmas facturar el consumo de la Habitación ${habitacion.numero} y generar su Factura de Venta oficial?`)) {
       return;
     }
 
@@ -257,18 +257,23 @@ export const CarritoHabitacion = ({
         },
         body: JSON.stringify({
           habitacionId: habitacion.id,
+          tipoDoc: 'FACTURA',
         }),
       });
 
       const data = await res.json();
       if (res.ok) {
+        const numDoc = data.numDoc || data.numPed || '';
         setActionFeedback({
           type: 'success',
-          message: `🎉 ¡Pedido Facturado con Éxito! Número oficial: ${data.numPed}. Grabado en PEDIDOS y PEDIDOS_DETALLE mediante GRABE_PEDIDO_APP.`,
+          message: `🎉 ¡Factura de Venta #${numDoc} generada con Éxito! Total: ${formatMoney(data.total || totalPagar)}. Habitación liberada a estado Disponible.`,
         });
-        await fetchConsumos();
+        setItems([]);
+        setTimeout(() => {
+          onBack();
+        }, 2200);
       } else {
-        throw new Error(data.error || 'Error al ejecutar procedimiento GRABE_PEDIDO_APP');
+        throw new Error(data.error || 'Error al procesar la Factura de Venta en el servidor');
       }
     } catch (err: any) {
       setActionFeedback({
@@ -524,10 +529,10 @@ export const CarritoHabitacion = ({
               title={
                 habitacion.estado !== 'Ocupada'
                   ? 'La habitación debe estar en estado OCUPADA para poder facturar'
-                  : 'Enviar a facturar (GRABE_PEDIDO_APP)'
+                  : 'Facturar Habitación (Factura de Venta)'
               }
             >
-              {processingAction === 'FACTURAR' ? 'Facturando mediante GRABE_PEDIDO_APP...' : '⚡ Enviar a facturar (GRABE_PEDIDO_APP)'}
+              {processingAction === 'FACTURAR' ? 'Facturando mediante Factura de Venta...' : '⚡ Facturar Habitación (Factura de Venta)'}
             </button>
           </div>
         )}
