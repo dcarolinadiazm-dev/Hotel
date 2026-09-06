@@ -1,5 +1,4 @@
 require('./scripts/setup_bindings.js');
-require('./scripts/error_handler.js');
 
 import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
