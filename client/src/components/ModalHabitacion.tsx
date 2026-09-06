@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import type { Habitacion } from './Habitaciones';
 import { ModalAbonos } from './ModalAbonos';
 import { ModalImpresionPOS } from './ModalImpresionPOS';
+import { ClienteSearchSelect } from './ClienteSearchSelect';
 
 
 interface Tercero {
@@ -499,24 +500,6 @@ export const ModalHabitacion = ({
       fetchPrefijosFactura(),
     ]).finally(() => setLoading(false));
   }, [habitacion.id]);
-
-  const handleTerceroSelect = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const selectedNit = e.target.value;
-    if (!selectedNit) {
-      setDocumento('');
-      setHuesped('');
-      setObservaciones('');
-      refreshAbonosTotal('');
-      return;
-    }
-    const found = terceros.find((t) => t.nit === selectedNit);
-    if (found) {
-      setDocumento(found.nit);
-      setHuesped(found.nombre);
-      setObservaciones(found.nombre);
-      refreshAbonosTotal(found.nit);
-    }
-  };
 
   const handleGrabeTercero = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1564,23 +1547,25 @@ export const ModalHabitacion = ({
                   )}
 
                   {!showNewClientForm && (
-                    <select
-                      className="modal-form-select"
-                      value={documento}
-                      onChange={handleTerceroSelect}
-                    >
-                      <option value="">-- Seleccione un tercero o cliente --</option>
-                      {documento && !terceros.some((t) => t.nit === documento) && (
-                        <option value={documento}>
-                          {huesped ? `${huesped} (${documento})` : documento}
-                        </option>
-                      )}
-                      {terceros.map((t) => (
-                        <option key={t.nit} value={t.nit}>
-                          {t.nombre} ({t.nit})
-                        </option>
-                      ))}
-                    </select>
+                    <ClienteSearchSelect
+                      clientes={terceros}
+                      selectedNit={documento}
+                      selectedNombre={huesped}
+                      onSelect={(cliente) => {
+                        if (cliente) {
+                          setDocumento(cliente.nit);
+                          setHuesped(cliente.nombre);
+                          setObservaciones(cliente.nombre);
+                          refreshAbonosTotal(cliente.nit);
+                        } else {
+                          setDocumento('');
+                          setHuesped('');
+                          setObservaciones('');
+                          refreshAbonosTotal('');
+                        }
+                      }}
+                      placeholder="-- Buscar huésped por nombre, apellido o NIT/C.C. --"
+                    />
                   )}
 
                   {huesped && (
