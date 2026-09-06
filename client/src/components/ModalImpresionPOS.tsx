@@ -170,7 +170,7 @@ export const ModalImpresionPOS: React.FC<ModalImpresionPOSProps> = ({
             .pos-col-total { width: 32%; text-align: right; white-space: nowrap; }
             .pos-col-full { width: 100% !important; padding: 0.5px 0 !important; }
             .pos-item-desc { font-weight: 700; font-size: 11px; }
-            .pos-item-subline { font-size: 11px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 240px; color: #000; line-height: 1.25; }
+            .pos-item-subline { font-size: 10.5px; font-weight: 700; white-space: normal; word-break: break-word; color: #000; line-height: 1.25; }
             .pos-item-unit-calc { display: block; font-size: 9.5px; color: #333; line-height: 1.2; }
             .pos-totals-block { margin: 5px 0; font-size: 11.5px; }
             .pos-total-row { display: flex; justify-content: space-between; margin-bottom: 2.5px; }
@@ -277,14 +277,23 @@ export const ModalImpresionPOS: React.FC<ModalImpresionPOSProps> = ({
                   </div>
                   {doc.habitacionNumero && (
                     <div className="pos-info-row pos-hab-row">
-                      <span className="pos-label">HABITACIÓN:</span>
-                      <span className="pos-value bold text-large">Habitación {doc.habitacionNumero}</span>
+                      <span className="pos-label">{doc.habitacionNumero.includes(',') ? 'HABITACIONES:' : 'HABITACIÓN:'}</span>
+                      <span className="pos-value bold text-large">{doc.habitacionNumero.includes(',') ? `Habitaciones ${doc.habitacionNumero}` : `Habitación ${doc.habitacionNumero}`}</span>
                     </div>
                   )}
                   <div className="pos-info-row">
                     <span className="pos-label">HUÉSPED:</span>
                     <span className="pos-value bold">{doc.huesped}</span>
                   </div>
+                  {doc.observaciones &&
+                    !doc.observaciones.toLowerCase().includes('consolidada') &&
+                    !doc.observaciones.toLowerCase().includes('hospedaje habitaci') &&
+                    doc.observaciones.trim().toLowerCase() !== doc.huesped.trim().toLowerCase() && (
+                      <div className="pos-info-row">
+                        <span className="pos-label">SUB-HUÉSPED:</span>
+                        <span className="pos-value bold">{doc.observaciones}</span>
+                      </div>
+                    )}
                   {doc.documento && (
                     <div className="pos-info-row">
                       <span className="pos-label">NIT / C.C.:</span>
@@ -330,31 +339,23 @@ export const ModalImpresionPOS: React.FC<ModalImpresionPOSProps> = ({
 
                       if (isHospedaje) {
                         mainDesc = 'SERVICIO HOSPEDAJE';
-                        const habNum =
-                          doc.habitacionNumero ||
-                          item.referencia.replace(/^HAB-/i, '') ||
-                          item.articulo.replace(/^H-/i, '') ||
-                          '';
-                        const obs = (item.obsItem || '').trim();
+                        const matchItemHab =
+                          item.referencia?.match(/HAB-(\w+)/i) ||
+                          item.descripcion?.match(/Hab(?:itaci[oó]n|\.)?\s*(\w+)/i) ||
+                          item.articulo?.match(/^H-(\w+)/i);
+                        const habNum = matchItemHab ? matchItemHab[1] : (doc.habitacionNumero && !doc.habitacionNumero.includes(',') ? doc.habitacionNumero : '');
 
-                        let extraObs = obs;
-                        if (!extraObs && item.descripcion.includes('-')) {
-                          const parts = item.descripcion.split('-');
-                          if (parts.length > 1) {
-                            extraObs = parts.slice(1).join('-').trim();
+                        let subHuesped = (item.obsItem || '').trim();
+                        if (!subHuesped) {
+                          const matchSub = item.descripcion.match(/Sub-Hu[eé]sped:\s*([^)]+)/i);
+                          if (matchSub) {
+                            subHuesped = matchSub[1].trim();
                           }
                         }
 
-                        const prefix = habNum ? `HABITACION ${habNum}` : 'HABITACION';
-                        if (extraObs) {
-                          const fullPrefix = `${prefix} - `;
-                          const maxChars = 34;
-                          const maxObs = Math.max(6, maxChars - fullPrefix.length);
-                          const trimmedObs =
-                            extraObs.length > maxObs
-                              ? extraObs.slice(0, maxObs - 1).trim() + '…'
-                              : extraObs;
-                          subline = `${fullPrefix}${trimmedObs}`;
+                        const prefix = habNum ? `HABITACIÓN ${habNum}` : 'HABITACIÓN';
+                        if (subHuesped) {
+                          subline = `${prefix} - Sub-Huésped: ${subHuesped}`;
                         } else {
                           subline = prefix;
                         }
@@ -364,10 +365,7 @@ export const ModalImpresionPOS: React.FC<ModalImpresionPOSProps> = ({
                           mainDesc = mainDesc.slice(0, -(item.obsItem.length + 3)).trim();
                         }
                         if (item.obsItem && item.obsItem.trim()) {
-                          const obs = item.obsItem.trim();
-                          const maxChars = 34;
-                          subline =
-                            obs.length > maxChars ? obs.slice(0, maxChars - 1).trim() + '…' : obs;
+                          subline = item.obsItem.trim();
                         }
                       }
 

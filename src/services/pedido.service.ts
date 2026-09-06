@@ -6,7 +6,31 @@ import { sanitizeText, truncateToBytes } from '../utils/text.utils';
 import { ContabilidadService } from './contabilidad.service';
 import { AbonoService } from './abono.service';
 
+// Helper function to read BLOB/Buffer/String from Firebird
+export async function parseFirebirdBlob(val: any): Promise<string> {
+    if (!val) return '';
+    if (typeof val === 'string') return val.trim();
+    if (Buffer.isBuffer(val)) return val.toString('utf8').trim();
+    if (typeof val === 'function') {
+        return new Promise((resolve) => {
+            val((err: any, name: any, eStream: any) => {
+                if (err || !eStream) return resolve('');
+                let chunks: Buffer[] = [];
+                eStream.on('data', (chunk: Buffer) => chunks.push(chunk));
+                eStream.on('end', () => resolve(Buffer.concat(chunks).toString('utf8').trim()));
+                eStream.on('error', () => resolve(''));
+            });
+        });
+    }
+    if (typeof val === 'object' && val.toString) {
+        const s = val.toString('utf8');
+        return s === '[object Object]' ? '' : s.trim();
+    }
+    return String(val).trim();
+}
+
 export class PedidoService {
+
     // Obtener Punto de Venta y Bodega activos
     static async getDefaultPuntoVentaAndBodega(): Promise<{ ptvtId: number; bodeCod: string }> {
         try {
@@ -1584,8 +1608,9 @@ export class PedidoService {
 
         const rawObs = first.OBS || fallbackHeader?.REVT_OBS || fallbackHeader?.FACT_OBS || fallbackHeader?.DINW_OBS || fallbackHeader?.REVT_CONC;
         const obsBuffer = rawObs ? (Buffer.isBuffer(rawObs) ? rawObs.toString('utf8') : String(rawObs)) : '';
+        const matchConsol = obsBuffer.match(/Habitaciones:\s*([0-9,\s]+)/i);
         const matchHab = obsBuffer.match(/Habitaci[oó]n\s+(\w+)/i) || (first.REFITEM ? String(first.REFITEM).match(/HAB-(\w+)/i) : null);
-        const habitacionNumero = matchHab ? matchHab[1] : '';
+        const habitacionNumero = matchConsol ? matchConsol[1].trim() : (matchHab ? matchHab[1] : '');
 
         const formaPagoStr = String(first.FORMAP || first.FORMAPAGO1 || 'EFECTIVO').trim();
         const huespedNombre = first.NOMCLIENTE || first.NOMTERCERO || fallbackHeader?.REVT_NOMTER || fallbackHeader?.FACT_NOMCLIENTE || 'Huésped General';
@@ -1599,17 +1624,81 @@ export class PedidoService {
                     .where({ FACT_ID: idDoc, FADE_ANULADO: 'N' })
                     .orderBy('FADE_ITEM', 'asc');
                 if (facDets && facDets.length > 0) {
-                    items = facDets.map((d: any) => ({
-                        item: parseInt(String(d.FADE_ITEM || '1'), 10),
-                        articulo: String(d.ARTI_COD || '').trim(),
-                        descripcion: String(d.FADE_DESC || d.ARTI_COD || 'Producto / Hospedaje').trim(),
-                        referencia: String(d.FADE_REFERENCIA || '').trim(),
-                        cantidad: parseFloat(String(d.FADE_CANT || '1')),
-                        precioUnitario: parseFloat(String(d.FADE_PRUNIT || '0')),
-                        ivaPorc: parseFloat(String(d.FADE_IVAPORC || '0')),
-                        ivaMonto: parseFloat(String(d.FADE_IVAMONTO || '0')),
-                        total: parseFloat(String(d.FADE_TOTAL || '0'))
-                    }));
+                    for (const d of facDets) {
+                        let obsItem = '';
+                        if (d.FADE_OBS) {
+                            obsItem = await parseFirebirdBlob(d.FADE_OBS);
+                        }
+
+                        const refStr = String(d.FADE_REFERENCIA || '').trim();
+                        const descRaw = String(d.FADE_DESC || d.ARTI_COD || 'Producto / Hospedaje').trim();
+                        const artCode = String(d.ARTI_COD || '').trim();
+
+                        const isLodging = /^H-[A-Z0-9]+/i.test(artCode) ||
+                            /^SERVICIO HOSPEDAJE/i.test(descRaw) ||
+                            /^HOSPEDAJE/i.test(descRaw);
+
+                        if (isLodging && !obsItem) {
+                            const matchItemHab = refStr.match(/HAB-(\w+)/i) || descRaw.match(/Hab(?:itaci[oó]n|\.)?\s*(\w+)/i);
+                            const habItemNum = matchItemHab ? matchItemHab[1] : habitacionNumero;
+
+                            if (habItemNum) {
+                                try {
+                                    const sourceDet = await db('DOC_INVENTARIO_DET_WEB as D')
+                                        .join('DOC_INVENTARIO_WEB as W', 'D.DINW_ID', 'W.DINW_ID')
+                                        .where(function () {
+                                            this.where('D.DIWD_REF', `HAB-${habItemNum}`)
+                                                .orWhere('D.DIWD_DESCART', 'like', `%Hab. ${habItemNum}%`)
+                                                .orWhere('D.DIWD_DESCART', 'like', `%Habitación ${habItemNum}%`);
+                                        })
+                                        .whereNotNull('D.DIWD_OBS')
+                                        .where('D.DIWD_OBS', '!=', '')
+                                        .orderBy('D.DINW_ID', 'desc')
+                                        .select('D.DIWD_OBS')
+                                        .first();
+
+                                    if (sourceDet?.DIWD_OBS) {
+                                        obsItem = await parseFirebirdBlob(sourceDet.DIWD_OBS);
+                                    }
+                                } catch (e) { }
+
+                                if (!obsItem) {
+                                    try {
+                                        const habRow = await db('HABITACION').where('NUMERO', habItemNum).first();
+                                        if (habRow?.NOTAS && String(habRow.NOTAS).trim()) {
+                                            obsItem = String(habRow.NOTAS).trim();
+                                        }
+                                    } catch (e) { }
+                                }
+                            }
+
+                            if (!obsItem && obsBuffer) {
+                                const isConsolidatedObs = /consolidada/i.test(obsBuffer);
+                                const isGenericObs = /^Hospedaje Habitaci[oó]n/i.test(obsBuffer);
+                                if (!isConsolidatedObs && !isGenericObs) {
+                                    obsItem = obsBuffer;
+                                }
+                            }
+                        }
+
+                        let formattedDesc = descRaw;
+                        if (obsItem && isLodging && !descRaw.toLowerCase().includes(obsItem.toLowerCase())) {
+                            formattedDesc = `${descRaw} (Sub-Huésped: ${obsItem})`;
+                        }
+
+                        items.push({
+                            item: parseInt(String(d.FADE_ITEM || '1'), 10),
+                            articulo: artCode,
+                            descripcion: formattedDesc,
+                            obsItem: obsItem,
+                            referencia: refStr,
+                            cantidad: parseFloat(String(d.FADE_CANT || '1')),
+                            precioUnitario: parseFloat(String(d.FADE_PRUNIT || '0')),
+                            ivaPorc: parseFloat(String(d.FADE_IVAPORC || '0')),
+                            ivaMonto: parseFloat(String(d.FADE_IVAMONTO || '0')),
+                            total: parseFloat(String(d.FADE_TOTAL || '0'))
+                        });
+                    }
                 }
             } catch (facDetErr: any) {
                 console.warn('Aviso consultando FACTURAS_DETALLE para impresion:', facDetErr.message);
@@ -1621,17 +1710,44 @@ export class PedidoService {
                         .where({ DINW_ID: idDoc, DIWD_ANULADO: 'N' })
                         .orderBy('DIWD_ITEM', 'asc');
                     if (dinwDets && dinwDets.length > 0) {
-                        items = dinwDets.map((d: any) => ({
-                            item: parseInt(String(d.DIWD_ITEM || '1'), 10),
-                            articulo: String(d.DIWD_ARTICULO || '').trim(),
-                            descripcion: String(d.DIWD_DESCART || d.DIWD_ARTICULO || 'Producto / Hospedaje').trim(),
-                            referencia: String(d.DIWD_REF || '').trim(),
-                            cantidad: parseFloat(String(d.DIWD_CANT || '1')),
-                            precioUnitario: parseFloat(String(d.DIWD_COSTO || d.DIWD_PRUNIT || '0')),
-                            ivaPorc: parseFloat(String(d.DIWD_IVAPORC || '0')),
-                            ivaMonto: parseFloat(String(d.DIWD_IVAMONTO || '0')),
-                            total: parseFloat(String(d.DIWD_TOTAL || '0'))
-                        }));
+                        for (const d of dinwDets) {
+                            let obsItem = '';
+                            if (d.DIWD_OBS) {
+                                obsItem = await parseFirebirdBlob(d.DIWD_OBS);
+                            }
+                            const refStr = String(d.DIWD_REF || '').trim();
+                            const descRaw = String(d.DIWD_DESCART || d.DIWD_ARTICULO || 'Producto / Hospedaje').trim();
+                            const artCode = String(d.DIWD_ARTICULO || '').trim();
+                            const isLodging = /^H-[A-Z0-9]+/i.test(artCode) ||
+                                /^SERVICIO HOSPEDAJE/i.test(descRaw) ||
+                                /^HOSPEDAJE/i.test(descRaw);
+
+                            if (isLodging && !obsItem && obsBuffer) {
+                                const isConsolidatedObs = /consolidada/i.test(obsBuffer);
+                                const isGenericObs = /^Hospedaje Habitaci[oó]n/i.test(obsBuffer);
+                                if (!isConsolidatedObs && !isGenericObs) {
+                                    obsItem = obsBuffer;
+                                }
+                            }
+
+                            let formattedDesc = descRaw;
+                            if (obsItem && isLodging && !descRaw.toLowerCase().includes(obsItem.toLowerCase())) {
+                                formattedDesc = `${descRaw} (Sub-Huésped: ${obsItem})`;
+                            }
+
+                            items.push({
+                                item: parseInt(String(d.DIWD_ITEM || '1'), 10),
+                                articulo: artCode,
+                                descripcion: formattedDesc,
+                                obsItem: obsItem,
+                                referencia: refStr,
+                                cantidad: parseFloat(String(d.DIWD_CANT || '1')),
+                                precioUnitario: parseFloat(String(d.DIWD_COSTO || d.DIWD_PRUNIT || '0')),
+                                ivaPorc: parseFloat(String(d.DIWD_IVAPORC || '0')),
+                                ivaMonto: parseFloat(String(d.DIWD_IVAMONTO || '0')),
+                                total: parseFloat(String(d.DIWD_TOTAL || '0'))
+                            });
+                        }
                     }
                 } catch (dinwDetErr: any) {
                     console.warn('Aviso consultando DOC_INVENTARIO_DET_WEB para impresion:', dinwDetErr.message);
@@ -2012,11 +2128,15 @@ export class PedidoService {
                         ? descOriginal
                         : `${descOriginal} (Hab. ${hNum})`;
 
+                    const itemObs = String(d.DIWD_OBS || h.NOTAS || h.HUESPED || '').trim();
+
                     consolidatedItems.push({
                         ...d,
                         DIWD_DESCART: descConHab,
+                        DIWD_OBS: itemObs,
                         _habNumero: hNum,
-                        _habId: hId
+                        _habId: hId,
+                        _subHuesped: itemObs
                     });
                 }
             }
@@ -2108,6 +2228,7 @@ export class PedidoService {
                 DIWD_BODEGA: String(it.DIWD_BODEGA || bodega).trim(),
                 DIWD_LISTA: parseInt(String(it.DIWD_LISTA || '1'), 10) || 1,
                 DIWD_REF: it._habNumero ? `HAB-${it._habNumero}` : 'MULTI-HAB',
+                DIWD_OBS: truncateToBytes(String(it.DIWD_OBS || it._subHuesped || '').trim(), 100),
                 DIWD_ANULADO: 'N',
                 DIWD_TRANSMIT: 'N'
             });
