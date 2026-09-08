@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { ModalImpresionPOS } from './ModalImpresionPOS';
+import { ClienteSearchSelect } from './ClienteSearchSelect';
 
 interface ModalFacturacionDirectaProps {
   isOpen: boolean;
@@ -247,17 +248,6 @@ export const ModalFacturacionDirecta: React.FC<ModalFacturacionDirectaProps> = (
   }, [isOpen]);
 
   if (!isOpen) return null;
-
-  const handleTerceroSelect = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const nit = e.target.value;
-    setSelectedNit(nit);
-    const found = terceros.find((t) => t.nit === nit);
-    if (found) {
-      setSelectedNombre(found.nombre);
-    } else {
-      setSelectedNombre('');
-    }
-  };
 
   const handleLiprChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const newLipr = parseInt(e.target.value, 10) || 1;
@@ -903,25 +893,23 @@ export const ModalFacturacionDirecta: React.FC<ModalFacturacionDirectaProps> = (
                       </div>
                     )}
 
-                    {/* Selector de Cliente */}
-                    <select
-                      className="modal-form-select"
-                      value={selectedNit}
-                      onChange={handleTerceroSelect}
-                      style={{ fontWeight: selectedNit ? 700 : 'normal' }}
-                    >
-                      <option value="">-- Seleccione un cliente --</option>
-                      {terceros.map((t) => (
-                        <option key={t.nit} value={t.nit}>
-                          {t.nombre} ({t.nit})
-                        </option>
-                      ))}
-                    </select>
-
-                    {selectedNit && (
-                      <div style={{ marginTop: '6px', fontSize: '13px', color: '#1e40af', fontWeight: 600 }}>
-                        👤 Cliente: <strong>{selectedNombre}</strong> (NIT/CC: {selectedNit})
-                      </div>
+                    {/* Selector de Cliente con Búsqueda por Nombre, Apellidos y NIT */}
+                    {!showNewClientForm && (
+                      <ClienteSearchSelect
+                        clientes={terceros}
+                        selectedNit={selectedNit}
+                        selectedNombre={selectedNombre}
+                        onSelect={(cliente) => {
+                          if (cliente) {
+                            setSelectedNit(cliente.nit);
+                            setSelectedNombre(cliente.nombre);
+                          } else {
+                            setSelectedNit('');
+                            setSelectedNombre('');
+                          }
+                        }}
+                        placeholder="-- Buscar cliente por nombre, apellido o NIT/C.C. --"
+                      />
                     )}
                   </div>
 

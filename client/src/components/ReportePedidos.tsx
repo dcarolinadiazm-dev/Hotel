@@ -92,8 +92,8 @@ export const ReportePedidos = ({
 
   const formatMoney = (val?: number | string) => {
     const num = typeof val === 'number' ? val : parseFloat(String(val || 0));
-    if (isNaN(num)) return '$ 0';
-    return '$ ' + Math.round(num).toLocaleString('es-CO');
+    if (isNaN(num)) return '$\u00A00';
+    return '$\u00A0' + Math.round(num).toLocaleString('es-CO');
   };
 
   const handleExportExcel = () => {
@@ -424,7 +424,7 @@ export const ReportePedidos = ({
                   <th>Sub-Huésped</th>
                   <th>Documento</th>
                   <th style={{ textAlign: 'center' }}>Artículos</th>
-                  <th style={{ textAlign: 'right' }}>Total</th>
+                  <th style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>Total</th>
                   <th style={{ textAlign: 'center' }}>Factura</th>
                   <th style={{ textAlign: 'center' }}>Acciones</th>
                 </tr>
@@ -449,16 +449,17 @@ export const ReportePedidos = ({
                       p.subHuesped &&
                       p.subHuesped.trim() !== '' &&
                       !p.subHuesped.toLowerCase().startsWith('hospedaje habitac') &&
+                      !p.subHuesped.toLowerCase().startsWith('venta directa') &&
                       p.subHuesped.trim().toLowerCase() !== p.huesped.trim().toLowerCase();
 
                     return (
                       <tr key={p.id}>
                         <td>{p.fechaTexto}</td>
-                        <td style={{ fontWeight: 600 }}>{p.habitacion}</td>
+                        <td style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>{p.habitacion}</td>
                         <td>{p.huesped}</td>
                         <td>
                           {isCustomSubHuesped ? (
-                            <span style={{ fontWeight: 700, color: '#1e293b', background: '#f1f5f9', padding: '2px 8px', borderRadius: '4px', border: '1px solid #cbd5e1' }} title={`Sub-Huésped en FADE_OBS: ${p.subHuesped}`}>
+                            <span style={{ fontWeight: 700, color: '#1e293b', background: '#f1f5f9', padding: '2px 8px', borderRadius: '4px', border: '1px solid #cbd5e1' }} title={`Sub-Huésped: ${p.subHuesped}`}>
                               🪪 {p.subHuesped}
                             </span>
                           ) : (
@@ -467,7 +468,7 @@ export const ReportePedidos = ({
                         </td>
                         <td>{p.documento}</td>
                         <td style={{ textAlign: 'center' }}>{p.articulos}</td>
-                        <td style={{ textAlign: 'right', fontWeight: 600 }}>
+                        <td style={{ textAlign: 'right', fontWeight: 600, whiteSpace: 'nowrap' }}>
                           {formatMoney(p.total)}
                         </td>
                         <td style={{ textAlign: 'center', fontFamily: 'monospace', fontWeight: 600, color: '#1e3a8a' }}>
@@ -481,7 +482,7 @@ export const ReportePedidos = ({
                               setImpresionData({
                                 tipo: 'FACTURA',
                                 idDoc: p.id,
-                                habitacionNumero: p.habitacion.replace(/[^0-9]/g, '') || '',
+                                habitacionNumero: p.habitacion.replace(/^Habitaci[oó]n(?:es)?\s+/i, '') || '',
                               })
                             }
                             title="Imprimir Tirilla POS"
@@ -503,7 +504,7 @@ export const ReportePedidos = ({
                     <td style={{ textAlign: 'center', fontWeight: 700 }}>
                       {totalArticulos}
                     </td>
-                    <td style={{ textAlign: 'right', fontWeight: 800, color: '#0b57d0', fontSize: '15.5px' }}>
+                    <td style={{ textAlign: 'right', fontWeight: 800, color: '#0b57d0', fontSize: '15.5px', whiteSpace: 'nowrap' }}>
                       {formatMoney(totalVentas)}
                     </td>
                     <td></td>

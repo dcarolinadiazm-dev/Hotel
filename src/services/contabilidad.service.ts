@@ -26,6 +26,16 @@ export class ContabilidadService {
         const cleanPref = String(prefijo || '0000').trim();
 
         try {
+            // Verificar si la factura ya tiene comprobante contable generado (ej. por procedimiento de Firebird)
+            const existingComp = await db('COMPROBANTE_ENCABEZADO')
+                .where({ ENCO_TIPOREF: 31, ENCO_IDREF: idDoc })
+                .first()
+                .catch(() => null);
+            if (existingComp) {
+                console.log(`[CONTABILIDAD] Factura ID ${idDoc} ya tiene comprobante contable (Consecutivo: ${existingComp.ENCO_CONSEC}). Omitiendo ejecución duplicada.`);
+                return [existingComp];
+            }
+
             const intRow = await db(tables.H_INTERFAZ_PREFIJOS)
                 .where({ PREF_PRE: cleanPref })
                 .andWhere(function () {
@@ -64,6 +74,16 @@ export class ContabilidadService {
         const cleanPref = String(prefijo || '0000').trim();
 
         try {
+            // Verificar si el recibo de anticipo ya tiene comprobante
+            const existingComp = await db('COMPROBANTE_ENCABEZADO')
+                .where({ ENCO_TIPOREF: 61, ENCO_IDREF: recaId })
+                .first()
+                .catch(() => null);
+            if (existingComp) {
+                console.log(`[CONTABILIDAD] Recibo de Anticipo ID ${recaId} ya tiene comprobante (Consecutivo: ${existingComp.ENCO_CONSEC}). Omitiendo ejecución duplicada.`);
+                return [existingComp];
+            }
+
             const intRow = await db(tables.H_INTERFAZ_PREFIJOS)
                 .where({ PREF_PRE: cleanPref })
                 .andWhere(function () {
@@ -105,6 +125,16 @@ export class ContabilidadService {
         const cleanPref = String(prefijo || '0000').trim();
 
         try {
+            // Verificar si el recibo de cartera ya tiene comprobante
+            const existingComp = await db('COMPROBANTE_ENCABEZADO')
+                .where({ ENCO_TIPOREF: 61, ENCO_IDREF: recaId })
+                .first()
+                .catch(() => null);
+            if (existingComp) {
+                console.log(`[CONTABILIDAD] Recibo de Cartera ID ${recaId} ya tiene comprobante (Consecutivo: ${existingComp.ENCO_CONSEC}). Omitiendo ejecución duplicada.`);
+                return [existingComp];
+            }
+
             const intRow = await db(tables.H_INTERFAZ_PREFIJOS)
                 .where({ PREF_PRE: cleanPref })
                 .andWhere(function () {
@@ -146,6 +176,16 @@ export class ContabilidadService {
         const cleanPref = String(prefijoFactura || '0000').trim();
 
         try {
+            // Verificar si la aplicación ya tiene comprobante
+            const existingComp = await db('COMPROBANTE_ENCABEZADO')
+                .where({ ENCO_TIPOREF: 43, ENCO_IDREF: apclId })
+                .first()
+                .catch(() => null);
+            if (existingComp) {
+                console.log(`[CONTABILIDAD] Aplicación ID ${apclId} ya tiene comprobante (Consecutivo: ${existingComp.ENCO_CONSEC}). Omitiendo ejecución duplicada.`);
+                return [existingComp];
+            }
+
             // Buscar interfaz por el prefijo de la factura que se cruzó (FE -> APL_FE / 0000 -> APL_REMISION)
             let intRow = await db(tables.H_INTERFAZ_PREFIJOS)
                 .where({ PREF_PRE: cleanPref })

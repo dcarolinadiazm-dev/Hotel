@@ -6,7 +6,31 @@ import { sanitizeText, truncateToBytes } from '../utils/text.utils';
 import { ContabilidadService } from './contabilidad.service';
 import { AbonoService } from './abono.service';
 
+// Helper function to read BLOB/Buffer/String from Firebird
+export async function parseFirebirdBlob(val: any): Promise<string> {
+    if (!val) return '';
+    if (typeof val === 'string') return val.trim();
+    if (Buffer.isBuffer(val)) return val.toString('utf8').trim();
+    if (typeof val === 'function') {
+        return new Promise((resolve) => {
+            val((err: any, name: any, eStream: any) => {
+                if (err || !eStream) return resolve('');
+                let chunks: Buffer[] = [];
+                eStream.on('data', (chunk: Buffer) => chunks.push(chunk));
+                eStream.on('end', () => resolve(Buffer.concat(chunks).toString('utf8').trim()));
+                eStream.on('error', () => resolve(''));
+            });
+        });
+    }
+    if (typeof val === 'object' && val.toString) {
+        const s = val.toString('utf8');
+        return s === '[object Object]' ? '' : s.trim();
+    }
+    return String(val).trim();
+}
+
 export class PedidoService {
+
     // Obtener Punto de Venta y Bodega activos
     static async getDefaultPuntoVentaAndBodega(): Promise<{ ptvtId: number; bodeCod: string }> {
         try {
@@ -865,7 +889,7 @@ export class PedidoService {
 
         const mensajeExito = `Factura de Venta generada exitosamente con número ${numDocGenerado}`;
 
-        // Dejar la habitación en estado 'Disponible' y limpiar notas/observaciones
+        // Dejar la habitación en estado 'Disponible' y limpiar notas/observaciones.
         await db(tables.HABITACION)
             .where('ID_HABITACION', habitacionId)
             .update({
@@ -873,7 +897,7 @@ export class PedidoService {
                 NOTAS: ''
             });
 
-        // Marcar el movimiento en HABITACION_MOVIM como Facturado y asignar ID_DOC y TIPO = 31
+        // Marcar el movimiento en HABITACION_MOVIM como Facturado y asignar ID_DOC y TIPO = 31.
         try {
             const activeMov = await db(tables.HABITACION_MOVIM)
                 .where('ID_HABITACION', String(habitacionId))
@@ -1194,9 +1218,9 @@ export class PedidoService {
             spResult = await db.raw('SELECT * FROM GRABE_DOCUMENTO_INV_WEB(?, ?)', [31, dinwId]);
         } catch (fbErr: any) {
             console.error('Error ejecutando GRABE_DOCUMENTO_INV_WEB en facturarDirecto:', fbErr.message);
-            await db(tables.DOC_INVENTARIO_DET_WEB).where('DINW_ID', dinwId).del().catch(() => {});
-            await db('DOC_INVENTARIO_PAGO_WEB').where('DINW_ID', dinwId).del().catch(() => {});
-            await db(tables.DOC_INVENTARIO_WEB).where('DINW_ID', dinwId).del().catch(() => {});
+            await db(tables.DOC_INVENTARIO_DET_WEB).where('DINW_ID', dinwId).del().catch(() => { });
+            await db('DOC_INVENTARIO_PAGO_WEB').where('DINW_ID', dinwId).del().catch(() => { });
+            await db(tables.DOC_INVENTARIO_WEB).where('DINW_ID', dinwId).del().catch(() => { });
             throw new Error(`Error en base de datos al facturar: ${fbErr.message}`);
         }
 
@@ -1335,74 +1359,151 @@ export class PedidoService {
 
         let pedidos: any[] = [];
 
-        // Función auxiliar para leer valores BLOB/Buffer/String de Firebird
-        const parseBlob = async (val: any): Promise<string> => {
-            if (!val) return '';
-            if (typeof val === 'string') return val.trim();
-            if (Buffer.isBuffer(val)) return val.toString('utf8').trim();
-            if (typeof val === 'function') {
-                return new Promise((resolve) => {
-                    val((err: any, name: any, eStream: any) => {
-                        if (err || !eStream) return resolve('');
-                        let chunks: Buffer[] = [];
-                        eStream.on('data', (chunk: Buffer) => chunks.push(chunk));
-                        eStream.on('end', () => resolve(Buffer.concat(chunks).toString('utf8').trim()));
-                        eStream.on('error', () => resolve(''));
-                    });
-                });
-            }
-            if (typeof val === 'object' && val.toString) {
-                const s = val.toString('utf8');
-                return s === '[object Object]' ? '' : s.trim();
-            }
-            return String(val).trim();
-        };
-
         for (const r of rows) {
-            // Contar cantidad de artículos de la factura
-            let totalCant = 1;
-            try {
-                const itemsCountRow = await db('FACTURAS_DETALLE')
-                    .where({ FACT_ID: r.FACT_ID, FADE_ANULADO: 'N' })
-                    .sum('FADE_CANT as TOTAL_CANT')
-                    .first();
-                if (itemsCountRow?.TOTAL_CANT) {
-                    totalCant = parseInt(String(itemsCountRow.TOTAL_CANT), 10) || 1;
-                }
-            } catch (e) {
-                totalCant = 1;
-            }
+            const obsStr = String(r.FACT_OBS || r.DINW_OBS || r.DINW_CONCEPTO || '');
+            const huespedStr = r.FACT_NOMCLIENTE ? String(r.FACT_NOMCLIENTE).trim() : (r.TERCERO_NOMBRE ? String(r.TERCERO_NOMBRE).trim() : 'Huésped General');
+            const nitStr = r.TERC_NIT ? String(r.TERC_NIT).trim() : '';
 
-            // Consultar FADE_OBS (Sub-Huésped / Ocupante) desde FACTURAS_DETALLE
-            let subHuespedStr = '';
+            // Consultar detalles de la factura
+            let totalCant = 0;
+            const habsSet = new Set<string>();
+            const subHuespedMap = new Map<string, string>(); // habNum -> subHuesped
+            let fallbackSubHuesped = '';
+
             try {
                 const fadeDets = await db('FACTURAS_DETALLE')
                     .where({ FACT_ID: r.FACT_ID, FADE_ANULADO: 'N' })
-                    .select('FADE_OBS')
+                    .select('FADE_ITEM', 'ARTI_COD', 'FADE_DESC', 'FADE_REFERENCIA', 'FADE_OBS', 'FADE_CANT')
                     .orderBy('FADE_ITEM', 'asc');
 
                 for (const fd of fadeDets) {
+                    const cant = parseFloat(String(fd.FADE_CANT || '1')) || 1;
+                    totalCant += cant;
+
+                    const refStr = String(fd.FADE_REFERENCIA || '').trim();
+                    const descStr = String(fd.FADE_DESC || '').trim();
+                    const artCode = String(fd.ARTI_COD || '').trim();
+
+                    // Detectar habitación
+                    const matchItemHab = refStr.match(/HAB-(\w+)/i) ||
+                        descStr.match(/Hab(?:itaci[oó]n|\.)?\s*(\w+)/i) ||
+                        artCode.match(/^H-(\w+)/i);
+                    const itemHab = matchItemHab ? matchItemHab[1] : '';
+                    if (itemHab) {
+                        habsSet.add(itemHab);
+                    }
+
+                    // Detectar sub-huésped en FADE_OBS
                     if (fd.FADE_OBS) {
-                        const blobTxt = await parseBlob(fd.FADE_OBS);
-                        if (blobTxt && blobTxt.length > 0) {
-                            subHuespedStr = blobTxt;
-                            break;
+                        const blobTxt = await parseFirebirdBlob(fd.FADE_OBS);
+                        if (blobTxt && blobTxt.trim()) {
+                            const cleanTxt = blobTxt.trim();
+                            if (itemHab) {
+                                subHuespedMap.set(itemHab, cleanTxt);
+                            } else if (!fallbackSubHuesped) {
+                                fallbackSubHuesped = cleanTxt;
+                            }
                         }
                     }
                 }
-            } catch (e) {
+            } catch (e) { }
+
+            if (totalCant === 0) totalCant = 1;
+
+            // Extraer habitaciones también de observaciones de encabezado
+            const matchConsolHabs = obsStr.match(/Habitaciones:\s*([0-9,\s]+)/i);
+            if (matchConsolHabs) {
+                const parts = matchConsolHabs[1].split(',').map(s => s.trim()).filter(Boolean);
+                for (const p of parts) habsSet.add(p);
+            }
+            const matchSingleHab = obsStr.match(/Habitaci[oó]n\s+(\w+)/i);
+            if (matchSingleHab) {
+                habsSet.add(matchSingleHab[1]);
+            }
+
+            const habsList = Array.from(habsSet);
+
+            // Determinar habitacionStr
+            let habitacionStr = '-';
+            if (habsList.length === 1) {
+                habitacionStr = `Habitación ${habsList[0]}`;
+            } else if (habsList.length > 1) {
+                habitacionStr = `Habitaciones ${habsList.join(', ')}`;
+            }
+
+            // Para facturas consolidadas o sin subHuesped en FADE_OBS, buscar sub-huéspedes faltantes
+            for (const hNum of habsList) {
+                if (!subHuespedMap.has(hNum)) {
+                    // Buscar en DOC_INVENTARIO_DET_WEB previo
+                    try {
+                        const sourceDet = await db('DOC_INVENTARIO_DET_WEB as D')
+                            .where(function () {
+                                this.where('D.DIWD_REF', `HAB-${hNum}`)
+                                    .orWhere('D.DIWD_DESCART', 'like', `%Hab. ${hNum}%`)
+                                    .orWhere('D.DIWD_DESCART', 'like', `%Habitación ${hNum}%`);
+                            })
+                            .whereNotNull('D.DIWD_OBS')
+                            .where('D.DIWD_OBS', '!=', '')
+                            .orderBy('D.DINW_ID', 'desc')
+                            .select('D.DIWD_OBS')
+                            .first();
+
+                        if (sourceDet?.DIWD_OBS) {
+                            const parsedObs = await parseFirebirdBlob(sourceDet.DIWD_OBS);
+                            if (parsedObs && parsedObs.trim()) {
+                                subHuespedMap.set(hNum, parsedObs.trim());
+                            }
+                        }
+                    } catch (e) { }
+
+                    // Si aún no está, buscar en HABITACION.NOTAS
+                    if (!subHuespedMap.has(hNum)) {
+                        try {
+                            const habRow = await db('HABITACION').where('NUMERO', hNum).first();
+                            if (habRow?.NOTAS && String(habRow.NOTAS).trim()) {
+                                subHuespedMap.set(hNum, String(habRow.NOTAS).trim());
+                            }
+                        } catch (e) { }
+                    }
+                }
+            }
+
+            // Si es factura individual y no tiene sub-huésped en mapa, verificar fallback
+            const cleanObsStr = obsStr.replace(/^(?:Hospedaje Habitaci[oó]n \w+ - |Factura Consolidada Habitaciones: [0-9,\s]+|Venta Directa - )/i, '').trim();
+
+            let subHuespedStr = '';
+            if (habsList.length > 1) {
+                // Documento consolidado
+                const itemsList: string[] = [];
+                for (const hNum of habsList) {
+                    const subName = subHuespedMap.get(hNum);
+                    if (subName && !subName.toLowerCase().startsWith('factura consolidada')) {
+                        itemsList.push(`${hNum}: ${subName}`);
+                    }
+                }
+                if (itemsList.length > 0) {
+                    subHuespedStr = itemsList.join(', ');
+                }
+            } else if (habsList.length === 1) {
+                // Factura de 1 habitación
+                const hNum = habsList[0];
+                subHuespedStr = subHuespedMap.get(hNum) || fallbackSubHuesped || '';
+                if (!subHuespedStr && cleanObsStr && !cleanObsStr.toLowerCase().startsWith('factura consolidada') && !cleanObsStr.toLowerCase().startsWith('venta directa') && cleanObsStr.toLowerCase() !== huespedStr.toLowerCase()) {
+                    subHuespedStr = cleanObsStr;
+                }
+            } else {
+                // Sin habitación (ej. venta directa)
+                subHuespedStr = fallbackSubHuesped || '';
+            }
+
+            // Evitar que subHuespedStr contenga títulos genéricos de factura
+            if (
+                subHuespedStr.toLowerCase().startsWith('factura consolidada') ||
+                subHuespedStr.toLowerCase().startsWith('venta directa') ||
+                subHuespedStr.toLowerCase().startsWith('hospedaje habitaci')
+            ) {
                 subHuespedStr = '';
             }
-            if (!subHuespedStr && r.DINW_OBS) {
-                subHuespedStr = await parseBlob(r.DINW_OBS);
-            }
-
-            const obsStr = String(r.FACT_OBS || r.DINW_OBS || r.DINW_CONCEPTO || '');
-            const matchHab = obsStr.match(/Habitaci[oó]n\s+(\w+)/i);
-            const habitacionStr = matchHab ? `Habitación ${matchHab[1]}` : 'General';
-
-            const huespedStr = r.FACT_NOMCLIENTE ? String(r.FACT_NOMCLIENTE).trim() : (r.TERCERO_NOMBRE ? String(r.TERCERO_NOMBRE).trim() : 'Huésped General');
-            const nitStr = r.TERC_NIT ? String(r.TERC_NIT).trim() : '';
 
             // Formatear Fecha y Hora
             const rawFecha = r.DINW_FECHA || r.FACT_FECHA;
@@ -1462,7 +1563,7 @@ export class PedidoService {
             pedidos.push({
                 id: r.FACT_ID,
                 habitacion: habitacionStr,
-                habitacionNumero: matchHab ? matchHab[1] : '1',
+                habitacionNumero: habsList[0] || '1',
                 huesped: huespedStr,
                 subHuesped: subHuespedStr,
                 documento: nitStr,
@@ -1584,8 +1685,9 @@ export class PedidoService {
 
         const rawObs = first.OBS || fallbackHeader?.REVT_OBS || fallbackHeader?.FACT_OBS || fallbackHeader?.DINW_OBS || fallbackHeader?.REVT_CONC;
         const obsBuffer = rawObs ? (Buffer.isBuffer(rawObs) ? rawObs.toString('utf8') : String(rawObs)) : '';
+        const matchConsol = obsBuffer.match(/Habitaciones:\s*([0-9,\s]+)/i);
         const matchHab = obsBuffer.match(/Habitaci[oó]n\s+(\w+)/i) || (first.REFITEM ? String(first.REFITEM).match(/HAB-(\w+)/i) : null);
-        const habitacionNumero = matchHab ? matchHab[1] : '';
+        const habitacionNumero = matchConsol ? matchConsol[1].trim() : (matchHab ? matchHab[1] : '');
 
         const formaPagoStr = String(first.FORMAP || first.FORMAPAGO1 || 'EFECTIVO').trim();
         const huespedNombre = first.NOMCLIENTE || first.NOMTERCERO || fallbackHeader?.REVT_NOMTER || fallbackHeader?.FACT_NOMCLIENTE || 'Huésped General';
@@ -1599,17 +1701,81 @@ export class PedidoService {
                     .where({ FACT_ID: idDoc, FADE_ANULADO: 'N' })
                     .orderBy('FADE_ITEM', 'asc');
                 if (facDets && facDets.length > 0) {
-                    items = facDets.map((d: any) => ({
-                        item: parseInt(String(d.FADE_ITEM || '1'), 10),
-                        articulo: String(d.ARTI_COD || '').trim(),
-                        descripcion: String(d.FADE_DESC || d.ARTI_COD || 'Producto / Hospedaje').trim(),
-                        referencia: String(d.FADE_REFERENCIA || '').trim(),
-                        cantidad: parseFloat(String(d.FADE_CANT || '1')),
-                        precioUnitario: parseFloat(String(d.FADE_PRUNIT || '0')),
-                        ivaPorc: parseFloat(String(d.FADE_IVAPORC || '0')),
-                        ivaMonto: parseFloat(String(d.FADE_IVAMONTO || '0')),
-                        total: parseFloat(String(d.FADE_TOTAL || '0'))
-                    }));
+                    for (const d of facDets) {
+                        let obsItem = '';
+                        if (d.FADE_OBS) {
+                            obsItem = await parseFirebirdBlob(d.FADE_OBS);
+                        }
+
+                        const refStr = String(d.FADE_REFERENCIA || '').trim();
+                        const descRaw = String(d.FADE_DESC || d.ARTI_COD || 'Producto / Hospedaje').trim();
+                        const artCode = String(d.ARTI_COD || '').trim();
+
+                        const isLodging = /^H-[A-Z0-9]+/i.test(artCode) ||
+                            /^SERVICIO HOSPEDAJE/i.test(descRaw) ||
+                            /^HOSPEDAJE/i.test(descRaw);
+
+                        if (isLodging && !obsItem) {
+                            const matchItemHab = refStr.match(/HAB-(\w+)/i) || descRaw.match(/Hab(?:itaci[oó]n|\.)?\s*(\w+)/i);
+                            const habItemNum = matchItemHab ? matchItemHab[1] : habitacionNumero;
+
+                            if (habItemNum) {
+                                try {
+                                    const sourceDet = await db('DOC_INVENTARIO_DET_WEB as D')
+                                        .join('DOC_INVENTARIO_WEB as W', 'D.DINW_ID', 'W.DINW_ID')
+                                        .where(function () {
+                                            this.where('D.DIWD_REF', `HAB-${habItemNum}`)
+                                                .orWhere('D.DIWD_DESCART', 'like', `%Hab. ${habItemNum}%`)
+                                                .orWhere('D.DIWD_DESCART', 'like', `%Habitación ${habItemNum}%`);
+                                        })
+                                        .whereNotNull('D.DIWD_OBS')
+                                        .where('D.DIWD_OBS', '!=', '')
+                                        .orderBy('D.DINW_ID', 'desc')
+                                        .select('D.DIWD_OBS')
+                                        .first();
+
+                                    if (sourceDet?.DIWD_OBS) {
+                                        obsItem = await parseFirebirdBlob(sourceDet.DIWD_OBS);
+                                    }
+                                } catch (e) { }
+
+                                if (!obsItem) {
+                                    try {
+                                        const habRow = await db('HABITACION').where('NUMERO', habItemNum).first();
+                                        if (habRow?.NOTAS && String(habRow.NOTAS).trim()) {
+                                            obsItem = String(habRow.NOTAS).trim();
+                                        }
+                                    } catch (e) { }
+                                }
+                            }
+
+                            if (!obsItem && obsBuffer) {
+                                const isConsolidatedObs = /consolidada/i.test(obsBuffer);
+                                const isGenericObs = /^Hospedaje Habitaci[oó]n/i.test(obsBuffer);
+                                if (!isConsolidatedObs && !isGenericObs) {
+                                    obsItem = obsBuffer;
+                                }
+                            }
+                        }
+
+                        let formattedDesc = descRaw;
+                        if (obsItem && isLodging && !descRaw.toLowerCase().includes(obsItem.toLowerCase())) {
+                            formattedDesc = `${descRaw} (Sub-Huésped: ${obsItem})`;
+                        }
+
+                        items.push({
+                            item: parseInt(String(d.FADE_ITEM || '1'), 10),
+                            articulo: artCode,
+                            descripcion: formattedDesc,
+                            obsItem: obsItem,
+                            referencia: refStr,
+                            cantidad: parseFloat(String(d.FADE_CANT || '1')),
+                            precioUnitario: parseFloat(String(d.FADE_PRUNIT || '0')),
+                            ivaPorc: parseFloat(String(d.FADE_IVAPORC || '0')),
+                            ivaMonto: parseFloat(String(d.FADE_IVAMONTO || '0')),
+                            total: parseFloat(String(d.FADE_TOTAL || '0'))
+                        });
+                    }
                 }
             } catch (facDetErr: any) {
                 console.warn('Aviso consultando FACTURAS_DETALLE para impresion:', facDetErr.message);
@@ -1621,17 +1787,44 @@ export class PedidoService {
                         .where({ DINW_ID: idDoc, DIWD_ANULADO: 'N' })
                         .orderBy('DIWD_ITEM', 'asc');
                     if (dinwDets && dinwDets.length > 0) {
-                        items = dinwDets.map((d: any) => ({
-                            item: parseInt(String(d.DIWD_ITEM || '1'), 10),
-                            articulo: String(d.DIWD_ARTICULO || '').trim(),
-                            descripcion: String(d.DIWD_DESCART || d.DIWD_ARTICULO || 'Producto / Hospedaje').trim(),
-                            referencia: String(d.DIWD_REF || '').trim(),
-                            cantidad: parseFloat(String(d.DIWD_CANT || '1')),
-                            precioUnitario: parseFloat(String(d.DIWD_COSTO || d.DIWD_PRUNIT || '0')),
-                            ivaPorc: parseFloat(String(d.DIWD_IVAPORC || '0')),
-                            ivaMonto: parseFloat(String(d.DIWD_IVAMONTO || '0')),
-                            total: parseFloat(String(d.DIWD_TOTAL || '0'))
-                        }));
+                        for (const d of dinwDets) {
+                            let obsItem = '';
+                            if (d.DIWD_OBS) {
+                                obsItem = await parseFirebirdBlob(d.DIWD_OBS);
+                            }
+                            const refStr = String(d.DIWD_REF || '').trim();
+                            const descRaw = String(d.DIWD_DESCART || d.DIWD_ARTICULO || 'Producto / Hospedaje').trim();
+                            const artCode = String(d.DIWD_ARTICULO || '').trim();
+                            const isLodging = /^H-[A-Z0-9]+/i.test(artCode) ||
+                                /^SERVICIO HOSPEDAJE/i.test(descRaw) ||
+                                /^HOSPEDAJE/i.test(descRaw);
+
+                            if (isLodging && !obsItem && obsBuffer) {
+                                const isConsolidatedObs = /consolidada/i.test(obsBuffer);
+                                const isGenericObs = /^Hospedaje Habitaci[oó]n/i.test(obsBuffer);
+                                if (!isConsolidatedObs && !isGenericObs) {
+                                    obsItem = obsBuffer;
+                                }
+                            }
+
+                            let formattedDesc = descRaw;
+                            if (obsItem && isLodging && !descRaw.toLowerCase().includes(obsItem.toLowerCase())) {
+                                formattedDesc = `${descRaw} (Sub-Huésped: ${obsItem})`;
+                            }
+
+                            items.push({
+                                item: parseInt(String(d.DIWD_ITEM || '1'), 10),
+                                articulo: artCode,
+                                descripcion: formattedDesc,
+                                obsItem: obsItem,
+                                referencia: refStr,
+                                cantidad: parseFloat(String(d.DIWD_CANT || '1')),
+                                precioUnitario: parseFloat(String(d.DIWD_COSTO || d.DIWD_PRUNIT || '0')),
+                                ivaPorc: parseFloat(String(d.DIWD_IVAPORC || '0')),
+                                ivaMonto: parseFloat(String(d.DIWD_IVAMONTO || '0')),
+                                total: parseFloat(String(d.DIWD_TOTAL || '0'))
+                            });
+                        }
                     }
                 } catch (dinwDetErr: any) {
                     console.warn('Aviso consultando DOC_INVENTARIO_DET_WEB para impresion:', dinwDetErr.message);
@@ -2012,11 +2205,15 @@ export class PedidoService {
                         ? descOriginal
                         : `${descOriginal} (Hab. ${hNum})`;
 
+                    const itemObs = String(d.DIWD_OBS || h.NOTAS || h.HUESPED || '').trim();
+
                     consolidatedItems.push({
                         ...d,
                         DIWD_DESCART: descConHab,
+                        DIWD_OBS: itemObs,
                         _habNumero: hNum,
-                        _habId: hId
+                        _habId: hId,
+                        _subHuesped: itemObs
                     });
                 }
             }
@@ -2108,6 +2305,7 @@ export class PedidoService {
                 DIWD_BODEGA: String(it.DIWD_BODEGA || bodega).trim(),
                 DIWD_LISTA: parseInt(String(it.DIWD_LISTA || '1'), 10) || 1,
                 DIWD_REF: it._habNumero ? `HAB-${it._habNumero}` : 'MULTI-HAB',
+                DIWD_OBS: truncateToBytes(String(it.DIWD_OBS || it._subHuesped || '').trim(), 100),
                 DIWD_ANULADO: 'N',
                 DIWD_TRANSMIT: 'N'
             });
