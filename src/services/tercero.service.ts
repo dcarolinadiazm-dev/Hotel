@@ -224,7 +224,10 @@ export class TerceroService {
 
         const nit = data.nit.trim();
         const tipoDoc = (data.tipoId || 'C').trim().substring(0, 1).toUpperCase();
-        const dvCalculado = data.dv ? data.dv.trim() : calculaDigitoVerificacion(nit);
+        const isNit = tipoDoc === 'J' || tipoDoc === 'N';
+        const dvCalculado = isNit
+            ? (data.dv && String(data.dv).trim() !== '' ? String(data.dv).trim() : calculaDigitoVerificacion(nit))
+            : null;
 
         let nombreCompleto = '';
         let nom1: string | null = null;

@@ -61,6 +61,9 @@ export interface ITurnoResumenCierre {
     totalAbonosCruzados?: number;
     totalAbonosHabitaciones?: number;
     totalEfectivoEsperado: number; // Base + Efectivo recaudado
+    totalEfectivoRecaudado?: number;
+    totalConsignaciones?: number;
+    totalCartera?: number;
     facturasGeneradas: Array<{
         prefijo: string;
         facturaInicial: number;

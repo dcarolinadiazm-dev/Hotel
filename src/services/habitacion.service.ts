@@ -1065,11 +1065,9 @@ export class HabitacionService {
 
             const dinwId = r.DINW_ID ? parseInt(String(r.DINW_ID), 10) : undefined;
             let abonos = 0;
-            if (dinwId) {
-                try {
-                    abonos = await AbonoService.getTotalAbonos(dinwId);
-                } catch {}
-            }
+            try {
+                abonos = await AbonoService.getTotalAbonos(r.ID_HABITACION, documento, r.ID_MOVIM);
+            } catch {}
             // Usar precio real de la reserva (DIWD_COSTO del detalle) o fallback a lista predeterminada
             const precioNoche = r.PRECIO_RESERVA !== null && r.PRECIO_RESERVA !== undefined && parseFloat(String(r.PRECIO_RESERVA)) > 0
                 ? parseFloat(String(r.PRECIO_RESERVA))

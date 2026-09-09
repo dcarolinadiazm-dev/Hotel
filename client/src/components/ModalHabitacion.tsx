@@ -211,7 +211,8 @@ export const ModalHabitacion = ({
 
   const handleNitChange = (val: string) => {
     setNewNit(val);
-    if (newTipoDoc?.trim().toUpperCase() === 'J') {
+    const tipo = newTipoDoc?.trim().toUpperCase();
+    if (tipo === 'J' || tipo === 'N') {
       setNewDv(calculaDigitoVerificacion(val));
     } else {
       setNewDv('');
@@ -517,6 +518,7 @@ export const ModalHabitacion = ({
     }
 
     const isJuridica = newTipoDoc?.trim().toUpperCase() === 'J';
+    const isNit = isJuridica || newTipoDoc?.trim().toUpperCase() === 'N';
 
     if (isJuridica) {
       if (!newNombre || !newNombre.trim()) {
@@ -572,7 +574,7 @@ export const ModalHabitacion = ({
           tercero: {
             tipoId: newTipoDoc.trim(),
             nit: newNit.trim(),
-            dv: isJuridica ? (newDv || calculaDigitoVerificacion(newNit)) : null,
+            dv: isNit ? (newDv || calculaDigitoVerificacion(newNit)) : null,
             nombre: isJuridica ? newNombre.trim() : calculatedName,
             apellido1: !isJuridica ? newApellido1.trim() : undefined,
             apellido2: !isJuridica ? newApellido2.trim() : undefined,
@@ -1375,8 +1377,9 @@ export const ModalHabitacion = ({
                             className="modal-form-select"
                             value={newTipoDoc}
                             onChange={(e) => {
+                              const val = e.target.value.trim().toUpperCase();
                               setNewTipoDoc(e.target.value);
-                              if (e.target.value.trim().toUpperCase() !== 'J') {
+                              if (val !== 'J' && val !== 'N') {
                                 setNewDv('');
                               } else if (newNit) {
                                 setNewDv(calculaDigitoVerificacion(newNit));
@@ -1403,7 +1406,7 @@ export const ModalHabitacion = ({
                               placeholder="Ej: 900123456"
                               required
                             />
-                            {newDv && newTipoDoc?.trim().toUpperCase() === 'J' && (
+                            {newDv && (newTipoDoc?.trim().toUpperCase() === 'J' || newTipoDoc?.trim().toUpperCase() === 'N') && (
                               <span
                                 style={{
                                   padding: '8px 10px',

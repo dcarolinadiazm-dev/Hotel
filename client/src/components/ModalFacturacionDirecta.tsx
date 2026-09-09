@@ -409,6 +409,7 @@ export const ModalFacturacionDirecta: React.FC<ModalFacturacionDirectaProps> = (
     }
 
     const isJuridica = newTipoDoc.trim().toUpperCase() === 'J';
+    const isNit = isJuridica || newTipoDoc.trim().toUpperCase() === 'N';
     if (isJuridica) {
       if (!newNombre.trim()) {
         setClientError('La razón social es obligatoria (*)');
@@ -463,7 +464,7 @@ export const ModalFacturacionDirecta: React.FC<ModalFacturacionDirectaProps> = (
           tercero: {
             tipoId: newTipoDoc.trim(),
             nit: newNit.trim(),
-            dv: isJuridica ? (newDv || calculaDigitoVerificacion(newNit)) : null,
+            dv: isNit ? (newDv || calculaDigitoVerificacion(newNit)) : null,
             nombre: isJuridica ? newNombre.trim() : calculatedName,
             apellido1: !isJuridica ? newApellido1.trim() : undefined,
             apellido2: !isJuridica ? newApellido2.trim() : undefined,
@@ -716,7 +717,15 @@ export const ModalFacturacionDirecta: React.FC<ModalFacturacionDirectaProps> = (
                             <select
                               className="modal-form-select"
                               value={newTipoDoc}
-                              onChange={(e) => setNewTipoDoc(e.target.value)}
+                              onChange={(e) => {
+                                const val = e.target.value.trim().toUpperCase();
+                                setNewTipoDoc(e.target.value);
+                                if (val !== 'J' && val !== 'N') {
+                                  setNewDv('');
+                                } else if (newNit) {
+                                  setNewDv(calculaDigitoVerificacion(newNit));
+                                }
+                              }}
                               required
                             >
                               {tiposDocumento.map((td) => (
@@ -738,7 +747,8 @@ export const ModalFacturacionDirecta: React.FC<ModalFacturacionDirectaProps> = (
                                 onChange={(e) => {
                                   const val = e.target.value.replace(/\D/g, '');
                                   setNewNit(val);
-                                  if (newTipoDoc?.trim().toUpperCase() === 'J') {
+                                  const tipo = newTipoDoc?.trim().toUpperCase();
+                                  if (tipo === 'J' || tipo === 'N') {
                                     setNewDv(calculaDigitoVerificacion(val));
                                   } else {
                                     setNewDv('');
@@ -747,7 +757,7 @@ export const ModalFacturacionDirecta: React.FC<ModalFacturacionDirectaProps> = (
                                 placeholder="Ej: 1098765432"
                                 required
                               />
-                              {newTipoDoc === 'J' && (
+                              {(newTipoDoc?.trim().toUpperCase() === 'J' || newTipoDoc?.trim().toUpperCase() === 'N') && (
                                 <span
                                   style={{
                                     padding: '8px 10px',

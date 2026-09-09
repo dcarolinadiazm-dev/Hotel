@@ -46,36 +46,44 @@ export class AbonoService {
     }
 
     // 2. Obtener lista de Abonos de la reserva activa (HABITACION_MOVIM_ANTICIPOS) excluyendo anulados
-    static async getAbonos(idHabitacion: string, tercNit?: string) {
-        const habNum = String(idHabitacion).trim();
+    static async getAbonos(idHabitacion: string, tercNit?: string, idMovim?: number | string) {
+        let activeMov: any = null;
 
-        const habRow = await db(tables.HABITACION)
-            .where('ID_HABITACION', habNum)
-            .orWhere('NUMERO', habNum)
-            .first()
-            .catch(() => null);
+        if (idMovim) {
+            activeMov = await db(tables.HABITACION_MOVIM)
+                .where('ID_MOVIM', idMovim)
+                .first()
+                .catch(() => null);
+        }
 
-        const idHab = habRow?.ID_HABITACION ? String(habRow.ID_HABITACION).trim() : habNum;
-        const numHab = habRow?.NUMERO ? String(habRow.NUMERO).trim() : habNum;
+        if (!activeMov) {
+            const habNum = String(idHabitacion).trim();
+            const habRow = await db(tables.HABITACION)
+                .where('ID_HABITACION', habNum)
+                .orWhere('NUMERO', habNum)
+                .first()
+                .catch(() => null);
 
-        // 1. Buscar si hay movimiento activo en HABITACION_MOVIM
-        const activeMov = await db(tables.HABITACION_MOVIM)
-            .where(function () {
-                this.where('ID_HABITACION', idHab)
-                    .orWhere('ID_HABITACION', habNum)
-                    .orWhere('ID_HABITACION', numHab)
-                    .orWhere('ID_MOVIM', habNum)
-                    .orWhere('DINW_ID', habNum);
-            })
-            .andWhere(function () {
-                this.where('ESTADO', 'Activo')
-                    .orWhereNull('ESTADO')
-                    .orWhere('ESTADO', 'Ocupada')
-                    .orWhere('ESTADO', 'Reservada');
-            })
-            .orderBy('ID_MOVIM', 'desc')
-            .first()
-            .catch(() => null);
+            const idHab = habRow?.ID_HABITACION ? String(habRow.ID_HABITACION).trim() : habNum;
+            const numHab = habRow?.NUMERO ? String(habRow.NUMERO).trim() : habNum;
+
+            // 1. Buscar si hay movimiento activo en HABITACION_MOVIM por ID o número de habitación
+            activeMov = await db(tables.HABITACION_MOVIM)
+                .where(function () {
+                    this.where('ID_HABITACION', idHab)
+                        .orWhere('ID_HABITACION', habNum)
+                        .orWhere('ID_HABITACION', numHab);
+                })
+                .andWhere(function () {
+                    this.where('ESTADO', 'Activo')
+                        .orWhereNull('ESTADO')
+                        .orWhere('ESTADO', 'Ocupada')
+                        .orWhere('ESTADO', 'Reservada');
+                })
+                .orderBy('ID_MOVIM', 'desc')
+                .first()
+                .catch(() => null);
+        }
 
         let rowsMap = new Map<number, any>();
 
@@ -196,10 +204,10 @@ export class AbonoService {
     }
 
     // Obtener la suma de abonos no anulados para una habitación, movimiento o cliente
-    static async getTotalAbonos(idHabitacionOrMovim?: string | number, tercNit?: string): Promise<number> {
+    static async getTotalAbonos(idHabitacionOrMovim?: string | number, tercNit?: string, idMovim?: number | string): Promise<number> {
         try {
             const habIdStr = idHabitacionOrMovim !== undefined ? String(idHabitacionOrMovim) : '';
-            const res = await this.getAbonos(habIdStr, tercNit);
+            const res = await this.getAbonos(habIdStr, tercNit, idMovim);
             return res.totalAbonado || 0;
         } catch (e) {
             return 0;
@@ -232,11 +240,20 @@ export class AbonoService {
         // Validar que el abono no exceda el total facturado / valor de la reserva
         try {
             const habNum = String(idHabitacion).trim();
+            const habRow = await db(tables.HABITACION)
+                .where('ID_HABITACION', habNum)
+                .orWhere('NUMERO', habNum)
+                .first()
+                .catch(() => null);
+
+            const idHab = habRow?.ID_HABITACION ? String(habRow.ID_HABITACION).trim() : habNum;
+            const numHab = habRow?.NUMERO ? String(habRow.NUMERO).trim() : habNum;
+
             const activeMov = await db(tables.HABITACION_MOVIM)
                 .where(function () {
-                    this.where('ID_HABITACION', habNum)
-                        .orWhere('ID_MOVIM', habNum)
-                        .orWhere('DINW_ID', habNum);
+                    this.where('ID_HABITACION', idHab)
+                        .orWhere('ID_HABITACION', habNum)
+                        .orWhere('ID_HABITACION', numHab);
                 })
                 .andWhere(function () {
                     this.where('ESTADO', 'Activo')
@@ -418,7 +435,7 @@ export class AbonoService {
             ANCL_ANULADO: 'N',
             ANCL_TRANSMIT: 'N',
             COBR_COD: 1,
-            RECA_ID: 0,
+            RECA_ID: recaId,
             ANCL_USUARIO: usuario || 'SYSDBA',
             ANCL_SUCURSAL: '01',
             NUMOK: 'S',
