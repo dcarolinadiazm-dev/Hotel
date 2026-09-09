@@ -187,8 +187,8 @@ export const ReporteReservasFuturas = ({
 
     const ws = XLSX.utils.json_to_sheet(dataExcel);
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Reservas_Futuras');
-    XLSX.writeFile(wb, `Reporte_Reservas_Futuras_${todayStr}.xlsx`);
+    XLSX.utils.book_append_sheet(wb, ws, 'Reservas');
+    XLSX.writeFile(wb, `Reporte_Reservas_${todayStr}.xlsx`);
   };
 
   const formatFecha = (val?: string) => {
@@ -294,7 +294,7 @@ export const ReporteReservasFuturas = ({
               type="button"
               className="sidebar-nav-item active"
               onClick={() => { }}
-              title="Reporte de Reservas Futuras"
+              title="Reporte Reservas"
             >
               <span className="nav-item-icon">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
@@ -304,7 +304,7 @@ export const ReporteReservasFuturas = ({
                   <line x1="3" y1="10" x2="21" y2="10" />
                 </svg>
               </span>
-              <span className="nav-item-label">Reservas Futuras</span>
+              <span className="nav-item-label">Reporte Reservas</span>
             </button>
           </nav>
         </div>
@@ -378,8 +378,8 @@ export const ReporteReservasFuturas = ({
         <main className="rooms-main-content">
           <div className="report-header-box">
             <div>
-              <h1 className="rooms-main-title">Agenda y Reporte de Reservas Futuras</h1>
-              <p className="rooms-subtitle">Control y programación de huéspedes con reserva para fechas próximas</p>
+              <h1 className="rooms-main-title">Reporte Reservas</h1>
+              <p className="rooms-subtitle">Control y programación de huéspedes con reserva</p>
             </div>
             <div style={{ display: 'flex', gap: '10px' }}>
               <button
@@ -510,12 +510,12 @@ export const ReporteReservasFuturas = ({
             )}
           </div>
 
-          {/* Tabla de Reservas Futuras */}
+          {/* Tabla de Reservas */}
           <div className="report-table-container" style={{ background: '#ffffff', borderRadius: '12px', border: '1px solid #e2e8f0', overflow: 'hidden' }}>
             {loading ? (
               <div style={{ padding: '40px', textAlign: 'center' }}>
                 <div className="spinner" style={{ margin: '0 auto 10px auto' }}></div>
-                <p style={{ color: '#64748b' }}>Cargando agenda de reservas futuras...</p>
+                <p style={{ color: '#64748b' }}>Cargando reporte de reservas...</p>
               </div>
             ) : reservasFiltradas.length === 0 ? (
               <div style={{ padding: '40px', textAlign: 'center', color: '#64748b' }}>

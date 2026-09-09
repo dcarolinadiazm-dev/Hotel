@@ -211,7 +211,11 @@ export const ModalHabitacion = ({
 
   const handleNitChange = (val: string) => {
     setNewNit(val);
-    setNewDv(calculaDigitoVerificacion(val));
+    if (newTipoDoc?.trim().toUpperCase() === 'J') {
+      setNewDv(calculaDigitoVerificacion(val));
+    } else {
+      setNewDv('');
+    }
   };
 
   // Helper para obtener fecha y hora actual en formato 'YYYY-MM-DDTHH:mm'
@@ -568,7 +572,7 @@ export const ModalHabitacion = ({
           tercero: {
             tipoId: newTipoDoc.trim(),
             nit: newNit.trim(),
-            dv: newDv || calculaDigitoVerificacion(newNit),
+            dv: isJuridica ? (newDv || calculaDigitoVerificacion(newNit)) : null,
             nombre: isJuridica ? newNombre.trim() : calculatedName,
             apellido1: !isJuridica ? newApellido1.trim() : undefined,
             apellido2: !isJuridica ? newApellido2.trim() : undefined,
@@ -1370,7 +1374,14 @@ export const ModalHabitacion = ({
                           <select
                             className="modal-form-select"
                             value={newTipoDoc}
-                            onChange={(e) => setNewTipoDoc(e.target.value)}
+                            onChange={(e) => {
+                              setNewTipoDoc(e.target.value);
+                              if (e.target.value.trim().toUpperCase() !== 'J') {
+                                setNewDv('');
+                              } else if (newNit) {
+                                setNewDv(calculaDigitoVerificacion(newNit));
+                              }
+                            }}
                             required
                           >
                             {tiposDocumento.map((td) => (
@@ -1392,7 +1403,7 @@ export const ModalHabitacion = ({
                               placeholder="Ej: 900123456"
                               required
                             />
-                            {newDv && (
+                            {newDv && newTipoDoc?.trim().toUpperCase() === 'J' && (
                               <span
                                 style={{
                                   padding: '8px 10px',
