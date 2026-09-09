@@ -20,7 +20,10 @@ export interface ResumenCierreZData {
   totalRecaudadoPagos: number;
   totalAbonosTurno?: number;
   totalAbonosAntiguos?: number;
+  totalEfectivoRecaudado?: number;
   totalEfectivoEsperado: number;
+  totalConsignaciones?: number;
+  totalCartera?: number;
   facturasGeneradas: Array<{
     prefijo: string;
     facturaInicial: number;

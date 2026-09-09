@@ -187,6 +187,20 @@ export const ModalCierreZ: React.FC<ModalCierreZProps> = ({
                   </div>
                 </div>
 
+                <div style={{ background: '#f0f9ff', border: '1px solid #7dd3fc', borderRadius: '10px', padding: '12px' }}>
+                  <span style={{ fontSize: '11px', fontWeight: 600, color: '#0369a1' }}>🏦 Consignaciones</span>
+                  <div style={{ fontSize: '17px', fontWeight: 800, color: '#0c4a6e', marginTop: '4px' }}>
+                    ${(resumen.totalConsignaciones || 0).toLocaleString('es-CO')}
+                  </div>
+                </div>
+
+                <div style={{ background: '#fdf4ff', border: '1px solid #e879f9', borderRadius: '10px', padding: '12px' }}>
+                  <span style={{ fontSize: '11px', fontWeight: 600, color: '#86198f' }}>📋 Cartera</span>
+                  <div style={{ fontSize: '17px', fontWeight: 800, color: '#701a75', marginTop: '4px' }}>
+                    ${(resumen.totalCartera || 0).toLocaleString('es-CO')}
+                  </div>
+                </div>
+
                 <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '10px', padding: '12px' }}>
                   <span style={{ fontSize: '11px', fontWeight: 600, color: '#92400e' }}>💰 Efectivo Esperado</span>
                   <div style={{ fontSize: '17px', fontWeight: 800, color: '#b45309', marginTop: '4px' }}>
@@ -194,6 +208,7 @@ export const ModalCierreZ: React.FC<ModalCierreZProps> = ({
                   </div>
                 </div>
               </div>
+
 
               {/* Desglose de Formas de Pago */}
               <div style={{ marginBottom: '20px' }}>

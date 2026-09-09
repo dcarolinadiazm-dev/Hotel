@@ -996,6 +996,10 @@ export class HabitacionService {
             })
             .leftJoin(tables.ARTICULO, `${tables.HABITACION}.ARTI_COD`, '=', `${tables.ARTICULO}.ARTI_COD`)
             .leftJoin(tables.DOC_INVENTARIO_WEB, `${tables.HABITACION_MOVIM}.DINW_ID`, '=', `${tables.DOC_INVENTARIO_WEB}.DINW_ID`)
+            .leftJoin(tables.DOC_INVENTARIO_DET_WEB, function () {
+                this.on(`${tables.DOC_INVENTARIO_DET_WEB}.DINW_ID`, '=', `${tables.DOC_INVENTARIO_WEB}.DINW_ID`)
+                    .andOn(`${tables.DOC_INVENTARIO_DET_WEB}.DIWD_ITEM`, '=', db.raw('1'));
+            })
             .leftJoin(tables.TERCEROS, `${tables.DOC_INVENTARIO_WEB}.DINW_NIT`, '=', `${tables.TERCEROS}.TERC_NIT`)
             .where(function () {
                 this.whereIn(`${tables.HABITACION_MOVIM}.ESTADO`, ['Activo', 'Reservada', 'Ocupada', 'Facturado'])
@@ -1017,6 +1021,7 @@ export class HabitacionService {
                 `${tables.HABITACION}.PISO as HAB_PISO`,
                 `${tables.HABITACION}.ARTI_COD as HAB_ARTI_COD`,
                 db.raw(`COALESCE(${tables.PRECIOS_ARTICULO}.PRAR_FIJO, ${tables.ARTICULO}.ARTI_PRECIO, 0) as "HAB_PRECIO"`),
+                db.raw(`COALESCE(${tables.DOC_INVENTARIO_DET_WEB}.DIWD_COSTO, ${tables.DOC_INVENTARIO_DET_WEB}.DIWD_PRUNIT, NULL) as "PRECIO_RESERVA"`),
                 `${tables.DOC_INVENTARIO_WEB}.DINW_NIT`,
                 `${tables.DOC_INVENTARIO_WEB}.DINW_IDDOC`,
                 `${tables.DOC_INVENTARIO_WEB}.DINW_TOTAL`,
@@ -1065,7 +1070,10 @@ export class HabitacionService {
                     abonos = await AbonoService.getTotalAbonos(dinwId);
                 } catch {}
             }
-            const precioNoche = parseFloat(String(r.HAB_PRECIO || '0'));
+            // Usar precio real de la reserva (DIWD_COSTO del detalle) o fallback a lista predeterminada
+            const precioNoche = r.PRECIO_RESERVA !== null && r.PRECIO_RESERVA !== undefined && parseFloat(String(r.PRECIO_RESERVA)) > 0
+                ? parseFloat(String(r.PRECIO_RESERVA))
+                : parseFloat(String(r.HAB_PRECIO || '0'));
             const totalEstadia = noches * precioNoche;
             const saldoPendiente = Math.max(0, totalEstadia - abonos);
 

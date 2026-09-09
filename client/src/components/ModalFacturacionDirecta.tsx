@@ -463,7 +463,7 @@ export const ModalFacturacionDirecta: React.FC<ModalFacturacionDirectaProps> = (
           tercero: {
             tipoId: newTipoDoc.trim(),
             nit: newNit.trim(),
-            dv: newDv || calculaDigitoVerificacion(newNit),
+            dv: isJuridica ? (newDv || calculaDigitoVerificacion(newNit)) : null,
             nombre: isJuridica ? newNombre.trim() : calculatedName,
             apellido1: !isJuridica ? newApellido1.trim() : undefined,
             apellido2: !isJuridica ? newApellido2.trim() : undefined,
@@ -738,7 +738,11 @@ export const ModalFacturacionDirecta: React.FC<ModalFacturacionDirectaProps> = (
                                 onChange={(e) => {
                                   const val = e.target.value.replace(/\D/g, '');
                                   setNewNit(val);
-                                  setNewDv(calculaDigitoVerificacion(val));
+                                  if (newTipoDoc?.trim().toUpperCase() === 'J') {
+                                    setNewDv(calculaDigitoVerificacion(val));
+                                  } else {
+                                    setNewDv('');
+                                  }
                                 }}
                                 placeholder="Ej: 1098765432"
                                 required

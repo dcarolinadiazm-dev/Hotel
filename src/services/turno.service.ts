@@ -156,7 +156,7 @@ export class TurnoService {
             .where(function () {
                 this.where('FOPA_ACTIVO', 'S').orWhereNull('FOPA_ACTIVO');
             })
-            .select('FOPA_ID', 'FOPA_NOM')
+            .select('FOPA_ID', 'FOPA_NOM', 'FOPA_CONSIGNA', 'FOPA_CARTERA')
             .orderBy('FOPA_ID', 'asc');
 
         const formasMap = new Map<number, string>();
@@ -180,6 +180,7 @@ export class TurnoService {
                     this.where('FACT_FECHA', '>=', turno.FECHA_APERTURA);
                 }
             })
+            .andWhere('FACT_FECHA', '>=', turno.FECHA_APERTURA)
             .andWhere(function () {
                 this.where('FACT_ANULADO', '!=', 'S').orWhereNull('FACT_ANULADO');
             })
@@ -361,6 +362,21 @@ export class TurnoService {
         totalEfectivoRecaudado = Math.round(totalEfectivoRecaudado * 100) / 100;
         const totalEfectivoEsperado = Math.round((turno.BASE + totalEfectivoRecaudado) * 100) / 100;
 
+        // Totales por categoría de forma de pago
+        let totalConsignaciones = 0;
+        let totalCartera = 0;
+
+        for (const fp of formasPagoRows) {
+            const fopaId = parseInt(String(fp.FOPA_ID), 10);
+            const esConsigna = String(fp.FOPA_CONSIGNA || '').trim().toUpperCase() === 'S';
+            const esCartera = String(fp.FOPA_CARTERA || '').trim().toUpperCase() === 'S';
+            const data = pagosAcumulados.get(fopaId) || { total: 0, cantidad: 0 };
+            if (esConsigna) totalConsignaciones += data.total;
+            else if (esCartera) totalCartera += data.total;
+        }
+        totalConsignaciones = Math.round(totalConsignaciones * 100) / 100;
+        totalCartera = Math.round(totalCartera * 100) / 100;
+
         // 6. Consultar estado actual de las habitaciones
         const habitaciones = await HabitacionService.getAllHabitaciones();
 
@@ -403,7 +419,10 @@ export class TurnoService {
             totalRecaudadoPagos,
             totalAbonosTurno,
             totalAbonosAntiguos,
+            totalEfectivoRecaudado,
             totalEfectivoEsperado,
+            totalConsignaciones,
+            totalCartera,
             facturasGeneradas,
             habitacionesEstado,
             totalesHabitaciones: {

@@ -277,7 +277,7 @@ export const ReporteCartera: React.FC<ReporteCarteraProps> = ({
                 type="button"
                 className="sidebar-nav-item"
                 onClick={onGoToReservasFuturas}
-                title="Reporte de Reservas Futuras y Agenda"
+                title="Reporte Reservas"
               >
                 <span className="nav-item-icon">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
@@ -287,7 +287,7 @@ export const ReporteCartera: React.FC<ReporteCarteraProps> = ({
                     <line x1="3" y1="10" x2="21" y2="10" />
                   </svg>
                 </span>
-                <span className="nav-item-label">Reservas Futuras</span>
+                <span className="nav-item-label">Reporte Reservas</span>
               </button>
             )}
           </nav>
