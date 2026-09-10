@@ -25,7 +25,13 @@ app.use(express.urlencoded({ extended: true }));
 // Servir frontend compilado de React
 const clientDistPath = path.join(__dirname, 'client', 'dist');
 if (fs.existsSync(clientDistPath)) {
-    app.use(express.static(clientDistPath));
+    app.use(express.static(clientDistPath, {
+        setHeaders: (res, filePath) => {
+            if (filePath.endsWith('.html')) {
+                res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+            }
+        }
+    }));
 }
 
 // Montaje de rutas de la API bajo /api
@@ -38,6 +44,7 @@ app.use((req: Request, res: Response, next: NextFunction) => {
     }
     const indexPath = path.join(clientDistPath, 'index.html');
     if (fs.existsSync(indexPath)) {
+        res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
         return res.sendFile(indexPath);
     }
     res.status(404).send('Frontend no compilado. Ejecute: npm run client:build');
