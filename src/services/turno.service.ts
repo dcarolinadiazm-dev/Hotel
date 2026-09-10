@@ -222,19 +222,8 @@ export class TurnoService {
         let maxPrevRecaId = prevLimits['RC'] || 0;
         let maxPrevAnclId = prevLimits['ANT'] || 0;
 
-        // Si maxPrevRecaId o maxPrevAnclId provienen de un turno anterior pero apuntan a un recibo de HOY (>= fechaInicioDia),
-        // significa que el turno previo se cerró después de creados los recibos de hoy (ej: pruebas).
-        // Por tanto, no es un límite válido de días anteriores y debemos cortar estrictamente antes de hoy.
-        if (maxPrevRecaId > 0) {
-            const prevRc = await db(tables.RECIBOS_CAJA).where('RECA_ID', maxPrevRecaId).select('RECA_FECHA').first().catch(() => null);
-            if (prevRc?.RECA_FECHA) {
-                const prevRcDate = new Date(prevRc.RECA_FECHA);
-                if (!isNaN(prevRcDate.getTime()) && prevRcDate >= fechaInicioDia) {
-                    maxPrevRecaId = 0;
-                }
-            }
-        }
-
+        // Si maxPrevAnclId proviene de un turno anterior pero apunta a un anticipo de HOY (>= fechaInicioDia),
+        // significa que el turno previo absorbió registros de hoy. Lo reseteamos a 0 para recalcular.
         if (maxPrevAnclId > 0) {
             const prevAncl = await db(tables.ANTICIPOS_CLIENTE).where('ANCL_ID', maxPrevAnclId).select('ANCL_FECHA').first().catch(() => null);
             if (prevAncl?.ANCL_FECHA) {
@@ -245,7 +234,8 @@ export class TurnoService {
             }
         }
 
-        if (!maxPrevRecaId) {
+        // Si no hay maxPrevAnclId válido, buscar en ANTICIPOS_CLIENTE el último anticipo previo a hoy
+        if (!maxPrevAnclId) {
             const prevTurnoRows = await db(tables.TURNO)
                 .where('ID_TURNO', '<', turno.ID_TURNO)
                 .where('ESTADO', 'Cerrado')
@@ -254,23 +244,26 @@ export class TurnoService {
 
             const fechaCierrePrev = prevTurnoRows?.FECHA_CIERRE ? new Date(prevTurnoRows.FECHA_CIERRE) : null;
 
-            // En Firebird RECA_FECHA es de tipo DATE (sin hora: 00:00:00).
-            // Si el turno anterior se cerró en un día previo a hoy (< fechaInicioDia), tomamos <= fechaCierrePrev.
-            // Si el turno anterior se cerró el mismo día (o no hay corte exacto de RC en TURNO_DET_FACTURAS),
-            // comparar <= prevTurno.FECHA_CIERRE tomaría erróneamente todos los recibos de hoy (00:00:00 <= 12:35:00).
-            // Por tanto, el corte seguro de recibos previos cuando no hay RC previo guardado es < fechaInicioDia.
             if (fechaCierrePrev && fechaCierrePrev < fechaInicioDia) {
-                const maxPrevReca = await db(tables.RECIBOS_CAJA)
-                    .where('RECA_FECHA', '<=', fechaCierrePrev)
-                    .max('RECA_ID as MAXR')
+                const maxPrevAncl = await db(tables.ANTICIPOS_CLIENTE)
+                    .where('ANCL_FECHA', '<=', fechaCierrePrev)
+                    .max('ANCL_ID as MAXA')
                     .first();
-                maxPrevRecaId = parseInt(String(maxPrevReca?.MAXR || 0), 10);
+                maxPrevAnclId = parseInt(String(maxPrevAncl?.MAXA || 0), 10);
             } else {
-                const maxPrevReca = await db(tables.RECIBOS_CAJA)
-                    .where('RECA_FECHA', '<', fechaInicioDia)
-                    .max('RECA_ID as MAXR')
+                const maxPrevAncl = await db(tables.ANTICIPOS_CLIENTE)
+                    .where('ANCL_FECHA', '<', fechaInicioDia)
+                    .max('ANCL_ID as MAXA')
                     .first();
-                maxPrevRecaId = parseInt(String(maxPrevReca?.MAXR || 0), 10);
+                maxPrevAnclId = parseInt(String(maxPrevAncl?.MAXA || 0), 10);
+            }
+        }
+
+        // Alinear maxPrevRecaId con el anticipo previo para consistencia estricta
+        if (maxPrevAnclId > 0) {
+            const anclRow = await db(tables.ANTICIPOS_CLIENTE).where('ANCL_ID', maxPrevAnclId).select('RECA_ID').first().catch(() => null);
+            if (anclRow?.RECA_ID) {
+                maxPrevRecaId = parseInt(String(anclRow.RECA_ID), 10);
             }
         }
 
@@ -435,12 +428,12 @@ export class TurnoService {
                 this.where(`${tables.RECIBOS_CAJA}.RECA_ANULADO`, '!=', 'S').orWhereNull(`${tables.RECIBOS_CAJA}.RECA_ANULADO`);
             })
             .andWhere(function () {
-                if (maxPrevRecaId > 0) {
-                    this.where(`${tables.RECIBOS_CAJA}.RECA_ID`, '>', maxPrevRecaId);
-                } else if (maxPrevAnclId > 0) {
+                if (maxPrevAnclId > 0) {
                     this.where(`${tables.ANTICIPOS_CLIENTE}.ANCL_ID`, '>', maxPrevAnclId);
+                } else if (maxPrevRecaId > 0) {
+                    this.where(`${tables.RECIBOS_CAJA}.RECA_ID`, '>', maxPrevRecaId);
                 } else {
-                    this.where(`${tables.RECIBOS_CAJA}.RECA_FECHA`, '>=', fechaInicioDia);
+                    this.where(`${tables.ANTICIPOS_CLIENTE}.ANCL_FECHA`, '>=', fechaInicioDia);
                 }
             })
             .select(
@@ -518,12 +511,12 @@ export class TurnoService {
                 this.where(`${tables.RECIBOS_CAJA}.RECA_ANULADO`, '!=', 'S').orWhereNull(`${tables.RECIBOS_CAJA}.RECA_ANULADO`);
             })
             .andWhere(function () {
-                if (maxPrevRecaId > 0) {
-                    this.where(`${tables.RECIBOS_CAJA}.RECA_ID`, '<=', maxPrevRecaId);
-                } else if (maxPrevAnclId > 0) {
+                if (maxPrevAnclId > 0) {
                     this.where(`${tables.ANTICIPOS_CLIENTE}.ANCL_ID`, '<=', maxPrevAnclId);
+                } else if (maxPrevRecaId > 0) {
+                    this.where(`${tables.RECIBOS_CAJA}.RECA_ID`, '<=', maxPrevRecaId);
                 } else {
-                    this.where(`${tables.RECIBOS_CAJA}.RECA_FECHA`, '<', fechaInicioDia);
+                    this.where(`${tables.ANTICIPOS_CLIENTE}.ANCL_FECHA`, '<', fechaInicioDia);
                 }
             })
             .whereNotIn(`${tables.ANTICIPOS_CLIENTE}.ANCL_ID`, appliedAnclIdsQuery)
