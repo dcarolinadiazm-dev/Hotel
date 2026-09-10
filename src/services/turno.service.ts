@@ -222,6 +222,29 @@ export class TurnoService {
         let maxPrevRecaId = prevLimits['RC'] || 0;
         let maxPrevAnclId = prevLimits['ANT'] || 0;
 
+        // Si maxPrevRecaId o maxPrevAnclId provienen de un turno anterior pero apuntan a un recibo de HOY (>= fechaInicioDia),
+        // significa que el turno previo se cerró después de creados los recibos de hoy (ej: pruebas).
+        // Por tanto, no es un límite válido de días anteriores y debemos cortar estrictamente antes de hoy.
+        if (maxPrevRecaId > 0) {
+            const prevRc = await db(tables.RECIBOS_CAJA).where('RECA_ID', maxPrevRecaId).select('RECA_FECHA').first().catch(() => null);
+            if (prevRc?.RECA_FECHA) {
+                const prevRcDate = new Date(prevRc.RECA_FECHA);
+                if (!isNaN(prevRcDate.getTime()) && prevRcDate >= fechaInicioDia) {
+                    maxPrevRecaId = 0;
+                }
+            }
+        }
+
+        if (maxPrevAnclId > 0) {
+            const prevAncl = await db(tables.ANTICIPOS_CLIENTE).where('ANCL_ID', maxPrevAnclId).select('ANCL_FECHA').first().catch(() => null);
+            if (prevAncl?.ANCL_FECHA) {
+                const prevAnclDate = new Date(prevAncl.ANCL_FECHA);
+                if (!isNaN(prevAnclDate.getTime()) && prevAnclDate >= fechaInicioDia) {
+                    maxPrevAnclId = 0;
+                }
+            }
+        }
+
         if (!maxPrevRecaId) {
             const prevTurnoRows = await db(tables.TURNO)
                 .where('ID_TURNO', '<', turno.ID_TURNO)

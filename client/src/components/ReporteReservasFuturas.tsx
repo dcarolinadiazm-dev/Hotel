@@ -188,7 +188,7 @@ export const ReporteReservasFuturas = ({
     const ws = XLSX.utils.json_to_sheet(dataExcel);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Reservas');
-    XLSX.writeFile(wb, `Reporte_Reservas_${todayStr}.xlsx`);
+    XLSX.writeFile(wb, `Reporte_Historico_Reservas_${todayStr}.xlsx`);
   };
 
   const formatFecha = (val?: string) => {
@@ -378,7 +378,7 @@ export const ReporteReservasFuturas = ({
         <main className="rooms-main-content">
           <div className="report-header-box">
             <div>
-              <h1 className="rooms-main-title">Reporte Reservas</h1>
+              <h1 className="rooms-main-title">Reporte Histórico de Reservas</h1>
               <p className="rooms-subtitle">Control y programación de huéspedes con reserva</p>
             </div>
             <div style={{ display: 'flex', gap: '10px' }}>
