@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import type { Habitacion } from './Habitaciones';
 import { ModalAbonos } from './ModalAbonos';
 import { ModalImpresionPOS } from './ModalImpresionPOS';

@@ -286,7 +286,7 @@ export class TurnoService {
             : [];
 
         // Agrupar formas de pago de facturas
-        const pagosFacturasConsolidados: Array<{ fopaId: number; monto: number }> = [];
+        const pagosFacturasConsolidados: Array<{ fopaId: number; monto: number; factId: number; factNumero: string; cliente: string }> = [];
 
         const fcpByFact = new Map<number, Array<{ fopaId: number; monto: number }>>();
         for (const r of pagosFacturasContado) {
@@ -321,14 +321,26 @@ export class TurnoService {
             const fid = parseInt(String(f.FACT_ID), 10);
             const totalFactura = parseFloat(String(f.FACT_TOTAL || 0));
             const primaryFopa = parseInt(String(f.FACT_FORMAP || 1), 10) || 1;
+            const factNumero = `${String(f.PREF_PRE || '0000').trim()}-${String(f.FACT_NUMERO || '').trim()}`;
+            const cliente = String(f.FACT_NOMTERC || f.FACT_NOMCLIENTE || f.TERC_NIT || 'CLIENTE').trim();
 
             if (fcpByFact.has(fid) && fcpByFact.get(fid)!.length > 0) {
                 for (const p of fcpByFact.get(fid)!) {
-                    pagosFacturasConsolidados.push(p);
+                    pagosFacturasConsolidados.push({
+                        ...p,
+                        factId: fid,
+                        factNumero,
+                        cliente
+                    });
                 }
             } else if (rcByFact.has(fid) && rcByFact.get(fid)!.length > 0) {
                 for (const p of rcByFact.get(fid)!) {
-                    pagosFacturasConsolidados.push(p);
+                    pagosFacturasConsolidados.push({
+                        ...p,
+                        factId: fid,
+                        factNumero,
+                        cliente
+                    });
                 }
             } else {
                 const abonoCruzado = crucesByFact.get(fid) || 0;
@@ -336,11 +348,46 @@ export class TurnoService {
                 if (saldoPendiente > 0) {
                     pagosFacturasConsolidados.push({
                         fopaId: primaryFopa,
-                        monto: saldoPendiente
+                        monto: saldoPendiente,
+                        factId: fid,
+                        factNumero,
+                        cliente
                     });
                 }
             }
         }
+
+        // Mapeo de habitaciones para enriquecer detalles de abonos
+        const habRows = await db(tables.HABITACION).select('ID_HABITACION', 'NUMERO').catch(() => []);
+        const habMap = new Map<string, string>();
+        for (const h of habRows) {
+            const id = String(h.ID_HABITACION || '').trim();
+            const num = String(h.NUMERO || '').trim();
+            habMap.set(id, num);
+            habMap.set(num, num);
+        }
+
+        const hmaRows = await db(tables.HABITACION_MOVIM_ANTICIPOS)
+            .join(tables.HABITACION_MOVIM, `${tables.HABITACION_MOVIM_ANTICIPOS}.ID_MOVIM`, `${tables.HABITACION_MOVIM}.ID_MOVIM`)
+            .select(
+                `${tables.HABITACION_MOVIM_ANTICIPOS}.ANCL_ID`,
+                `${tables.HABITACION_MOVIM}.ID_HABITACION`
+            )
+            .catch(() => []);
+
+        const anclToHabMap = new Map<number, string>();
+        for (const r of hmaRows) {
+            const anclId = parseInt(String(r.ANCL_ID), 10);
+            const idHab = String(r.ID_HABITACION || '').trim();
+            const numHab = habMap.get(idHab) || idHab;
+            if (numHab) anclToHabMap.set(anclId, numHab);
+        }
+
+        const extractHabFromConc = (conc?: string) => {
+            if (!conc) return '-';
+            const m = conc.match(/HABITACI[OÓ]N\s*([A-Za-z0-9]+)/i);
+            return m ? m[1].trim() : '-';
+        };
 
         // 4. Consultar abonos registrados dentro de este turno
         const abonosRegistradosTurno = await db(tables.ANTICIPOS_CLIENTE)
@@ -360,7 +407,17 @@ export class TurnoService {
                     this.where(`${tables.RECIBOS_CAJA}.RECA_FECHA`, '>=', turno.FECHA_APERTURA);
                 }
             })
-            .select(`${tables.RECIBOS_CAJA}.RECA_ID`, `${tables.RECIBOS_CAJA}.RECA_MONTO`);
+            .select(
+                `${tables.RECIBOS_CAJA}.RECA_ID`,
+                `${tables.RECIBOS_CAJA}.RECA_NUMERO`,
+                `${tables.RECIBOS_CAJA}.RECA_MONTO`,
+                `${tables.RECIBOS_CAJA}.RECA_FECHA`,
+                `${tables.RECIBOS_CAJA}.RECA_NOMTERC`,
+                `${tables.ANTICIPOS_CLIENTE}.ANCL_ID`,
+                `${tables.ANTICIPOS_CLIENTE}.ANCL_NUMERO`,
+                `${tables.ANTICIPOS_CLIENTE}.ANCL_CONC`,
+                `${tables.ANTICIPOS_CLIENTE}.TERC_NIT`
+            );
 
         const totalAbonosTurno = Math.round(abonosRegistradosTurno.reduce((sum, a) => sum + parseFloat(String(a.RECA_MONTO || 0)), 0) * 100) / 100;
 
@@ -376,6 +433,36 @@ export class TurnoService {
                     this.where('RCPA_ANULADO', '!=', 'S').orWhereNull('RCPA_ANULADO');
                 })
             : [];
+
+        const recaToFopaMap = new Map<number, { fopaId: number; nombre: string }>();
+        for (const pa of pagosAbonosTurno) {
+            const rid = parseInt(String(pa.RECA_ID), 10);
+            const fid = parseInt(String(pa.FOPA_ID), 10);
+            const nom = formasMap.get(fid) || 'Efectivo';
+            recaToFopaMap.set(rid, { fopaId: fid, nombre: nom });
+        }
+
+        const detalleAbonosTurno = abonosRegistradosTurno.map(a => {
+            const rid = parseInt(String(a.RECA_ID || 0), 10);
+            const aid = parseInt(String(a.ANCL_ID || 0), 10);
+            const fopaInfo = recaToFopaMap.get(rid) || { fopaId: 1, nombre: 'Efectivo' };
+            const habNum = anclToHabMap.get(aid) || extractHabFromConc(String(a.ANCL_CONC || ''));
+            const monto = parseFloat(String(a.RECA_MONTO || 0));
+
+            return {
+                reciboId: rid,
+                reciboNumero: String(a.RECA_NUMERO || '').trim(),
+                anticipoId: aid,
+                anticipoNumero: String(a.ANCL_NUMERO || '').trim(),
+                habitacionNumero: habNum,
+                clienteNombre: String(a.RECA_NOMTERC || a.TERC_NIT || '').trim(),
+                tercNit: String(a.TERC_NIT || '').trim(),
+                formaPagoId: fopaInfo.fopaId,
+                formaPagoNombre: fopaInfo.nombre,
+                monto: Math.round(monto * 100) / 100,
+                fecha: a.RECA_FECHA ? String(a.RECA_FECHA) : undefined
+            };
+        });
 
         // 5. Consultar abonos antiguos de otros turnos que NO se han facturado aún
         const appliedAnclIdsQuery = db('APLICACION_CLIENTE_DETALLE')
@@ -404,9 +491,38 @@ export class TurnoService {
                 }
             })
             .whereNotIn(`${tables.ANTICIPOS_CLIENTE}.ANCL_ID`, appliedAnclIdsQuery)
-            .select(`${tables.RECIBOS_CAJA}.RECA_MONTO`);
+            .select(
+                `${tables.RECIBOS_CAJA}.RECA_ID`,
+                `${tables.RECIBOS_CAJA}.RECA_NUMERO`,
+                `${tables.RECIBOS_CAJA}.RECA_MONTO`,
+                `${tables.RECIBOS_CAJA}.RECA_FECHA`,
+                `${tables.RECIBOS_CAJA}.RECA_NOMTERC`,
+                `${tables.ANTICIPOS_CLIENTE}.ANCL_ID`,
+                `${tables.ANTICIPOS_CLIENTE}.ANCL_NUMERO`,
+                `${tables.ANTICIPOS_CLIENTE}.ANCL_CONC`,
+                `${tables.ANTICIPOS_CLIENTE}.TERC_NIT`
+            );
 
         const totalAbonosAntiguos = Math.round(habsConAbono.reduce((sum, a) => sum + (parseFloat(String(a.RECA_MONTO || 0))), 0) * 100) / 100;
+
+        const detalleAbonosAntiguos = habsConAbono.map(a => {
+            const rid = parseInt(String(a.RECA_ID || 0), 10);
+            const aid = parseInt(String(a.ANCL_ID || 0), 10);
+            const habNum = anclToHabMap.get(aid) || extractHabFromConc(String(a.ANCL_CONC || ''));
+            const monto = parseFloat(String(a.RECA_MONTO || 0));
+
+            return {
+                reciboId: rid,
+                reciboNumero: String(a.RECA_NUMERO || '').trim(),
+                anticipoId: aid,
+                anticipoNumero: String(a.ANCL_NUMERO || '').trim(),
+                habitacionNumero: habNum,
+                clienteNombre: String(a.RECA_NOMTERC || a.TERC_NIT || '').trim(),
+                tercNit: String(a.TERC_NIT || '').trim(),
+                monto: Math.round(monto * 100) / 100,
+                fecha: a.RECA_FECHA ? String(a.RECA_FECHA) : undefined
+            };
+        });
 
         // Consolidar pagos por cada forma (facturas emitidas en el turno + abonos registrados en el turno)
         const pagosAcumulados = new Map<number, { total: number; cantidad: number }>();
@@ -502,6 +618,78 @@ export class TurnoService {
         const totalReservasFuturas = habitaciones.reduce((sum, h) => sum + (h.totalReservasFuturas || 0), 0);
         reservadas += totalReservasFuturas;
 
+        const isEfectivoFopa = (fopaId: number) => {
+            const nom = (formasMap.get(fopaId) || '').toUpperCase();
+            return fopaId === 1 || nom.includes('EFECTIVO');
+        };
+
+        const isConsignaFopa = (fopaId: number) => {
+            const fp = formasPagoRows.find(r => parseInt(String(r.FOPA_ID), 10) === fopaId);
+            const esConsignaFlag = String(fp?.FOPA_CONSIGNA || '').trim().toUpperCase() === 'S';
+            const nom = (formasMap.get(fopaId) || '').toUpperCase();
+            return esConsignaFlag || nom.includes('BANCO') || nom.includes('TRANSFERENCIA') || nom.includes('BANCOL');
+        };
+
+        const facturasEfectivo = pagosFacturasConsolidados
+            .filter(p => isEfectivoFopa(p.fopaId))
+            .map(p => ({
+                facturaId: p.factId,
+                facturaNumero: p.factNumero,
+                monto: Math.round(p.monto * 100) / 100,
+                clienteNombre: p.cliente
+            }));
+        const totalFacturasEfectivo = Math.round(facturasEfectivo.reduce((sum, f) => sum + f.monto, 0) * 100) / 100;
+
+        const abonosEfectivo = detalleAbonosTurno
+            .filter(a => isEfectivoFopa(a.formaPagoId))
+            .map(a => ({
+                reciboNumero: a.reciboNumero,
+                anticipoNumero: a.anticipoNumero,
+                habitacionNumero: a.habitacionNumero,
+                clienteNombre: a.clienteNombre,
+                monto: a.monto
+            }));
+        const totalAbonosEfectivo = Math.round(abonosEfectivo.reduce((sum, a) => sum + a.monto, 0) * 100) / 100;
+
+        const detalleEfectivo = {
+            facturas: facturasEfectivo,
+            totalFacturas: totalFacturasEfectivo,
+            abonos: abonosEfectivo,
+            totalAbonos: totalAbonosEfectivo,
+            totalEfectivo: Math.round((totalFacturasEfectivo + totalAbonosEfectivo) * 100) / 100
+        };
+
+        const facturasConsigna = pagosFacturasConsolidados
+            .filter(p => isConsignaFopa(p.fopaId))
+            .map(p => ({
+                facturaId: p.factId,
+                facturaNumero: p.factNumero,
+                formaPagoNombre: formasMap.get(p.fopaId) || 'Consignación',
+                monto: Math.round(p.monto * 100) / 100,
+                clienteNombre: p.cliente
+            }));
+        const totalFacturasConsigna = Math.round(facturasConsigna.reduce((sum, f) => sum + f.monto, 0) * 100) / 100;
+
+        const abonosConsigna = detalleAbonosTurno
+            .filter(a => isConsignaFopa(a.formaPagoId))
+            .map(a => ({
+                reciboNumero: a.reciboNumero,
+                anticipoNumero: a.anticipoNumero,
+                habitacionNumero: a.habitacionNumero,
+                clienteNombre: a.clienteNombre,
+                formaPagoNombre: a.formaPagoNombre,
+                monto: a.monto
+            }));
+        const totalAbonosConsigna = Math.round(abonosConsigna.reduce((sum, a) => sum + a.monto, 0) * 100) / 100;
+
+        const detalleConsignaciones = {
+            facturas: facturasConsigna,
+            totalFacturas: totalFacturasConsigna,
+            abonos: abonosConsigna,
+            totalAbonos: totalAbonosConsigna,
+            totalConsignaciones: Math.round((totalFacturasConsigna + totalAbonosConsigna) * 100) / 100
+        };
+
         return {
             turno: {
                 idTurno: turno.ID_TURNO,
@@ -528,7 +716,11 @@ export class TurnoService {
                 ocupadas,
                 reservadas,
                 inhabilitadas
-            }
+            },
+            detalleAbonosTurno,
+            detalleAbonosAntiguos,
+            detalleEfectivo,
+            detalleConsignaciones
         };
     }
 
