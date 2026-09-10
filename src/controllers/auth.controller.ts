@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { AuthService } from '../services/auth.service';
-import { dbOptions } from '../config/knex.config';
+import { db, dbOptions } from '../config/knex.config';
 import { AuthenticatedRequest } from '../middlewares/auth.middleware';
 
 export class AuthController {
@@ -24,8 +24,46 @@ export class AuthController {
     }
 
     static async verifySession(req: AuthenticatedRequest, res: Response) {
+        const user = req.user || {};
+        const cleanUsername = String(user.username || '').trim();
+        let displayName = user.nombre;
+        let cargo = user.cargo;
+
+        if (cleanUsername && (!displayName || displayName === cleanUsername)) {
+            try {
+                const userRow = await db('USUARIO')
+                    .whereRaw('UPPER(TRIM(USER_COD)) = ?', [cleanUsername.toUpperCase()])
+                    .first();
+
+                if (userRow) {
+                    const parts = [userRow.USER_NOMBRE, userRow.USER_APELLIDO]
+                        .filter(Boolean)
+                        .map((s: any) => String(s).trim())
+                        .filter(s => s.length > 0);
+
+                    if (parts.length > 0) {
+                        displayName = parts.join(' ').replace(/\w\S*/g, (w) => (w.charAt(0).toUpperCase() + w.substring(1).toLowerCase()));
+                    }
+                    if (userRow.USER_CARGO) {
+                        cargo = String(userRow.USER_CARGO).trim();
+                    }
+                }
+            } catch (e: any) { }
+
+            if (!displayName) {
+                displayName = (cleanUsername.toUpperCase() === 'SYSDBA') ? 'Administrador' : cleanUsername;
+            }
+            if (!cargo) {
+                cargo = (cleanUsername.toUpperCase() === 'SYSDBA') ? 'Administrador' : 'Recepción';
+            }
+        }
+
         res.json({
-            user: req.user,
+            user: {
+                ...user,
+                nombre: displayName || (cleanUsername.toUpperCase() === 'SYSDBA' ? 'Administrador' : cleanUsername),
+                cargo: cargo || (cleanUsername.toUpperCase() === 'SYSDBA' ? 'Administrador' : 'Recepción')
+            },
             authenticated: true
         });
     }

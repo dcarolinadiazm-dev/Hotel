@@ -10,7 +10,7 @@ interface Turno {
 }
 
 interface ModalAperturaTurnoProps {
-  user: { username: string };
+  user: { username: string; nombre?: string; cargo?: string };
   onClose: () => void;
   onTurnoAbierto: (turno: Turno) => void;
 }
@@ -113,7 +113,7 @@ export const ModalAperturaTurno: React.FC<ModalAperturaTurnoProps> = ({
             </label>
             <input
               type="text"
-              value={user.username}
+              value={user.nombre ? `${user.nombre} (${user.username})` : (user.username?.toUpperCase() === 'SYSDBA' ? 'Administrador (sysdba)' : user.username)}
               disabled
               style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid #d1d5db', background: '#f3f4f6', color: '#4b5563', fontWeight: 600 }}
             />

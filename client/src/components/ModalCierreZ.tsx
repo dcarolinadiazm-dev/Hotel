@@ -3,7 +3,7 @@ import type { ResumenCierreZData } from './ModalImpresionCierreZ';
 
 interface ModalCierreZProps {
   idTurno: number;
-  user?: { username: string };
+  user?: { username: string; nombre?: string; cargo?: string };
   onClose: () => void;
   onCierreCompletado: (data: ResumenCierreZData) => void;
 }

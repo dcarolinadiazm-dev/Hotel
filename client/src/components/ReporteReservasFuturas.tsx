@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import * as XLSX from 'xlsx';
+import { getUserDisplayName, getUserCargo } from '../utils/user.utils';
 
 export interface ReservaFuturaItem {
   idMovim: number;
@@ -27,7 +28,7 @@ export interface ReservaFuturaItem {
 }
 
 interface ReporteReservasFuturasProps {
-  user: { username: string };
+  user: { username: string; nombre?: string; cargo?: string };
   sidebarOpen?: boolean;
   onToggleSidebar?: () => void;
   onBackToRooms: () => void;
@@ -317,8 +318,8 @@ export const ReporteReservasFuturas = ({
             </svg>
           </div>
           <div className="sidebar-user-details">
-            <span className="sidebar-user-name">Recepción</span>
-            <span className="sidebar-user-login">({user.username})</span>
+            <span className="sidebar-user-name">{getUserDisplayName(user)}</span>
+            <span className="sidebar-user-login">{getUserCargo(user)}</span>
             <div className="sidebar-status-online">
               <span className="online-green-dot"></span>
               <span>En línea</span>
@@ -356,12 +357,12 @@ export const ReporteReservasFuturas = ({
               ← Habitaciones
             </button>
 
-            <div className="topbar-user">
+            <div className="topbar-user" title={`Usuario: ${user.username}`}>
               <svg className="user-icon-small" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
                 <circle cx="12" cy="7" r="4" />
               </svg>
-              <span className="user-label">Recepción ({user.username})</span>
+              <span className="user-label">{getUserDisplayName(user)}</span>
             </div>
 
             <button onClick={onLogout} className="btn-topbar-logout" title="Cerrar sesión">

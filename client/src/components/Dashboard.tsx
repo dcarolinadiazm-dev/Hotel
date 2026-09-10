@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
+import { getUserDisplayName, getUserCargo } from '../utils/user.utils';
 
 interface DashboardProps {
-  user: { username: string };
+  user: { username: string; nombre?: string; cargo?: string };
   onLogout: () => void;
 }
 
@@ -77,11 +78,11 @@ export const Dashboard = ({ user, onLogout }: DashboardProps) => {
 
         <div className="user-profile-badge">
           <div className="user-avatar-circle">
-            {user.username.charAt(0).toUpperCase()}
+            {getUserDisplayName(user).charAt(0).toUpperCase()}
           </div>
           <div className="user-info-text">
-            <span className="user-name">{user.username}</span>
-            <span className="user-role">Sesión Firebird Activa</span>
+            <span className="user-name">{getUserDisplayName(user)}</span>
+            <span className="user-role">{getUserCargo(user)}</span>
           </div>
           <button
             id="btn-logout"
@@ -111,7 +112,7 @@ export const Dashboard = ({ user, onLogout }: DashboardProps) => {
       <main className="dashboard-main">
         <div className="welcome-banner">
           <div className="welcome-text">
-            <h2>¡Bienvenido, {user.username}!</h2>
+            <h2>¡Bienvenido, {getUserDisplayName(user)}!</h2>
             <p>Has iniciado sesión correctamente a través de la base de datos Firebird.</p>
           </div>
           <div className="connection-badge">
@@ -147,7 +148,7 @@ export const Dashboard = ({ user, onLogout }: DashboardProps) => {
               </div>
               <div className="info-row">
                 <span className="info-label">Usuario Autenticado:</span>
-                <span className="info-value user-highlight">{user.username}</span>
+                <span className="info-value user-highlight">{getUserDisplayName(user)} ({user.username})</span>
               </div>
             </div>
           </div>

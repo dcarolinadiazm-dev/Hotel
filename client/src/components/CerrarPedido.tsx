@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import type { Habitacion } from './Habitaciones';
+import { getUserDisplayName } from '../utils/user.utils';
 
 interface CerrarPedidoProps {
   habitacion: Habitacion;
   totalItems: number;
   totalPagar: number;
-  user: { username: string };
+  user: { username: string; nombre?: string; cargo?: string };
   onCancel: () => void;
   onSuccess: (numeroPedido: string) => void;
   onLogout: () => void;
@@ -78,12 +79,12 @@ export const CerrarPedido = ({
         </div>
 
         <div className="topbar-right">
-          <div className="topbar-user">
+          <div className="topbar-user" title={`Usuario: ${user.username}`}>
             <svg className="user-icon-small" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
               <circle cx="12" cy="7" r="4" />
             </svg>
-            <span className="user-label">Recepción ({user.username})</span>
+            <span className="user-label">{getUserDisplayName(user)}</span>
           </div>
           <button onClick={onLogout} className="btn-topbar-logout" title="Cerrar sesión">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">

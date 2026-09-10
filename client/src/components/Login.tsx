@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 
 interface LoginProps {
-  onLoginSuccess: (user: { username: string; token: string; role?: string }, token: string) => void;
+  onLoginSuccess: (user: { username: string; nombre?: string; cargo?: string; token?: string; role?: string }, token: string) => void;
   sessionExpiredMessage?: string | null;
 }
 

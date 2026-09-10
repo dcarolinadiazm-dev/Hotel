@@ -34,7 +34,7 @@ function isTokenExpired(token: string): boolean {
 }
 
 function App() {
-  const [currentUser, setCurrentUser] = useState<{ username: string } | null>(null);
+  const [currentUser, setCurrentUser] = useState<{ username: string; nombre?: string; cargo?: string } | null>(null);
   const [isVerifying, setIsVerifying] = useState(true);
   const [sessionExpiredMsg, setSessionExpiredMsg] = useState<string | null>(null);
 
@@ -60,15 +60,12 @@ function App() {
     const originalFetch = window.fetch;
     window.fetch = async (...args) => {
       const response = await originalFetch(...args);
-      const url = typeof args[0] === 'string' ? args[0] : (args[0] as Request).url || '';
-      
-      // Si el servidor responde 401 Unauthorized (y no es el endpoint de login)
-      if (response.status === 401 && !url.includes('/api/auth/login')) {
-        console.warn('⚠️ Sesión invalidada o expirada (401 detectado en petición):', url);
-        localStorage.removeItem('hotel_token');
-        localStorage.removeItem('hotel_user');
-        setCurrentUser(null);
-        setSessionExpiredMsg('Tu sesión ha expirado o el token ya no es válido. Por favor ingresa tus credenciales nuevamente.');
+      if (response.status === 401) {
+        const url = typeof args[0] === 'string' ? args[0] : (args[0] as Request).url;
+        if (!url.includes('/api/auth/login')) {
+          console.warn('⚠️ Sesión terminada por el servidor (401 Unauthorized)');
+          handleLogout('Tu sesión ha expirado o no es válida. Por favor inicia sesión nuevamente.');
+        }
       }
       return response;
     };
@@ -78,17 +75,18 @@ function App() {
     };
   }, []);
 
-  // 2. Comprobación inicial de sesión al cargar la app
+  // 2. Verificar Sesión al Cargar la Página
   useEffect(() => {
     const savedToken = localStorage.getItem('hotel_token');
     const savedUser = localStorage.getItem('hotel_user');
 
     if (savedToken && savedUser) {
       if (isTokenExpired(savedToken)) {
+        console.warn('⚠️ Token guardado en localStorage ya ha expirado.');
         localStorage.removeItem('hotel_token');
         localStorage.removeItem('hotel_user');
         setCurrentUser(null);
-        setSessionExpiredMsg('Tu sesión previa ha expirado (límite de 24 horas). Por favor ingresa nuevamente.');
+        setSessionExpiredMsg('Tu sesión anterior ha expirado. Por favor ingresa tus datos.');
         setIsVerifying(false);
         return;
       }
@@ -100,9 +98,12 @@ function App() {
             Authorization: `Bearer ${savedToken}`,
           },
         })
-          .then((res) => {
+          .then(async (res) => {
             if (res.ok) {
-              setCurrentUser(parsedUser);
+              const data = await res.json();
+              const fullUser = data.user || parsedUser;
+              setCurrentUser(fullUser);
+              localStorage.setItem('hotel_user', JSON.stringify(fullUser));
             } else {
               localStorage.removeItem('hotel_token');
               localStorage.removeItem('hotel_user');
@@ -157,7 +158,7 @@ function App() {
     };
   }, []);
 
-  const handleLoginSuccess = (user: { username: string }) => {
+  const handleLoginSuccess = (user: { username: string; nombre?: string; cargo?: string }) => {
     setSessionExpiredMsg(null);
     setCurrentUser(user);
     setCurrentView('HABITACIONES');
