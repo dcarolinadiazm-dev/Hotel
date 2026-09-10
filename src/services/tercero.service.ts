@@ -57,8 +57,33 @@ export class TerceroService {
     }
 
     // Asegurar que el tercero también esté registrado como CLIENTE en SYSPLUS
-    static async ensureCliente(nit: string) {
+    static async ensureCliente(nit: string, nombreDefault?: string) {
         const cleanNit = nit.trim();
+        if (!cleanNit) return;
+
+        // 1. Verificar si existe en TERCEROS; si no existe, el trigger TI_CLIENTES arrojará exception 46 TERCERO_NO_EXISTE
+        let existingTercero = await db(tables.TERCEROS)
+            .where('TERC_NIT', cleanNit)
+            .first();
+
+        if (!existingTercero) {
+            try {
+                await db(tables.TERCEROS).insert({
+                    TERC_NIT: cleanNit,
+                    TERC_NITCONTA: cleanNit,
+                    TERC_NOM: (nombreDefault && nombreDefault.trim()) ? nombreDefault.trim().toUpperCase() : 'CLIENTE VARIOS',
+                    TERC_TIPOID: 'C',
+                    TERC_CLIE: 'S',
+                    TERC_ESTADO: 'S',
+                    CIUD_COD: '05001',
+                    PAIS_ID: '169'
+                });
+            } catch (errTercero) {
+                // Si no se pudo crear en TERCEROS (por ejemplo conflicto de clave), no podemos proceder a CLIENTES
+                return;
+            }
+        }
+
         const existingCliente = await db(tables.CLIENTES)
             .where('TERC_NIT', cleanNit)
             .first();
