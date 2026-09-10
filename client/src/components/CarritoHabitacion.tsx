@@ -257,6 +257,7 @@ export const CarritoHabitacion = ({
         },
         body: JSON.stringify({
           habitacionId: habitacion.id,
+          peweId: habitacion.peweId || undefined,
           tipoDoc: 'FACTURA',
         }),
       });

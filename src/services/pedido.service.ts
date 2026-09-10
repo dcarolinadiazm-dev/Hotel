@@ -2,6 +2,7 @@ import { db } from '../config/knex.config';
 import { tables } from '../utils/tables';
 import { TerceroService } from './tercero.service';
 import { ArticuloService } from './articulo.service';
+import { HabitacionService } from './habitacion.service';
 import { sanitizeText, truncateToBytes } from '../utils/text.utils';
 import { ContabilidadService } from './contabilidad.service';
 import { AbonoService } from './abono.service';
@@ -197,34 +198,60 @@ export class PedidoService {
     static async getActiveDinw(habitacionId: string, habNumero: string, nit?: string, huesped?: string): Promise<number> {
         const ref = `HAB-${habNumero}`;
 
-        // 1. Buscar en HABITACION_MOVIM el movimiento activo
-        const activeMov = await db(tables.HABITACION_MOVIM)
+        // 1. Buscar en todos los movimientos activos de la habitación
+        const activeMovs = await db(tables.HABITACION_MOVIM)
             .where('ID_HABITACION', habitacionId)
             .andWhere(function () {
                 this.where('ESTADO', 'Activo').orWhereNull('ESTADO');
             })
-            .orderBy('ID_MOVIM', 'desc')
-            .first();
+            .orderBy('ID_MOVIM', 'desc');
 
-        const movDinwId = activeMov?.DINW_ID || activeMov?.PEWE_ID || activeMov?.ID_DOC || activeMov?.PEDI_ID;
-        if (movDinwId) {
-            const dinwHeader = await db(tables.DOC_INVENTARIO_WEB)
-                .where('DINW_ID', movDinwId)
-                .andWhere(function () {
-                    this.whereNull('DINW_IDDOC').orWhere('DINW_IDDOC', 0);
-                })
-                .andWhere('DINW_ANULADO', 'N')
-                .first();
+        // Priorizar el movimiento que tenga un DINW_ID con detalles activos cargados
+        for (const mov of activeMovs) {
+            const movDinwId = mov?.DINW_ID || mov?.PEWE_ID || mov?.ID_DOC || mov?.PEDI_ID;
+            if (movDinwId) {
+                const dinwHeader = await db(tables.DOC_INVENTARIO_WEB)
+                    .where('DINW_ID', movDinwId)
+                    .andWhere(function () {
+                        this.whereNull('DINW_IDDOC').orWhere('DINW_IDDOC', 0);
+                    })
+                    .andWhere('DINW_ANULADO', 'N')
+                    .first();
 
-            if (dinwHeader?.DINW_ID) {
-                return dinwHeader.DINW_ID;
+                if (dinwHeader?.DINW_ID) {
+                    const hasDets = await db(tables.DOC_INVENTARIO_DET_WEB)
+                        .where({ DINW_ID: dinwHeader.DINW_ID, DIWD_ANULADO: 'N' })
+                        .first();
+                    if (hasDets) {
+                        return dinwHeader.DINW_ID;
+                    }
+                }
+            }
+        }
+
+        // Si ninguno tenía detalles aún, pero alguno tiene DINW_ID válido no anulado
+        for (const mov of activeMovs) {
+            const movDinwId = mov?.DINW_ID || mov?.PEWE_ID || mov?.ID_DOC || mov?.PEDI_ID;
+            if (movDinwId) {
+                const dinwHeader = await db(tables.DOC_INVENTARIO_WEB)
+                    .where('DINW_ID', movDinwId)
+                    .andWhere(function () {
+                        this.whereNull('DINW_IDDOC').orWhere('DINW_IDDOC', 0);
+                    })
+                    .andWhere('DINW_ANULADO', 'N')
+                    .first();
+                if (dinwHeader?.DINW_ID) return dinwHeader.DINW_ID;
             }
         }
 
         // 2. Buscar por detalle no facturado en DOC_INVENTARIO_DET_WEB
         const existingDet = await db(tables.DOC_INVENTARIO_DET_WEB)
             .join(tables.DOC_INVENTARIO_WEB, `${tables.DOC_INVENTARIO_DET_WEB}.DINW_ID`, '=', `${tables.DOC_INVENTARIO_WEB}.DINW_ID`)
-            .where(`${tables.DOC_INVENTARIO_DET_WEB}.DIWD_REF`, ref)
+            .where(function () {
+                this.where(`${tables.DOC_INVENTARIO_DET_WEB}.DIWD_REF`, ref)
+                    .orWhere(`${tables.DOC_INVENTARIO_DET_WEB}.DIWD_REF`, `H-${habNumero}`)
+                    .orWhere(`${tables.DOC_INVENTARIO_DET_WEB}.DIWD_REF`, habNumero);
+            })
             .andWhere(function () {
                 this.whereNull(`${tables.DOC_INVENTARIO_WEB}.DINW_IDDOC`)
                     .orWhere(`${tables.DOC_INVENTARIO_WEB}.DINW_IDDOC`, 0);
@@ -238,7 +265,7 @@ export class PedidoService {
             return existingDet.DINW_ID;
         }
 
-        // 3. Buscar por concepto u observación activa
+        // 3. Buscar por concepto u observación activa (con o sin tilde)
         const existingHeader = await db(tables.DOC_INVENTARIO_WEB)
             .where(function () {
                 this.whereNull('DINW_IDDOC').orWhere('DINW_IDDOC', 0);
@@ -246,13 +273,34 @@ export class PedidoService {
             .andWhere('DINW_ANULADO', 'N')
             .andWhere(function () {
                 this.whereRaw(`CAST(DINW_CONCEPTO AS VARCHAR(250)) LIKE ?`, [`%Habitación ${habNumero}%`])
-                    .orWhereRaw(`CAST(DINW_OBS AS VARCHAR(250)) LIKE ?`, [`%Habitación ${habNumero}%`]);
+                    .orWhereRaw(`CAST(DINW_OBS AS VARCHAR(250)) LIKE ?`, [`%Habitación ${habNumero}%`])
+                    .orWhereRaw(`CAST(DINW_CONCEPTO AS VARCHAR(250)) LIKE ?`, [`%Habitacion ${habNumero}%`])
+                    .orWhereRaw(`CAST(DINW_OBS AS VARCHAR(250)) LIKE ?`, [`%Habitacion ${habNumero}%`])
+                    .orWhereRaw(`CAST(DINW_CONCEPTO AS VARCHAR(250)) LIKE ?`, [`%Hab. ${habNumero}%`])
+                    .orWhereRaw(`CAST(DINW_OBS AS VARCHAR(250)) LIKE ?`, [`%H-${habNumero}%`]);
             })
             .first();
 
         if (existingHeader?.DINW_ID) {
             return existingHeader.DINW_ID;
         }
+
+        // 4. Fallback directo a HabitacionService para obtener el mismo peweId activo que ve el cliente
+        try {
+            const habData = await HabitacionService.getHabitacionById(habitacionId);
+            if (habData?.peweId) {
+                const checkDinw = await db(tables.DOC_INVENTARIO_WEB)
+                    .where('DINW_ID', habData.peweId)
+                    .andWhere(function () {
+                        this.whereNull('DINW_IDDOC').orWhere('DINW_IDDOC', 0);
+                    })
+                    .andWhere('DINW_ANULADO', 'N')
+                    .first();
+                if (checkDinw?.DINW_ID) {
+                    return checkDinw.DINW_ID;
+                }
+            }
+        } catch (habErr) { }
 
         // Crear un nuevo DOC_INVENTARIO_WEB (borrador de remisión activa)
         const maxDinwRow = await db.raw('SELECT MAX(DINW_ID) AS MAXID FROM DOC_INVENTARIO_WEB');

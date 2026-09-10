@@ -925,6 +925,7 @@ export const ModalHabitacion = ({
         },
         body: JSON.stringify({
           habitacionId: habitacion.id,
+          peweId: peweId || habitacion.peweId || undefined,
           tipoDoc: 'FACTURA',
           prefijo: prefijoToSend,
           pagos: pagosToSend.map((l) => ({ formaPagoId: l.formaPagoId, monto: Number(l.monto) || 0 })),
