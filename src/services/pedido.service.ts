@@ -863,28 +863,28 @@ export class PedidoService {
                     console.warn('Aviso sincronizando FADE_DTOPORC/FADE_DTOMONTO/FADE_TOTAL/FADE_OBS:', dtoErr.message);
                 }
 
-                // 1. Garantizar sincronización exacta de formas de pago en FACTURAS_CONTADO_PAGO y RECIBOS_CAJA_PAGO
-                await PedidoService.syncFacturaPagos(idGenerado, listaPagos);
-
-                // 2. Contabilizar la Factura de Venta generada
-                try {
-                    console.log(`[FACTURACION-PASO-13] Contabilizando Factura de Venta ID ${idGenerado} (${prefijo})...`);
-                    await ContabilidadService.contabilizarFactura(idGenerado, prefijo);
-                } catch (contErr: any) {
-                    console.warn('Aviso contabilizando factura:', contErr.message);
-                }
-
-                // 3. Obtener abonos para sincronizar
+                // 1. Obtener abonos para sincronizar
                 const abonosResult = await AbonoService.getAbonos(habitacionId, clienteNit);
                 const abonosList = abonosResult?.abonos || [];
 
-                // 4. Sincronizar el Recibo de Caja y Aplicación de Anticipos si hay abonos disponibles
+                // 2. Sincronizar el Recibo de Caja y Aplicación de Anticipos si hay abonos disponibles
                 if (abonosList && abonosList.length > 0) {
                     console.log(`[FACTURACION-PASO-14] Sincronizando Recibo de Caja y Aplicación de Anticipos...`);
                     await PedidoService.syncReciboCajaFactura(idGenerado, totalDoc, abonosList, listaPagos, prefijo);
                 } else {
                     console.log(`[FACTURACION-PASO-14] Contabilizando Recibo de Caja generado con la factura...`);
                     await PedidoService.contabilizarReciboDeFactura(idGenerado, prefijo);
+                }
+
+                // 3. Garantizar sincronización exacta de formas de pago en FACTURAS_CONTADO_PAGO y RECIBOS_CAJA_PAGO
+                await PedidoService.syncFacturaPagos(idGenerado, listaPagos);
+
+                // 4. Contabilizar la Factura de Venta generada
+                try {
+                    console.log(`[FACTURACION-PASO-13] Contabilizando Factura de Venta ID ${idGenerado} (${prefijo})...`);
+                    await ContabilidadService.contabilizarFactura(idGenerado, prefijo);
+                } catch (contErr: any) {
+                    console.warn('Aviso contabilizando factura:', contErr.message);
                 }
             } catch (syncErr: any) {
                 console.error('Error procesando factura generada:', syncErr.message);
@@ -2448,18 +2448,7 @@ export class PedidoService {
                     }
                 } catch (dtoErr: any) { }
 
-                // 1. Garantizar sincronización exacta de formas de pago en FACTURAS_CONTADO_PAGO y RECIBOS_CAJA_PAGO
-                await PedidoService.syncFacturaPagos(idGenerado, listaPagos);
-
-                // 2. Contabilizar la Factura de Venta consolidada
-                try {
-                    console.log(`[FACTURACION-MULTI] Contabilizando Factura de Venta ID ${idGenerado} (${prefijo})...`);
-                    await ContabilidadService.contabilizarFactura(idGenerado, prefijo);
-                } catch (contErr: any) {
-                    console.warn('Aviso contabilizando factura multi:', contErr.message);
-                }
-
-                // 3. Obtener abonos para sincronizar de todas las habitaciones consolidadas
+                // 1. Obtener abonos para sincronizar de todas las habitaciones consolidadas
                 let abonosList: any[] = [];
                 for (const hab of habitacionesIds) {
                     const abResult = await AbonoService.getAbonos(String(hab), nit);
@@ -2474,13 +2463,24 @@ export class PedidoService {
                     return true;
                 });
 
-                // 4. Sincronizar el Recibo de Caja y Aplicación de Anticipos si hay abonos disponibles
+                // 2. Sincronizar el Recibo de Caja y Aplicación de Anticipos si hay abonos disponibles
                 if (abonosList && abonosList.length > 0) {
                     console.log(`[FACTURACION-MULTI] Sincronizando Recibo de Caja y Aplicación de Anticipos (${abonosList.length} abonos)...`);
                     await PedidoService.syncReciboCajaFactura(idGenerado, totalDoc, abonosList, listaPagos, prefijo);
                 } else {
                     console.log(`[FACTURACION-MULTI] Contabilizando Recibo de Caja generado...`);
                     await PedidoService.contabilizarReciboDeFactura(idGenerado, prefijo);
+                }
+
+                // 3. Garantizar sincronización exacta de formas de pago en FACTURAS_CONTADO_PAGO y RECIBOS_CAJA_PAGO
+                await PedidoService.syncFacturaPagos(idGenerado, listaPagos);
+
+                // 4. Contabilizar la Factura de Venta consolidada
+                try {
+                    console.log(`[FACTURACION-MULTI] Contabilizando Factura de Venta ID ${idGenerado} (${prefijo})...`);
+                    await ContabilidadService.contabilizarFactura(idGenerado, prefijo);
+                } catch (contErr: any) {
+                    console.warn('Aviso contabilizando factura multi:', contErr.message);
                 }
             } catch (syncErr: any) {
                 console.error('Error procesando factura múltiple:', syncErr.message);
@@ -2660,13 +2660,19 @@ export class PedidoService {
                     await db('RECIBOS_CAJA_DETALLE').where('RECA_ID', recaId).del().catch(() => { });
                     await db('RECIBOS_CAJA_PAGO').where('RECA_ID', recaId).del().catch(() => { });
                     await db('RECIBOS_CAJA').where('RECA_ID', recaId).update({ RECA_MONTO: 0, RECA_ANULADO: 'S' }).catch(() => { });
-                    await db('SALDOS_DOC_CARTERA').where({ SDCA_TIPOREF: 31, SDCA_IDREF: idDoc }).update({ SDCA_ABONO: 0 }).catch(() => { });
                 } else {
                     await db('RECIBOS_CAJA').where('RECA_ID', recaId).update({ RECA_MONTO: saldoPagado }).catch(() => { });
                     await db('RECIBOS_CAJA_DETALLE').where({ RECA_ID: recaId, RCDE_TIPODOC: 31, RCDE_IDDOC: idDoc }).update({ RCDE_ABONO: saldoPagado }).catch(() => { });
-                    await db('SALDOS_DOC_CARTERA').where({ SDCA_TIPOREF: 31, SDCA_IDREF: idDoc }).update({ SDCA_ABONO: saldoPagado }).catch(() => { });
                 }
             }
+
+            // CRÍTICO: Siempre sincronizar SALDOS_DOC_CARTERA con saldoPagado (tanto si hay RC como si no)
+            // para que SDCA_SALDO sea igual a montoAplicarTotal y el trigger APLICACION_CLIENTE_DETALLE_AI
+            // no lance DOCUMENTO_ABONO_MAYOR al aplicar los anticipos
+            await db('SALDOS_DOC_CARTERA')
+                .where({ SDCA_TIPOREF: 31, SDCA_IDREF: idDoc })
+                .update({ SDCA_ABONO: saldoPagado })
+                .catch(() => { });
 
             // PASO B: REGISTRO DE APLICACION DE CLIENTE (TIDO_COD = 43)
             if (montoAplicarTotal > 0) {

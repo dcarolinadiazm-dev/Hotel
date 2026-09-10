@@ -348,31 +348,43 @@ export class TurnoService {
             const factNumero = `${String(f.PREF_PRE || '0000').trim()}-${String(f.FACT_NUMERO || '').trim()}`;
             const cliente = String(f.FACT_NOMTERC || f.FACT_NOMCLIENTE || f.TERC_NIT || 'CLIENTE').trim();
 
+            const abonoCruzado = crucesByFact.get(fid) || 0;
+            const saldoMaximoTurno = Math.max(0, Math.round((totalFactura - abonoCruzado) * 100) / 100);
+            let remTurno = saldoMaximoTurno;
+
             if (rcByFact.has(fid) && rcByFact.get(fid)!.length > 0) {
                 for (const p of rcByFact.get(fid)!) {
-                    pagosFacturasConsolidados.push({
-                        ...p,
-                        factId: fid,
-                        factNumero,
-                        cliente
-                    });
+                    const montoReal = abonoCruzado > 0 ? Math.min(p.monto, remTurno) : p.monto;
+                    if (montoReal > 0) {
+                        pagosFacturasConsolidados.push({
+                            ...p,
+                            monto: montoReal,
+                            factId: fid,
+                            factNumero,
+                            cliente
+                        });
+                        remTurno = Math.max(0, remTurno - montoReal);
+                    }
                 }
             } else if (fcpByFact.has(fid) && fcpByFact.get(fid)!.length > 0) {
                 for (const p of fcpByFact.get(fid)!) {
-                    pagosFacturasConsolidados.push({
-                        ...p,
-                        factId: fid,
-                        factNumero,
-                        cliente
-                    });
+                    const montoReal = abonoCruzado > 0 ? Math.min(p.monto, remTurno) : p.monto;
+                    if (montoReal > 0) {
+                        pagosFacturasConsolidados.push({
+                            ...p,
+                            monto: montoReal,
+                            factId: fid,
+                            factNumero,
+                            cliente
+                        });
+                        remTurno = Math.max(0, remTurno - montoReal);
+                    }
                 }
             } else {
-                const abonoCruzado = crucesByFact.get(fid) || 0;
-                const saldoPendiente = Math.max(0, Math.round((totalFactura - abonoCruzado) * 100) / 100);
-                if (saldoPendiente > 0) {
+                if (saldoMaximoTurno > 0) {
                     pagosFacturasConsolidados.push({
                         fopaId: primaryFopa,
-                        monto: saldoPendiente,
+                        monto: saldoMaximoTurno,
                         factId: fid,
                         factNumero,
                         cliente
