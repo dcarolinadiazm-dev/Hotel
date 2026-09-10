@@ -18,6 +18,7 @@ export const ModalCierreZ: React.FC<ModalCierreZProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [observaciones, setObservaciones] = useState<string>('');
   const [guardando, setGuardando] = useState<boolean>(false);
+  const [modalDetalle, setModalDetalle] = useState<'abonosTurno' | 'efectivo' | 'consignaciones' | 'abonosAntiguos' | null>(null);
 
   useEffect(() => {
     const fetchResumen = async () => {
@@ -182,7 +183,11 @@ export const ModalCierreZ: React.FC<ModalCierreZProps> = ({
                 </div>
 
                 {/* 2. Efectivo Esperado */}
-                <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '10px', padding: '12px' }}>
+                <div
+                  style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '10px', padding: '12px', cursor: 'pointer', transition: 'all 0.15s ease' }}
+                  onDoubleClick={() => setModalDetalle('efectivo')}
+                  title="Haga doble clic para ver el detalle"
+                >
                   <span style={{ fontSize: '11px', fontWeight: 600, color: '#92400e' }}>💰 Efectivo Esperado</span>
                   <div style={{ fontSize: '17px', fontWeight: 800, color: '#b45309', marginTop: '4px' }}>
                     ${resumen.totalEfectivoEsperado.toLocaleString('es-CO')}
@@ -190,7 +195,11 @@ export const ModalCierreZ: React.FC<ModalCierreZProps> = ({
                 </div>
 
                 {/* 3. Consignaciones */}
-                <div style={{ background: '#f0f9ff', border: '1px solid #7dd3fc', borderRadius: '10px', padding: '12px' }}>
+                <div
+                  style={{ background: '#f0f9ff', border: '1px solid #7dd3fc', borderRadius: '10px', padding: '12px', cursor: 'pointer', transition: 'all 0.15s ease' }}
+                  onDoubleClick={() => setModalDetalle('consignaciones')}
+                  title="Haga doble clic para ver el detalle"
+                >
                   <span style={{ fontSize: '11px', fontWeight: 600, color: '#0369a1' }}>🏦 Consignaciones</span>
                   <div style={{ fontSize: '17px', fontWeight: 800, color: '#0c4a6e', marginTop: '4px' }}>
                     ${(resumen.totalConsignaciones || 0).toLocaleString('es-CO')}
@@ -206,7 +215,11 @@ export const ModalCierreZ: React.FC<ModalCierreZProps> = ({
                 </div>
 
                 {/* 5. Abonos del Turno */}
-                <div style={{ background: '#f0fdfa', border: '1px solid #99f6e4', borderRadius: '10px', padding: '12px' }}>
+                <div
+                  style={{ background: '#f0fdfa', border: '1px solid #99f6e4', borderRadius: '10px', padding: '12px', cursor: 'pointer', transition: 'all 0.15s ease' }}
+                  onDoubleClick={() => setModalDetalle('abonosTurno')}
+                  title="Haga doble clic para ver el detalle"
+                >
                   <span style={{ fontSize: '11px', fontWeight: 600, color: '#0f766e' }}>📥 Abonos del Turno</span>
                   <div style={{ fontSize: '17px', fontWeight: 800, color: '#115e59', marginTop: '4px' }}>
                     ${(resumen.totalAbonosTurno || 0).toLocaleString('es-CO')}
@@ -231,7 +244,11 @@ export const ModalCierreZ: React.FC<ModalCierreZProps> = ({
                 </div>
 
                 {/* 8. Abonos Antiguos */}
-                <div style={{ background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: '10px', padding: '12px' }}>
+                <div
+                  style={{ background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: '10px', padding: '12px', cursor: 'pointer', transition: 'all 0.15s ease' }}
+                  onDoubleClick={() => setModalDetalle('abonosAntiguos')}
+                  title="Haga doble clic para ver el detalle"
+                >
                   <span style={{ fontSize: '11px', fontWeight: 600, color: '#c2410c' }}>⏳ Abonos Antiguos</span>
                   <div style={{ fontSize: '17px', fontWeight: 800, color: '#9a3412', marginTop: '4px' }}>
                     ${(resumen.totalAbonosAntiguos || 0).toLocaleString('es-CO')}
@@ -397,6 +414,487 @@ export const ModalCierreZ: React.FC<ModalCierreZProps> = ({
           </button>
         </div>
       </div>
+
+      {/* Modal Emergente de Detalle al dar Doble Clic */}
+      {modalDetalle && resumen && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(15, 23, 42, 0.7)',
+            backdropFilter: 'blur(4px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 10000,
+            padding: '16px',
+          }}
+          onClick={() => setModalDetalle(null)}
+        >
+          <div
+            style={{
+              background: '#ffffff',
+              borderRadius: '16px',
+              maxWidth: '820px',
+              width: '100%',
+              maxHeight: '88vh',
+              display: 'flex',
+              flexDirection: 'column',
+              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.35)',
+              overflow: 'hidden',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header Detalle */}
+            <div
+              style={{
+                padding: '16px 20px',
+                background:
+                  modalDetalle === 'abonosTurno'
+                    ? 'linear-gradient(135deg, #0d9488 0%, #115e59 100%)'
+                    : modalDetalle === 'efectivo'
+                    ? 'linear-gradient(135deg, #d97706 0%, #b45309 100%)'
+                    : modalDetalle === 'consignaciones'
+                    ? 'linear-gradient(135deg, #0284c7 0%, #0369a1 100%)'
+                    : 'linear-gradient(135deg, #ea580c 0%, #c2410c 100%)',
+                color: '#fff',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+              }}
+            >
+              <div>
+                <h3 style={{ margin: 0, fontSize: '17px', fontWeight: 700 }}>
+                  {modalDetalle === 'abonosTurno' && '📥 Detalle de Abonos del Turno'}
+                  {modalDetalle === 'efectivo' && '💰 Detalle de Efectivo Esperado'}
+                  {modalDetalle === 'consignaciones' && '🏦 Detalle de Consignaciones y Transferencias'}
+                  {modalDetalle === 'abonosAntiguos' && '⏳ Detalle de Abonos Antiguos (Pendientes de Facturación)'}
+                </h3>
+                <p style={{ margin: '2px 0 0 0', fontSize: '12px', opacity: 0.9 }}>
+                  {modalDetalle === 'abonosTurno' && 'Relación de anticipos registrados durante este turno'}
+                  {modalDetalle === 'efectivo' && 'Facturas y abonos recibidos en efectivo en este turno'}
+                  {modalDetalle === 'consignaciones' && 'Facturas y abonos recibidos por banco, transferencia o consignación'}
+                  {modalDetalle === 'abonosAntiguos' && 'Anticipos de fechas o turnos previos que siguen en habitaciones activas'}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setModalDetalle(null)}
+                style={{
+                  background: 'rgba(255,255,255,0.2)',
+                  border: 'none',
+                  color: '#fff',
+                  width: '30px',
+                  height: '30px',
+                  borderRadius: '50%',
+                  cursor: 'pointer',
+                  fontSize: '16px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Body Detalle con Scroll */}
+            <div style={{ padding: '20px', overflowY: 'auto', flex: 1 }}>
+              {/* CASO 1: ABONOS DEL TURNO */}
+              {modalDetalle === 'abonosTurno' && (
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                    <span style={{ fontSize: '13px', fontWeight: 700, color: '#0f766e' }}>
+                      📋 Recibos de Abono del Turno ({resumen.detalleAbonosTurno?.length || 0})
+                    </span>
+                    <span style={{ fontSize: '16px', fontWeight: 800, color: '#115e59' }}>
+                      Total: ${(resumen.totalAbonosTurno || 0).toLocaleString('es-CO')}
+                    </span>
+                  </div>
+
+                  <div style={{ border: '1px solid #e2e8f0', borderRadius: '8px', overflow: 'hidden' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12.5px' }}>
+                      <thead>
+                        <tr style={{ background: '#f0fdfa', borderBottom: '2px solid #99f6e4', color: '#115e59', textAlign: 'left' }}>
+                          <th style={{ padding: '8px 10px', fontWeight: 700 }}>Recibo</th>
+                          <th style={{ padding: '8px 10px', fontWeight: 700 }}>Anticipo</th>
+                          <th style={{ padding: '8px 10px', fontWeight: 700 }}>Habitación</th>
+                          <th style={{ padding: '8px 10px', fontWeight: 700 }}>Huésped / Cliente</th>
+                          <th style={{ padding: '8px 10px', fontWeight: 700 }}>Forma de Pago</th>
+                          <th style={{ padding: '8px 10px', fontWeight: 700, textAlign: 'right' }}>Monto</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(!resumen.detalleAbonosTurno || resumen.detalleAbonosTurno.length === 0) ? (
+                          <tr>
+                            <td colSpan={6} style={{ padding: '20px', textAlign: 'center', color: '#64748b' }}>
+                              No hay abonos registrados en este turno.
+                            </td>
+                          </tr>
+                        ) : (
+                          resumen.detalleAbonosTurno.map((a, idx) => (
+                            <tr key={idx} style={{ borderBottom: '1px solid #f1f5f9', background: idx % 2 === 0 ? '#fff' : '#f8fafc' }}>
+                              <td style={{ padding: '8px 10px', fontWeight: 600, color: '#334155' }}>RC #{a.reciboNumero}</td>
+                              <td style={{ padding: '8px 10px', color: '#64748b' }}>ANT #{a.anticipoNumero}</td>
+                              <td style={{ padding: '8px 10px' }}>
+                                <span style={{ background: '#e0f2fe', color: '#0369a1', padding: '2px 7px', borderRadius: '4px', fontWeight: 700, fontSize: '11px' }}>
+                                  Hab {a.habitacionNumero}
+                                </span>
+                              </td>
+                              <td style={{ padding: '8px 10px', color: '#1e293b' }}>
+                                <div style={{ fontWeight: 600 }}>{a.clienteNombre}</div>
+                                {a.tercNit && <div style={{ fontSize: '11px', color: '#64748b' }}>NIT: {a.tercNit}</div>}
+                              </td>
+                              <td style={{ padding: '8px 10px' }}>
+                                <span style={{ background: '#f1f5f9', color: '#475569', padding: '2px 6px', borderRadius: '4px', fontSize: '11px', fontWeight: 600 }}>
+                                  {a.formaPagoNombre}
+                                </span>
+                              </td>
+                              <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 800, color: '#0f766e' }}>
+                                ${a.monto.toLocaleString('es-CO')}
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                      <tfoot>
+                        <tr style={{ background: '#ccfbf1', borderTop: '2px solid #99f6e4', fontWeight: 800, color: '#115e59' }}>
+                          <td colSpan={5} style={{ padding: '10px', textAlign: 'right' }}>TOTAL ABONOS DEL TURNO:</td>
+                          <td style={{ padding: '10px', textAlign: 'right', fontSize: '14px' }}>
+                            ${(resumen.totalAbonosTurno || 0).toLocaleString('es-CO')}
+                          </td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* CASO 2: EFECTIVO ESPERADO */}
+              {modalDetalle === 'efectivo' && (
+                <div>
+                  {/* Resumen Banner */}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '10px', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '10px', padding: '12px 16px', marginBottom: '16px' }}>
+                    <div>
+                      <span style={{ fontSize: '11px', color: '#92400e', fontWeight: 600 }}>FACTURAS EN EFECTIVO</span>
+                      <div style={{ fontSize: '16px', fontWeight: 800, color: '#b45309' }}>
+                        ${(resumen.detalleEfectivo?.totalFacturas || 0).toLocaleString('es-CO')}
+                      </div>
+                    </div>
+                    <div>
+                      <span style={{ fontSize: '11px', color: '#92400e', fontWeight: 600 }}>ABONOS EN EFECTIVO</span>
+                      <div style={{ fontSize: '16px', fontWeight: 800, color: '#b45309' }}>
+                        ${(resumen.detalleEfectivo?.totalAbonos || 0).toLocaleString('es-CO')}
+                      </div>
+                    </div>
+                    <div>
+                      <span style={{ fontSize: '11px', color: '#92400e', fontWeight: 700 }}>TOTAL EFECTIVO RECAUDADO</span>
+                      <div style={{ fontSize: '18px', fontWeight: 800, color: '#78350f' }}>
+                        ${resumen.totalEfectivoEsperado.toLocaleString('es-CO')}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Facturas en Efectivo */}
+                  <div style={{ marginBottom: '18px' }}>
+                    <h4 style={{ margin: '0 0 8px 0', fontSize: '13px', fontWeight: 700, color: '#92400e' }}>
+                      🧾 Facturas Pagadas en Efectivo ({resumen.detalleEfectivo?.facturas.length || 0})
+                    </h4>
+                    <div style={{ border: '1px solid #e2e8f0', borderRadius: '8px', overflow: 'hidden' }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
+                        <thead>
+                          <tr style={{ background: '#fef3c7', borderBottom: '1px solid #fde68a', color: '#92400e', textAlign: 'left' }}>
+                            <th style={{ padding: '7px 10px', fontWeight: 700 }}>Factura</th>
+                            <th style={{ padding: '7px 10px', fontWeight: 700 }}>Cliente / Huésped</th>
+                            <th style={{ padding: '7px 10px', fontWeight: 700, textAlign: 'right' }}>Monto</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {(!resumen.detalleEfectivo?.facturas || resumen.detalleEfectivo.facturas.length === 0) ? (
+                            <tr>
+                              <td colSpan={3} style={{ padding: '12px', textAlign: 'center', color: '#64748b' }}>
+                                No se emitieron facturas en efectivo.
+                              </td>
+                            </tr>
+                          ) : (
+                            resumen.detalleEfectivo.facturas.map((f, i) => (
+                              <tr key={i} style={{ borderBottom: '1px solid #f1f5f9', background: i % 2 === 0 ? '#fff' : '#f8fafc' }}>
+                                <td style={{ padding: '7px 10px', fontWeight: 600 }}>{f.facturaNumero}</td>
+                                <td style={{ padding: '7px 10px', color: '#334155' }}>{f.clienteNombre || 'CLIENTE MOSTRADOR'}</td>
+                                <td style={{ padding: '7px 10px', textAlign: 'right', fontWeight: 700, color: '#92400e' }}>
+                                  ${f.monto.toLocaleString('es-CO')}
+                                </td>
+                              </tr>
+                            ))
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                  {/* Abonos en Efectivo */}
+                  <div>
+                    <h4 style={{ margin: '0 0 8px 0', fontSize: '13px', fontWeight: 700, color: '#92400e' }}>
+                      📥 Abonos Recibidos en Efectivo ({resumen.detalleEfectivo?.abonos.length || 0})
+                    </h4>
+                    <div style={{ border: '1px solid #e2e8f0', borderRadius: '8px', overflow: 'hidden' }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
+                        <thead>
+                          <tr style={{ background: '#fef3c7', borderBottom: '1px solid #fde68a', color: '#92400e', textAlign: 'left' }}>
+                            <th style={{ padding: '7px 10px', fontWeight: 700 }}>Recibo</th>
+                            <th style={{ padding: '7px 10px', fontWeight: 700 }}>Anticipo</th>
+                            <th style={{ padding: '7px 10px', fontWeight: 700 }}>Habitación</th>
+                            <th style={{ padding: '7px 10px', fontWeight: 700 }}>Cliente / Huésped</th>
+                            <th style={{ padding: '7px 10px', fontWeight: 700, textAlign: 'right' }}>Monto</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {(!resumen.detalleEfectivo?.abonos || resumen.detalleEfectivo.abonos.length === 0) ? (
+                            <tr>
+                              <td colSpan={5} style={{ padding: '12px', textAlign: 'center', color: '#64748b' }}>
+                                No se recibieron abonos en efectivo en este turno.
+                              </td>
+                            </tr>
+                          ) : (
+                            resumen.detalleEfectivo.abonos.map((a, i) => (
+                              <tr key={i} style={{ borderBottom: '1px solid #f1f5f9', background: i % 2 === 0 ? '#fff' : '#f8fafc' }}>
+                                <td style={{ padding: '7px 10px', fontWeight: 600 }}>RC #{a.reciboNumero}</td>
+                                <td style={{ padding: '7px 10px', color: '#64748b' }}>ANT #{a.anticipoNumero}</td>
+                                <td style={{ padding: '7px 10px' }}>
+                                  <span style={{ background: '#fef3c7', color: '#92400e', padding: '2px 6px', borderRadius: '4px', fontWeight: 700, fontSize: '11px' }}>
+                                    Hab {a.habitacionNumero}
+                                  </span>
+                                </td>
+                                <td style={{ padding: '7px 10px', color: '#334155' }}>{a.clienteNombre}</td>
+                                <td style={{ padding: '7px 10px', textAlign: 'right', fontWeight: 700, color: '#92400e' }}>
+                                  ${a.monto.toLocaleString('es-CO')}
+                                </td>
+                              </tr>
+                            ))
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* CASO 3: CONSIGNACIONES Y TRANSFERENCIAS */}
+              {modalDetalle === 'consignaciones' && (
+                <div>
+                  {/* Resumen Banner */}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '10px', background: '#f0f9ff', border: '1px solid #7dd3fc', borderRadius: '10px', padding: '12px 16px', marginBottom: '16px' }}>
+                    <div>
+                      <span style={{ fontSize: '11px', color: '#0369a1', fontWeight: 600 }}>FACTURAS POR BANCO / TRANSF.</span>
+                      <div style={{ fontSize: '16px', fontWeight: 800, color: '#0284c7' }}>
+                        ${(resumen.detalleConsignaciones?.totalFacturas || 0).toLocaleString('es-CO')}
+                      </div>
+                    </div>
+                    <div>
+                      <span style={{ fontSize: '11px', color: '#0369a1', fontWeight: 600 }}>ABONOS POR BANCO / TRANSF.</span>
+                      <div style={{ fontSize: '16px', fontWeight: 800, color: '#0284c7' }}>
+                        ${(resumen.detalleConsignaciones?.totalAbonos || 0).toLocaleString('es-CO')}
+                      </div>
+                    </div>
+                    <div>
+                      <span style={{ fontSize: '11px', color: '#0369a1', fontWeight: 700 }}>TOTAL CONSIGNACIONES</span>
+                      <div style={{ fontSize: '18px', fontWeight: 800, color: '#0c4a6e' }}>
+                        ${(resumen.totalConsignaciones || 0).toLocaleString('es-CO')}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Facturas en Banco/Transferencia */}
+                  <div style={{ marginBottom: '18px' }}>
+                    <h4 style={{ margin: '0 0 8px 0', fontSize: '13px', fontWeight: 700, color: '#0369a1' }}>
+                      🧾 Facturas Pagadas con Banco / Consignación ({resumen.detalleConsignaciones?.facturas.length || 0})
+                    </h4>
+                    <div style={{ border: '1px solid #e2e8f0', borderRadius: '8px', overflow: 'hidden' }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
+                        <thead>
+                          <tr style={{ background: '#e0f2fe', borderBottom: '1px solid #bae6fd', color: '#0369a1', textAlign: 'left' }}>
+                            <th style={{ padding: '7px 10px', fontWeight: 700 }}>Factura</th>
+                            <th style={{ padding: '7px 10px', fontWeight: 700 }}>Forma de Pago</th>
+                            <th style={{ padding: '7px 10px', fontWeight: 700 }}>Cliente / Huésped</th>
+                            <th style={{ padding: '7px 10px', fontWeight: 700, textAlign: 'right' }}>Monto</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {(!resumen.detalleConsignaciones?.facturas || resumen.detalleConsignaciones.facturas.length === 0) ? (
+                            <tr>
+                              <td colSpan={4} style={{ padding: '12px', textAlign: 'center', color: '#64748b' }}>
+                                No se emitieron facturas por banco/consignación.
+                              </td>
+                            </tr>
+                          ) : (
+                            resumen.detalleConsignaciones.facturas.map((f, i) => (
+                              <tr key={i} style={{ borderBottom: '1px solid #f1f5f9', background: i % 2 === 0 ? '#fff' : '#f8fafc' }}>
+                                <td style={{ padding: '7px 10px', fontWeight: 600 }}>{f.facturaNumero}</td>
+                                <td style={{ padding: '7px 10px' }}>
+                                  <span style={{ background: '#e0f2fe', color: '#0369a1', padding: '2px 6px', borderRadius: '4px', fontSize: '11px', fontWeight: 600 }}>
+                                    {f.formaPagoNombre}
+                                  </span>
+                                </td>
+                                <td style={{ padding: '7px 10px', color: '#334155' }}>{f.clienteNombre || 'CLIENTE'}</td>
+                                <td style={{ padding: '7px 10px', textAlign: 'right', fontWeight: 700, color: '#0369a1' }}>
+                                  ${f.monto.toLocaleString('es-CO')}
+                                </td>
+                              </tr>
+                            ))
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                  {/* Abonos por Banco/Transferencia */}
+                  <div>
+                    <h4 style={{ margin: '0 0 8px 0', fontSize: '13px', fontWeight: 700, color: '#0369a1' }}>
+                      📥 Abonos Recibidos por Banco / Consignación ({resumen.detalleConsignaciones?.abonos.length || 0})
+                    </h4>
+                    <div style={{ border: '1px solid #e2e8f0', borderRadius: '8px', overflow: 'hidden' }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
+                        <thead>
+                          <tr style={{ background: '#e0f2fe', borderBottom: '1px solid #bae6fd', color: '#0369a1', textAlign: 'left' }}>
+                            <th style={{ padding: '7px 10px', fontWeight: 700 }}>Recibo</th>
+                            <th style={{ padding: '7px 10px', fontWeight: 700 }}>Anticipo</th>
+                            <th style={{ padding: '7px 10px', fontWeight: 700 }}>Habitación</th>
+                            <th style={{ padding: '7px 10px', fontWeight: 700 }}>Cliente / Huésped</th>
+                            <th style={{ padding: '7px 10px', fontWeight: 700 }}>Forma de Pago</th>
+                            <th style={{ padding: '7px 10px', fontWeight: 700, textAlign: 'right' }}>Monto</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {(!resumen.detalleConsignaciones?.abonos || resumen.detalleConsignaciones.abonos.length === 0) ? (
+                            <tr>
+                              <td colSpan={6} style={{ padding: '12px', textAlign: 'center', color: '#64748b' }}>
+                                No se recibieron abonos por banco o transferencia.
+                              </td>
+                            </tr>
+                          ) : (
+                            resumen.detalleConsignaciones.abonos.map((a, i) => (
+                              <tr key={i} style={{ borderBottom: '1px solid #f1f5f9', background: i % 2 === 0 ? '#fff' : '#f8fafc' }}>
+                                <td style={{ padding: '7px 10px', fontWeight: 600 }}>RC #{a.reciboNumero}</td>
+                                <td style={{ padding: '7px 10px', color: '#64748b' }}>ANT #{a.anticipoNumero}</td>
+                                <td style={{ padding: '7px 10px' }}>
+                                  <span style={{ background: '#e0f2fe', color: '#0369a1', padding: '2px 6px', borderRadius: '4px', fontWeight: 700, fontSize: '11px' }}>
+                                    Hab {a.habitacionNumero}
+                                  </span>
+                                </td>
+                                <td style={{ padding: '7px 10px', color: '#334155' }}>{a.clienteNombre}</td>
+                                <td style={{ padding: '7px 10px' }}>
+                                  <span style={{ background: '#f1f5f9', color: '#475569', padding: '2px 6px', borderRadius: '4px', fontSize: '11px', fontWeight: 600 }}>
+                                    {a.formaPagoNombre}
+                                  </span>
+                                </td>
+                                <td style={{ padding: '7px 10px', textAlign: 'right', fontWeight: 700, color: '#0369a1' }}>
+                                  ${a.monto.toLocaleString('es-CO')}
+                                </td>
+                              </tr>
+                            ))
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* CASO 4: ABONOS ANTIGUOS */}
+              {modalDetalle === 'abonosAntiguos' && (
+                <div>
+                  <div style={{ background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: '8px', padding: '10px 14px', marginBottom: '14px', fontSize: '12.5px', color: '#9a3412' }}>
+                    ℹ️ Estos abonos fueron registrados en turnos o fechas anteriores para huéspedes que continúan alojados en el hotel y cuyo saldo aún no ha sido facturado.
+                  </div>
+
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                    <span style={{ fontSize: '13px', fontWeight: 700, color: '#c2410c' }}>
+                      ⏳ Abonos Pendientes de Turnos Anteriores ({resumen.detalleAbonosAntiguos?.length || 0})
+                    </span>
+                    <span style={{ fontSize: '16px', fontWeight: 800, color: '#9a3412' }}>
+                      Total: ${(resumen.totalAbonosAntiguos || 0).toLocaleString('es-CO')}
+                    </span>
+                  </div>
+
+                  <div style={{ border: '1px solid #e2e8f0', borderRadius: '8px', overflow: 'hidden' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12.5px' }}>
+                      <thead>
+                        <tr style={{ background: '#fff7ed', borderBottom: '2px solid #fed7aa', color: '#9a3412', textAlign: 'left' }}>
+                          <th style={{ padding: '8px 10px', fontWeight: 700 }}>Recibo</th>
+                          <th style={{ padding: '8px 10px', fontWeight: 700 }}>Anticipo</th>
+                          <th style={{ padding: '8px 10px', fontWeight: 700 }}>Habitación</th>
+                          <th style={{ padding: '8px 10px', fontWeight: 700 }}>Huésped / Cliente</th>
+                          <th style={{ padding: '8px 10px', fontWeight: 700, textAlign: 'right' }}>Monto</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(!resumen.detalleAbonosAntiguos || resumen.detalleAbonosAntiguos.length === 0) ? (
+                          <tr>
+                            <td colSpan={5} style={{ padding: '20px', textAlign: 'center', color: '#64748b' }}>
+                              No hay abonos antiguos pendientes de facturar.
+                            </td>
+                          </tr>
+                        ) : (
+                          resumen.detalleAbonosAntiguos.map((a, idx) => (
+                            <tr key={idx} style={{ borderBottom: '1px solid #f1f5f9', background: idx % 2 === 0 ? '#fff' : '#f8fafc' }}>
+                              <td style={{ padding: '8px 10px', fontWeight: 600, color: '#334155' }}>RC #{a.reciboNumero}</td>
+                              <td style={{ padding: '8px 10px', color: '#64748b' }}>ANT #{a.anticipoNumero}</td>
+                              <td style={{ padding: '8px 10px' }}>
+                                <span style={{ background: '#ffedd5', color: '#c2410c', padding: '2px 7px', borderRadius: '4px', fontWeight: 700, fontSize: '11px' }}>
+                                  Hab {a.habitacionNumero}
+                                </span>
+                              </td>
+                              <td style={{ padding: '8px 10px', color: '#1e293b' }}>
+                                <div style={{ fontWeight: 600 }}>{a.clienteNombre}</div>
+                                {a.tercNit && <div style={{ fontSize: '11px', color: '#64748b' }}>NIT: {a.tercNit}</div>}
+                              </td>
+                              <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 800, color: '#c2410c' }}>
+                                ${a.monto.toLocaleString('es-CO')}
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                      <tfoot>
+                        <tr style={{ background: '#ffedd5', borderTop: '2px solid #fed7aa', fontWeight: 800, color: '#9a3412' }}>
+                          <td colSpan={4} style={{ padding: '10px', textAlign: 'right' }}>TOTAL ABONOS ANTIGUOS:</td>
+                          <td style={{ padding: '10px', textAlign: 'right', fontSize: '14px' }}>
+                            ${(resumen.totalAbonosAntiguos || 0).toLocaleString('es-CO')}
+                          </td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Footer Detalle */}
+            <div style={{ padding: '12px 20px', borderTop: '1px solid #e2e8f0', background: '#f8fafc', display: 'flex', justifyContent: 'flex-end' }}>
+              <button
+                type="button"
+                onClick={() => setModalDetalle(null)}
+                style={{
+                  padding: '8px 20px',
+                  borderRadius: '8px',
+                  border: '1px solid #cbd5e1',
+                  background: '#fff',
+                  color: '#334155',
+                  fontWeight: 600,
+                  fontSize: '13px',
+                  cursor: 'pointer',
+                }}
+              >
+                Cerrar Detalle
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
+

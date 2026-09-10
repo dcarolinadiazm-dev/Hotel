@@ -84,6 +84,68 @@ export interface ITurnoResumenCierre {
         reservadas: number;
         inhabilitadas: number;
     };
+    detalleAbonosTurno?: Array<{
+        reciboId: number;
+        reciboNumero: string;
+        anticipoId: number;
+        anticipoNumero: string;
+        habitacionNumero: string;
+        clienteNombre: string;
+        tercNit: string;
+        formaPagoId: number;
+        formaPagoNombre: string;
+        monto: number;
+        fecha?: string;
+    }>;
+    detalleAbonosAntiguos?: Array<{
+        reciboId: number;
+        reciboNumero: string;
+        anticipoId: number;
+        anticipoNumero: string;
+        habitacionNumero: string;
+        clienteNombre: string;
+        tercNit: string;
+        monto: number;
+        fecha?: string;
+    }>;
+    detalleEfectivo?: {
+        facturas: Array<{
+            facturaId: number;
+            facturaNumero: string;
+            monto: number;
+            clienteNombre?: string;
+        }>;
+        totalFacturas: number;
+        abonos: Array<{
+            reciboNumero: string;
+            anticipoNumero: string;
+            habitacionNumero: string;
+            clienteNombre: string;
+            monto: number;
+        }>;
+        totalAbonos: number;
+        totalEfectivo: number;
+    };
+    detalleConsignaciones?: {
+        facturas: Array<{
+            facturaId: number;
+            facturaNumero: string;
+            formaPagoNombre: string;
+            monto: number;
+            clienteNombre?: string;
+        }>;
+        totalFacturas: number;
+        abonos: Array<{
+            reciboNumero: string;
+            anticipoNumero: string;
+            habitacionNumero: string;
+            clienteNombre: string;
+            formaPagoNombre: string;
+            monto: number;
+        }>;
+        totalAbonos: number;
+        totalConsignaciones: number;
+    };
 }
 
 export interface ITurnoAperturaPayload {
