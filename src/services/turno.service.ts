@@ -423,10 +423,9 @@ export class TurnoService {
                 this.where(`${tables.RECIBOS_CAJA}.RECA_ANULADO`, '!=', 'S').orWhereNull(`${tables.RECIBOS_CAJA}.RECA_ANULADO`);
             })
             .andWhere(function () {
+                this.where(`${tables.ANTICIPOS_CLIENTE}.ANCL_FECHA`, '>=', fechaInicioDia);
                 if (maxPrevAnclId > 0) {
                     this.where(`${tables.ANTICIPOS_CLIENTE}.ANCL_ID`, '>', maxPrevAnclId);
-                } else {
-                    this.where(`${tables.ANTICIPOS_CLIENTE}.ANCL_FECHA`, '>=', fechaInicioDia);
                 }
             })
             .select(
@@ -482,10 +481,12 @@ export class TurnoService {
                 this.where(`${tables.RECIBOS_CAJA}.RECA_ANULADO`, '!=', 'S').orWhereNull(`${tables.RECIBOS_CAJA}.RECA_ANULADO`);
             })
             .andWhere(function () {
+                this.where(`${tables.ANTICIPOS_CLIENTE}.ANCL_FECHA`, '<', fechaInicioDia);
                 if (maxPrevAnclId > 0) {
-                    this.where(`${tables.ANTICIPOS_CLIENTE}.ANCL_ID`, '<=', maxPrevAnclId);
-                } else {
-                    this.where(`${tables.ANTICIPOS_CLIENTE}.ANCL_FECHA`, '<', fechaInicioDia);
+                    this.orWhere(function () {
+                        this.where(`${tables.ANTICIPOS_CLIENTE}.ANCL_FECHA`, '>=', fechaInicioDia)
+                            .andWhere(`${tables.ANTICIPOS_CLIENTE}.ANCL_ID`, '<=', maxPrevAnclId);
+                    });
                 }
             })
             .whereNotIn(`${tables.ANTICIPOS_CLIENTE}.ANCL_ID`, appliedAnclIdsQuery)
