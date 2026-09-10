@@ -939,19 +939,16 @@ export const ModalHabitacion = ({
           type: 'success',
           message: `🎉 ¡Factura de Venta generada con Éxito! Número oficial: ${docNum}. La habitación ha quedado Disponible.`,
         });
+        if (onHabitacionUpdated) onHabitacionUpdated();
         if (data.idDoc) {
           setImpresionData({ tipo: 'FACTURA', idDoc: data.idDoc });
+        } else {
+          onClose();
         }
-        setEstado('Disponible');
-        setHuesped('');
-        setDocumento('');
-        setFechaReserva(getCurrentDatetimeLocal(0));
-        setFechaSalida(getDefaultFechaSalida(undefined, 1));
-        setPeweId(undefined);
-        setItems([]);
-        await fetchRoomDetails();
-        if (onHabitacionUpdated) onHabitacionUpdated();
       } else {
+        if (res.status === 401) {
+          throw new Error('Tu sesión ha expirado por inactividad. Por favor recarga la página o inicia sesión nuevamente.');
+        }
         throw new Error(data.error || 'Error al procesar factura en el servidor');
       }
     } catch (err: any) {
@@ -2379,7 +2376,10 @@ export const ModalHabitacion = ({
           tipoDoc={impresionData.tipo}
           idDoc={impresionData.idDoc}
           habitacionNumero={habitacion.numero}
-          onClose={() => setImpresionData(null)}
+          onClose={() => {
+            setImpresionData(null);
+            onClose();
+          }}
         />
       )}
     </div>

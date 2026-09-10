@@ -21,6 +21,33 @@ export class HabitacionService {
             const day = String(now.getDate()).padStart(2, '0');
             const todayStr = `${year}-${month}-${day}`;
 
+            // Auto-heal: Si existen movimientos marcados como 'Activo' cuyo documento DINW_ID ya fue facturado (DINW_IDDOC > 0),
+            // actualizarlos a 'Facturado' para evitar que dejen la habitación bloqueada como ocupada.
+            const billedActiveMovs = await db(tables.HABITACION_MOVIM)
+                .join(tables.DOC_INVENTARIO_WEB, `${tables.HABITACION_MOVIM}.DINW_ID`, '=', `${tables.DOC_INVENTARIO_WEB}.DINW_ID`)
+                .where(function () {
+                    this.where(`${tables.HABITACION_MOVIM}.ESTADO`, 'Activo').orWhereNull(`${tables.HABITACION_MOVIM}.ESTADO`);
+                })
+                .whereNotNull(`${tables.DOC_INVENTARIO_WEB}.DINW_IDDOC`)
+                .andWhere(`${tables.DOC_INVENTARIO_WEB}.DINW_IDDOC`, '>', 0)
+                .select(
+                    `${tables.HABITACION_MOVIM}.ID_MOVIM`,
+                    `${tables.DOC_INVENTARIO_WEB}.DINW_IDDOC`
+                )
+                .catch(() => []);
+
+            for (const bm of billedActiveMovs) {
+                const idDoc = parseInt(String(bm.DINW_IDDOC), 10);
+                await db(tables.HABITACION_MOVIM)
+                    .where('ID_MOVIM', bm.ID_MOVIM)
+                    .update({
+                        ESTADO: 'Facturado',
+                        ID_DOC: idDoc,
+                        TIPO: 31
+                    })
+                    .catch(() => {});
+            }
+
             const habitaciones = await db(tables.HABITACION).select('ID_HABITACION', 'ESTADO');
 
             for (const hab of habitaciones) {

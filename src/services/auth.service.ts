@@ -24,7 +24,7 @@ export class AuthService {
                 const token = jwt.sign(
                     { username: username },
                     JWT_SECRET,
-                    { expiresIn: '8h' }
+                    { expiresIn: '24h' }
                 );
 
                 resolve({
