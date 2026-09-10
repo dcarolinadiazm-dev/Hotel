@@ -164,6 +164,11 @@ export class TurnoService {
             formasMap.set(parseInt(String(fp.FOPA_ID), 10), String(fp.FOPA_NOM || '').trim());
         }
 
+        const fechaAperturaDate = new Date(turno.FECHA_APERTURA);
+        const fechaInicioDia = !isNaN(fechaAperturaDate.getTime())
+            ? new Date(fechaAperturaDate.getFullYear(), fechaAperturaDate.getMonth(), fechaAperturaDate.getDate(), 0, 0, 0, 0)
+            : new Date();
+
         // 2. Facturas emitidas estrictamente en este turno
         const facturasEmitidasList = await db('FACTURAS')
             .where(function () {
@@ -177,10 +182,10 @@ export class TurnoService {
                     }
                 }
                 if (!hasCondition) {
-                    this.where('FACT_FECHA', '>=', turno.FECHA_APERTURA);
+                    this.where('FACT_FECHA', '>=', fechaInicioDia);
                 }
             })
-            .andWhere('FACT_FECHA', '>=', turno.FECHA_APERTURA)
+            .andWhere('FACT_FECHA', '>=', fechaInicioDia)
             .andWhere(function () {
                 this.where('FACT_ANULADO', '!=', 'S').orWhereNull('FACT_ANULADO');
             })
@@ -223,15 +228,23 @@ export class TurnoService {
                 .where('ESTADO', 'Cerrado')
                 .orderBy('ID_TURNO', 'desc')
                 .first();
-            if (prevTurnoRows?.FECHA_CIERRE) {
+
+            const fechaCierrePrev = prevTurnoRows?.FECHA_CIERRE ? new Date(prevTurnoRows.FECHA_CIERRE) : null;
+
+            // En Firebird RECA_FECHA es de tipo DATE (sin hora: 00:00:00).
+            // Si el turno anterior se cerró en un día previo a hoy (< fechaInicioDia), tomamos <= fechaCierrePrev.
+            // Si el turno anterior se cerró el mismo día (o no hay corte exacto de RC en TURNO_DET_FACTURAS),
+            // comparar <= prevTurno.FECHA_CIERRE tomaría erróneamente todos los recibos de hoy (00:00:00 <= 12:35:00).
+            // Por tanto, el corte seguro de recibos previos cuando no hay RC previo guardado es < fechaInicioDia.
+            if (fechaCierrePrev && fechaCierrePrev < fechaInicioDia) {
                 const maxPrevReca = await db(tables.RECIBOS_CAJA)
-                    .where('RECA_FECHA', '<=', prevTurnoRows.FECHA_CIERRE)
+                    .where('RECA_FECHA', '<=', fechaCierrePrev)
                     .max('RECA_ID as MAXR')
                     .first();
                 maxPrevRecaId = parseInt(String(maxPrevReca?.MAXR || 0), 10);
             } else {
                 const maxPrevReca = await db(tables.RECIBOS_CAJA)
-                    .where('RECA_FECHA', '<', turno.FECHA_APERTURA)
+                    .where('RECA_FECHA', '<', fechaInicioDia)
                     .max('RECA_ID as MAXR')
                     .first();
                 maxPrevRecaId = parseInt(String(maxPrevReca?.MAXR || 0), 10);
@@ -404,7 +417,7 @@ export class TurnoService {
                 } else if (maxPrevAnclId > 0) {
                     this.where(`${tables.ANTICIPOS_CLIENTE}.ANCL_ID`, '>', maxPrevAnclId);
                 } else {
-                    this.where(`${tables.RECIBOS_CAJA}.RECA_FECHA`, '>=', turno.FECHA_APERTURA);
+                    this.where(`${tables.RECIBOS_CAJA}.RECA_FECHA`, '>=', fechaInicioDia);
                 }
             })
             .select(
@@ -487,7 +500,7 @@ export class TurnoService {
                 } else if (maxPrevAnclId > 0) {
                     this.where(`${tables.ANTICIPOS_CLIENTE}.ANCL_ID`, '<=', maxPrevAnclId);
                 } else {
-                    this.where(`${tables.RECIBOS_CAJA}.RECA_FECHA`, '<', turno.FECHA_APERTURA);
+                    this.where(`${tables.RECIBOS_CAJA}.RECA_FECHA`, '<', fechaInicioDia);
                 }
             })
             .whereNotIn(`${tables.ANTICIPOS_CLIENTE}.ANCL_ID`, appliedAnclIdsQuery)
