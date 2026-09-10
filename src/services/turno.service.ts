@@ -352,22 +352,14 @@ export class TurnoService {
             const saldoMaximoTurno = Math.max(0, Math.round((totalFactura - abonoCruzado) * 100) / 100);
             let remTurno = saldoMaximoTurno;
 
-            if (rcByFact.has(fid) && rcByFact.get(fid)!.length > 0) {
-                for (const p of rcByFact.get(fid)!) {
-                    const montoReal = abonoCruzado > 0 ? Math.min(p.monto, remTurno) : p.monto;
-                    if (montoReal > 0) {
-                        pagosFacturasConsolidados.push({
-                            ...p,
-                            monto: montoReal,
-                            factId: fid,
-                            factNumero,
-                            cliente
-                        });
-                        remTurno = Math.max(0, remTurno - montoReal);
-                    }
-                }
-            } else if (fcpByFact.has(fid) && fcpByFact.get(fid)!.length > 0) {
-                for (const p of fcpByFact.get(fid)!) {
+            const pagosFactura = (fcpByFact.has(fid) && fcpByFact.get(fid)!.length > 0)
+                ? fcpByFact.get(fid)!
+                : (rcByFact.has(fid) && rcByFact.get(fid)!.length > 0)
+                    ? rcByFact.get(fid)!
+                    : [];
+
+            if (pagosFactura.length > 0) {
+                for (const p of pagosFactura) {
                     const montoReal = abonoCruzado > 0 ? Math.min(p.monto, remTurno) : p.monto;
                     if (montoReal > 0) {
                         pagosFacturasConsolidados.push({

@@ -871,13 +871,13 @@ export class PedidoService {
                 if (abonosList && abonosList.length > 0) {
                     console.log(`[FACTURACION-PASO-14] Sincronizando Recibo de Caja y Aplicación de Anticipos...`);
                     await PedidoService.syncReciboCajaFactura(idGenerado, totalDoc, abonosList, listaPagos, prefijo);
+                    await PedidoService.syncFacturaPagos(idGenerado, listaPagos);
                 } else {
+                    // Garantizar sincronización exacta de formas de pago en FACTURAS_CONTADO_PAGO y RECIBOS_CAJA_PAGO
+                    await PedidoService.syncFacturaPagos(idGenerado, listaPagos);
                     console.log(`[FACTURACION-PASO-14] Contabilizando Recibo de Caja generado con la factura...`);
                     await PedidoService.contabilizarReciboDeFactura(idGenerado, prefijo);
                 }
-
-                // 3. Garantizar sincronización exacta de formas de pago en FACTURAS_CONTADO_PAGO y RECIBOS_CAJA_PAGO
-                await PedidoService.syncFacturaPagos(idGenerado, listaPagos);
 
                 // 4. Contabilizar la Factura de Venta generada
                 try {
@@ -1578,11 +1578,57 @@ export class PedidoService {
                         nombre: String(p.nombre || p.NOMBRE || 'EFECTIVO').trim(),
                         monto: parseFloat(String(p.monto || p.MONTO || '0'))
                     }));
-                    if (pagosList.length === 1) {
-                        formaPagoStr = pagosList[0].nombre;
-                    } else {
-                        formaPagoStr = pagosList.map(p => `${p.nombre}: $${Math.round(p.monto).toLocaleString('es-CO')}`).join(' + ');
+                }
+
+                // Fallback 1: RECIBOS_CAJA_PAGO
+                if (pagosList.length === 0) {
+                    const rcRow = await db('RECIBOS_CAJA_DETALLE')
+                        .where({ RCDE_TIPODOC: 31, RCDE_IDDOC: r.FACT_ID, RCDE_ANULADO: 'N' })
+                        .select('RECA_ID')
+                        .first();
+                    if (rcRow?.RECA_ID) {
+                        const rcPagos = await db('RECIBOS_CAJA_PAGO as P')
+                            .join('FORMAS_PAGO as F', 'P.FOPA_ID', 'F.FOPA_ID')
+                            .where('P.RECA_ID', rcRow.RECA_ID)
+                            .andWhere(function () {
+                                this.where('P.RCPA_ANULADO', '!=', 'S').orWhereNull('P.RCPA_ANULADO');
+                            })
+                            .orderBy('P.RCPA_ITEM', 'asc')
+                            .select('F.FOPA_NOM as nombre', 'P.RCPA_MONTO as monto');
+                        if (rcPagos && rcPagos.length > 0) {
+                            pagosList = rcPagos.map((p: any) => ({
+                                nombre: String(p.nombre || p.NOMBRE || 'EFECTIVO').trim(),
+                                monto: parseFloat(String(p.monto || 0))
+                            }));
+                        }
                     }
+                }
+
+                // Fallback 2: DOC_INVENTARIO_PAGO_WEB
+                if (pagosList.length === 0) {
+                    const dinwRow = await db(tables.DOC_INVENTARIO_WEB)
+                        .where('DINW_IDDOC', r.FACT_ID)
+                        .select('DINW_ID')
+                        .first();
+                    if (dinwRow?.DINW_ID) {
+                        const diwpRows = await db('DOC_INVENTARIO_PAGO_WEB as P')
+                            .join('FORMAS_PAGO as F', 'P.FOPA_ID', 'F.FOPA_ID')
+                            .where('P.DINW_ID', dinwRow.DINW_ID)
+                            .orderBy('P.DIWP_ITEM', 'asc')
+                            .select('F.FOPA_NOM as nombre', 'P.DIWP_MONTO as monto');
+                        if (diwpRows && diwpRows.length > 0) {
+                            pagosList = diwpRows.map((p: any) => ({
+                                nombre: String(p.nombre || p.NOMBRE || 'EFECTIVO').trim(),
+                                monto: parseFloat(String(p.monto || 0))
+                            }));
+                        }
+                    }
+                }
+
+                if (pagosList.length === 1) {
+                    formaPagoStr = pagosList[0].nombre;
+                } else if (pagosList.length > 1) {
+                    formaPagoStr = pagosList.map(p => `${p.nombre}: $${Math.round(p.monto).toLocaleString('es-CO')}`).join(' + ');
                 } else if (r.FACT_FORMAP) {
                     const fpRow = await db('FORMAS_PAGO').where('FOPA_ID', r.FACT_FORMAP).first();
                     if (fpRow?.FOPA_NOM) {
@@ -1950,6 +1996,31 @@ export class PedidoService {
                     }
                 } catch (rcErr: any) {
                     console.warn('Aviso consultando RECIBOS_CAJA_PAGO para impresion:', rcErr.message);
+                }
+            }
+
+            // Fallback 2: si no hay registros contables, consultar DOC_INVENTARIO_PAGO_WEB
+            if (pagosList.length === 0) {
+                try {
+                    const dinwRow = await db(tables.DOC_INVENTARIO_WEB)
+                        .where('DINW_IDDOC', idDoc)
+                        .select('DINW_ID')
+                        .first();
+                    if (dinwRow?.DINW_ID) {
+                        const diwpRows = await db('DOC_INVENTARIO_PAGO_WEB as P')
+                            .join('FORMAS_PAGO as F', 'P.FOPA_ID', 'F.FOPA_ID')
+                            .where('P.DINW_ID', dinwRow.DINW_ID)
+                            .orderBy('P.DIWP_ITEM', 'asc')
+                            .select('F.FOPA_NOM as nombre', 'P.DIWP_MONTO as monto');
+                        if (diwpRows && diwpRows.length > 0) {
+                            pagosList = diwpRows.map((p: any) => ({
+                                nombre: String(p.nombre || p.NOMBRE || 'EFECTIVO').trim(),
+                                monto: parseFloat(String(p.monto || 0))
+                            }));
+                        }
+                    }
+                } catch (diwpErr: any) {
+                    console.warn('Aviso consultando DOC_INVENTARIO_PAGO_WEB para impresion:', diwpErr.message);
                 }
             }
         }
@@ -2497,13 +2568,13 @@ export class PedidoService {
                 if (abonosList && abonosList.length > 0) {
                     console.log(`[FACTURACION-MULTI] Sincronizando Recibo de Caja y Aplicación de Anticipos (${abonosList.length} abonos)...`);
                     await PedidoService.syncReciboCajaFactura(idGenerado, totalDoc, abonosList, listaPagos, prefijo);
+                    await PedidoService.syncFacturaPagos(idGenerado, listaPagos);
                 } else {
+                    // Garantizar sincronización exacta de formas de pago en FACTURAS_CONTADO_PAGO y RECIBOS_CAJA_PAGO
+                    await PedidoService.syncFacturaPagos(idGenerado, listaPagos);
                     console.log(`[FACTURACION-MULTI] Contabilizando Recibo de Caja generado...`);
                     await PedidoService.contabilizarReciboDeFactura(idGenerado, prefijo);
                 }
-
-                // 3. Garantizar sincronización exacta de formas de pago en FACTURAS_CONTADO_PAGO y RECIBOS_CAJA_PAGO
-                await PedidoService.syncFacturaPagos(idGenerado, listaPagos);
 
                 // 4. Contabilizar la Factura de Venta consolidada
                 try {
@@ -2597,20 +2668,27 @@ export class PedidoService {
 
             const totalPagos = listaPagos.reduce((acc, p) => acc + (parseFloat(String(p.monto)) || 0), 0);
 
+            // Obtener datos de caja y banco
+            let cajaId = 1;
+            let codbco = '';
+            try {
+                const ptvt = await db('PUNTO_VENTA').first();
+                if (ptvt?.CAJA_ID) cajaId = parseInt(String(ptvt.CAJA_ID), 10);
+                const cajaRow = await db('CAJAS').where('CAJA_ID', cajaId).first();
+                if (cajaRow?.CAJA_FPBCO) codbco = String(cajaRow.CAJA_FPBCO).trim();
+            } catch (e) { }
+
+            const nowFecha = new Date();
+
             if (!matches) {
                 console.log(`[PAGOS] Ajustando formas de pago en FACTURAS_CONTADO_PAGO para Factura ID ${idDoc}. Formas enviadas: ${listaPagos.length}, en BD: ${existing.length}`);
 
-                // Obtener datos de caja y banco
-                let cajaId = 1;
-                let codbco = '';
-                try {
-                    const ptvt = await db('PUNTO_VENTA').first();
-                    if (ptvt?.CAJA_ID) cajaId = parseInt(String(ptvt.CAJA_ID), 10);
-                    const cajaRow = await db('CAJAS').where('CAJA_ID', cajaId).first();
-                    if (cajaRow?.CAJA_FPBCO) codbco = String(cajaRow.CAJA_FPBCO).trim();
-                } catch (e) { }
-
-                const nowFecha = new Date();
+                // Asegurar que SALDOS_DOC_CARTERA tenga saldo disponible para que el trigger
+                // FACTURAS_CONTADO_PAGO_AI / RECIBOS_CAJA_DETALLE_AI no lance DOCUMENTO_ABONO_MAYOR
+                await db('SALDOS_DOC_CARTERA')
+                    .where({ SDCA_TIPOREF: 31, SDCA_IDREF: idDoc })
+                    .update({ SDCA_ABONO: 0 })
+                    .catch(() => { });
 
                 // Eliminar registros incompletos o desactualizados
                 await db('FACTURAS_CONTADO_PAGO').where('FCNT_ID', idDoc).del();
@@ -2653,6 +2731,33 @@ export class PedidoService {
             if (rcdRow && rcdRow.RECA_ID && totalPagos > 0) {
                 await db('RECIBOS_CAJA').where('RECA_ID', rcdRow.RECA_ID).update({ RECA_MONTO: totalPagos }).catch(() => { });
                 await db('RECIBOS_CAJA_DETALLE').where({ RECA_ID: rcdRow.RECA_ID, RCDE_TIPODOC: 31, RCDE_IDDOC: idDoc }).update({ RCDE_ABONO: totalPagos }).catch(() => { });
+                await db('SALDOS_DOC_CARTERA').where({ SDCA_TIPOREF: 31, SDCA_IDREF: idDoc }).update({ SDCA_ABONO: totalPagos }).catch(() => { });
+
+                // Asegurar que RECIBOS_CAJA_PAGO tenga todas las líneas de pago
+                try {
+                    const rcPagos = await db('RECIBOS_CAJA_PAGO').where('RECA_ID', rcdRow.RECA_ID);
+                    if (rcPagos.length !== listaPagos.length) {
+                        await db('RECIBOS_CAJA_PAGO').where('RECA_ID', rcdRow.RECA_ID).del().catch(() => { });
+                        for (let i = 0; i < listaPagos.length; i++) {
+                            const p = listaPagos[i];
+                            const isEfectivo = p.formaPagoId === 1;
+                            await db('RECIBOS_CAJA_PAGO').insert({
+                                RECA_ID: rcdRow.RECA_ID,
+                                RCPA_ITEM: i + 1,
+                                FOPA_ID: p.formaPagoId,
+                                RCPA_BANCO: isEfectivo ? '' : codbco,
+                                RCPA_CUENTA: isEfectivo ? '' : '9999',
+                                RCPA_NUMERO: isEfectivo ? '' : String(i + 1).padStart(6, '0'),
+                                RCPA_FECHA: nowFecha,
+                                RCPA_MONTO: p.monto,
+                                RCPA_ANULADO: 'N',
+                                RCPA_TRANSMIT: 'N',
+                                RCPA_IVAMONTO: 0
+                            }).catch(() => { });
+                        }
+                    }
+                } catch (rcpaErr: any) { }
+            } else {
                 await db('SALDOS_DOC_CARTERA').where({ SDCA_TIPOREF: 31, SDCA_IDREF: idDoc }).update({ SDCA_ABONO: totalPagos }).catch(() => { });
             }
         } catch (err: any) {
