@@ -522,31 +522,35 @@ export class TurnoService {
             if (row.AUDI_HORA) {
                 const d = new Date(row.AUDI_HORA);
                 if (!isNaN(d.getTime())) {
-                    const day = String(d.getDate()).padStart(2, '0');
-                    const month = String(d.getMonth() + 1).padStart(2, '0');
-                    const year = d.getFullYear();
                     let hours = d.getHours();
                     const minutes = String(d.getMinutes()).padStart(2, '0');
                     const ampm = hours >= 12 ? 'PM' : 'AM';
                     hours = hours % 12;
                     hours = hours ? hours : 12;
                     const strHours = String(hours).padStart(2, '0');
-                    recaHoraMap.set(parseInt(String(row.AUDI_IDDOC), 10), `${day}/${month}/${year} ${strHours}:${minutes} ${ampm}`);
+                    recaHoraMap.set(parseInt(String(row.AUDI_IDDOC), 10), `${strHours}:${minutes} ${ampm}`);
                 }
             }
         }
 
         const formatFechaAbono = (dVal: any, rid: number): string => {
-            if (recaHoraMap.has(rid)) {
-                return recaHoraMap.get(rid)!;
+            let strFecha = '';
+            if (dVal) {
+                const d = new Date(dVal);
+                if (!isNaN(d.getTime())) {
+                    const day = String(d.getDate()).padStart(2, '0');
+                    const month = String(d.getMonth() + 1).padStart(2, '0');
+                    const year = d.getFullYear();
+                    strFecha = `${day}/${month}/${year}`;
+                } else {
+                    strFecha = String(dVal);
+                }
             }
-            if (!dVal) return '';
-            const d = new Date(dVal);
-            if (isNaN(d.getTime())) return String(dVal);
-            const day = String(d.getDate()).padStart(2, '0');
-            const month = String(d.getMonth() + 1).padStart(2, '0');
-            const year = d.getFullYear();
-            return `${day}/${month}/${year}`;
+            const hora = recaHoraMap.get(rid);
+            if (strFecha && hora) {
+                return `${strFecha} ${hora}`;
+            }
+            return strFecha || hora || '';
         };
 
         const detalleAbonosTurno = abonosRegistradosTurno.map(a => {
