@@ -1361,6 +1361,33 @@ export class PedidoService {
 
         const rows = await query.orderBy('F.FACT_ID', 'desc').limit(200);
 
+        // Consultar horas reales de expedición en AUDITORIA para cada factura
+        const factIds = rows.map(r => r.FACT_ID).filter(Boolean);
+        const audiFactRows = factIds.length > 0
+            ? await db('AUDITORIA')
+                .where('TIDO_COD', 31)
+                .whereIn('AUDI_IDDOC', factIds)
+                .where('AUDI_OPER', 'I')
+                .select('AUDI_IDDOC', 'AUDI_HORA')
+                .catch(() => [])
+            : [];
+
+        const factHoraMap = new Map<number, string>();
+        for (const row of audiFactRows) {
+            if (row.AUDI_HORA) {
+                const d = new Date(row.AUDI_HORA);
+                if (!isNaN(d.getTime())) {
+                    let hours = d.getHours();
+                    const minutes = String(d.getMinutes()).padStart(2, '0');
+                    const ampm = hours >= 12 ? 'p. m.' : 'a. m.';
+                    hours = hours % 12;
+                    hours = hours ? hours : 12;
+                    const strHours = String(hours).padStart(2, '0');
+                    factHoraMap.set(parseInt(String(row.AUDI_IDDOC), 10), `${strHours}:${minutes} ${ampm}`);
+                }
+            }
+        }
+
         let pedidos: any[] = [];
 
         for (const r of rows) {
@@ -1509,21 +1536,24 @@ export class PedidoService {
                 subHuespedStr = '';
             }
 
-            // Formatear Fecha y Hora
-            const rawFecha = r.DINW_FECHA || r.FACT_FECHA;
+            // Formatear Fecha y Hora con hora real de expedición desde AUDITORIA
+            const rawFecha = r.FACT_FECHA || r.DINW_FECHA;
             let fechaTexto = '';
+            const fid = parseInt(String(r.FACT_ID), 10);
+            const horaAudit = factHoraMap.get(fid);
+
             if (rawFecha) {
                 const d = new Date(rawFecha);
                 if (!isNaN(d.getTime())) {
-                    const hasTime = r.DINW_FECHA !== null && r.DINW_FECHA !== undefined;
-                    fechaTexto = d.toLocaleDateString('es-CO', {
-                        year: 'numeric',
-                        month: '2-digit',
-                        day: '2-digit'
-                    }) + (hasTime ? `, ${d.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', hour12: true })}` : '');
+                    const day = String(d.getDate()).padStart(2, '0');
+                    const month = String(d.getMonth() + 1).padStart(2, '0');
+                    const year = d.getFullYear();
+                    fechaTexto = `${day}/${month}/${year}` + (horaAudit ? `, ${horaAudit}` : '');
                 } else {
-                    fechaTexto = String(rawFecha);
+                    fechaTexto = String(rawFecha) + (horaAudit ? `, ${horaAudit}` : '');
                 }
+            } else if (horaAudit) {
+                fechaTexto = `${new Date().toLocaleDateString('es-CO')}, ${horaAudit}`;
             } else {
                 fechaTexto = new Date().toLocaleDateString('es-CO');
             }
