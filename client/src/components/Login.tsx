@@ -1,15 +1,22 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 
 interface LoginProps {
   onLoginSuccess: (user: { username: string; token: string; role?: string }, token: string) => void;
+  sessionExpiredMessage?: string | null;
 }
 
-export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
+export const Login: React.FC<LoginProps> = ({ onLoginSuccess, sessionExpiredMessage }) => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(sessionExpiredMessage || null);
+
+  useEffect(() => {
+    if (sessionExpiredMessage) {
+      setErrorMessage(sessionExpiredMessage);
+    }
+  }, [sessionExpiredMessage]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

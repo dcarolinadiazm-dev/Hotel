@@ -13,9 +13,30 @@ import './App.css';
 
 type ActiveView = 'HABITACIONES' | 'CARRITO' | 'CERRAR_PEDIDO' | 'REPORTES' | 'CARTERA' | 'CIERRES' | 'RESERVAS_FUTURAS';
 
+function isTokenExpired(token: string): boolean {
+  try {
+    const parts = token.split('.');
+    if (parts.length !== 3) return true;
+    const payloadBase64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+    const jsonPayload = decodeURIComponent(
+      atob(payloadBase64)
+        .split('')
+        .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+        .join('')
+    );
+    const payload = JSON.parse(jsonPayload);
+    if (!payload.exp) return false;
+    // Margen de 10 segundos antes de la expiración exacta
+    return Date.now() >= (payload.exp * 1000 - 10000);
+  } catch {
+    return false;
+  }
+}
+
 function App() {
   const [currentUser, setCurrentUser] = useState<{ username: string } | null>(null);
   const [isVerifying, setIsVerifying] = useState(true);
+  const [sessionExpiredMsg, setSessionExpiredMsg] = useState<string | null>(null);
 
   // Estados de Navegación
   const [currentView, setCurrentView] = useState<ActiveView>('HABITACIONES');
@@ -34,11 +55,44 @@ function App() {
   // Estado del Sidebar (Colapsado / Expandido)
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
+  // 1. Detección Global de Respuestas 401 (Token Expirado o Inválido)
+  useEffect(() => {
+    const originalFetch = window.fetch;
+    window.fetch = async (...args) => {
+      const response = await originalFetch(...args);
+      const url = typeof args[0] === 'string' ? args[0] : (args[0] as Request).url || '';
+      
+      // Si el servidor responde 401 Unauthorized (y no es el endpoint de login)
+      if (response.status === 401 && !url.includes('/api/auth/login')) {
+        console.warn('⚠️ Sesión invalidada o expirada (401 detectado en petición):', url);
+        localStorage.removeItem('hotel_token');
+        localStorage.removeItem('hotel_user');
+        setCurrentUser(null);
+        setSessionExpiredMsg('Tu sesión ha expirado o el token ya no es válido. Por favor ingresa tus credenciales nuevamente.');
+      }
+      return response;
+    };
+
+    return () => {
+      window.fetch = originalFetch;
+    };
+  }, []);
+
+  // 2. Comprobación inicial de sesión al cargar la app
   useEffect(() => {
     const savedToken = localStorage.getItem('hotel_token');
     const savedUser = localStorage.getItem('hotel_user');
 
     if (savedToken && savedUser) {
+      if (isTokenExpired(savedToken)) {
+        localStorage.removeItem('hotel_token');
+        localStorage.removeItem('hotel_user');
+        setCurrentUser(null);
+        setSessionExpiredMsg('Tu sesión previa ha expirado (límite de 24 horas). Por favor ingresa nuevamente.');
+        setIsVerifying(false);
+        return;
+      }
+
       try {
         const parsedUser = JSON.parse(savedUser);
         fetch('/api/auth/me', {
@@ -53,6 +107,7 @@ function App() {
               localStorage.removeItem('hotel_token');
               localStorage.removeItem('hotel_user');
               setCurrentUser(null);
+              setSessionExpiredMsg('Tu sesión ha vencido. Por favor inicia sesión de nuevo.');
             }
           })
           .catch(() => {
@@ -70,20 +125,56 @@ function App() {
     setIsVerifying(false);
   }, []);
 
+  // 3. Temporizador y eventos al volver a la pestaña tras periodos de inactividad
+  useEffect(() => {
+    const checkTokenExpiration = () => {
+      const token = localStorage.getItem('hotel_token');
+      if (!token) return;
+
+      if (isTokenExpired(token)) {
+        console.warn('⚠️ Sesión expirada por tiempo límite de 24 horas.');
+        handleLogout('Tu sesión ha expirado por tiempo límite (24 horas). Por favor ingresa nuevamente para continuar.');
+      }
+    };
+
+    // Chequeo periódico cada 30 segundos
+    const interval = setInterval(checkTokenExpiration, 30000);
+
+    // Chequeo inmediato cuando el recepcionista vuelve al navegador / enfoca la pestaña
+    const handleVisibilityOrFocus = () => {
+      if (document.visibilityState === 'visible') {
+        checkTokenExpiration();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityOrFocus);
+    window.addEventListener('focus', handleVisibilityOrFocus);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', handleVisibilityOrFocus);
+      window.removeEventListener('focus', handleVisibilityOrFocus);
+    };
+  }, []);
+
   const handleLoginSuccess = (user: { username: string }) => {
+    setSessionExpiredMsg(null);
     setCurrentUser(user);
     setCurrentView('HABITACIONES');
     setSelectedHabitacion(null);
     setModalHabitacion(null);
   };
 
-  const handleLogout = () => {
+  const handleLogout = (reason?: string) => {
     localStorage.removeItem('hotel_token');
     localStorage.removeItem('hotel_user');
     setCurrentUser(null);
     setCurrentView('HABITACIONES');
     setSelectedHabitacion(null);
     setModalHabitacion(null);
+    if (reason) {
+      setSessionExpiredMsg(reason);
+    }
   };
 
   if (isVerifying) {
@@ -98,7 +189,12 @@ function App() {
   }
 
   if (!currentUser) {
-    return <Login onLoginSuccess={handleLoginSuccess} />;
+    return (
+      <Login
+        onLoginSuccess={handleLoginSuccess}
+        sessionExpiredMessage={sessionExpiredMsg}
+      />
+    );
   }
 
   return (
