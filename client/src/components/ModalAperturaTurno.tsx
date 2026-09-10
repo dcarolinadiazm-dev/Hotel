@@ -20,7 +20,7 @@ export const ModalAperturaTurno: React.FC<ModalAperturaTurnoProps> = ({
   onClose,
   onTurnoAbierto,
 }) => {
-  const [base, setBase] = useState<string>('0');
+  const [base, setBase] = useState<string>('300.000');
   const [observaciones, setObservaciones] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
@@ -37,9 +37,13 @@ export const ModalAperturaTurno: React.FC<ModalAperturaTurnoProps> = ({
 
     setLoading(true);
     try {
+      const token = localStorage.getItem('hotel_token');
       const res = await fetch('/api/turnos/apertura', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
         body: JSON.stringify({
           usuario: user.username,
           base: baseNum,
@@ -47,7 +51,14 @@ export const ModalAperturaTurno: React.FC<ModalAperturaTurnoProps> = ({
         }),
       });
 
-      const data = await res.json();
+      const text = await res.text();
+      let data: any = {};
+      try {
+        data = text ? JSON.parse(text) : {};
+      } catch {
+        throw new Error(`El servidor no devolvió una respuesta válida (${res.status} ${res.statusText}): ${text.slice(0, 80) || 'Sin datos'}`);
+      }
+
       if (!res.ok) {
         throw new Error(data.error || 'Error al realizar la apertura de turno');
       }

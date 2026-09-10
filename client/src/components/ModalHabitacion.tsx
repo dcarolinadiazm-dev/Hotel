@@ -618,16 +618,7 @@ export const ModalHabitacion = ({
     }
   };
 
-  const filteredArticulos = useMemo(() => {
-    if (!searchArticuloText.trim()) return articulos;
-    const q = searchArticuloText.trim().toLowerCase();
-    return articulos.filter((a) => {
-      const matchDesc = a.descripcion.toLowerCase().includes(q);
-      const matchCod = a.codigo.toLowerCase().includes(q);
-      const matchBar = a.codigosBarra && a.codigosBarra.some((b) => b.toLowerCase().includes(q));
-      return matchDesc || matchCod || matchBar;
-    });
-  }, [articulos, searchArticuloText]);
+
 
   const seleccionarArticulo = (found: ArticuloCatalogo, overrideLiprCod?: number) => {
     setSelectedArticuloCod(found.codigo);
@@ -645,36 +636,81 @@ export const ModalHabitacion = ({
     }
   };
 
-  const handleBarcodeScanOrSearch = (query: string) => {
+  const handleBarcodeScanOrSearch = async (query: string) => {
     const term = query.trim().toLowerCase();
     if (!term) return;
 
-    // 1. Buscar coincidencia exacta por código de barras o código de artículo
-    const exactMatch = articulos.find(
+    // Buscar coincidencia exacta por código de barras o código de artículo
+    const match = articulos.find(
       (a) =>
         a.codigo.toLowerCase() === term ||
         (a.codigosBarra && a.codigosBarra.some((b) => b.toLowerCase() === term))
     );
 
-    // 2. Si no es exacto, buscar si hay una única coincidencia en la descripción
-    const match = exactMatch || (filteredArticulos.length === 1 ? filteredArticulos[0] : null);
+    if (!match) {
+      alert(`⚠️ No se encontró ningún producto con el código de barras: "${query.trim()}"`);
+      setSearchArticuloText('');
+      return;
+    }
 
-    if (match) {
-      seleccionarArticulo(match);
-      const pObj = match.precios?.find((p) => p.liprCod === selectedLiprCod);
-      const pTxt = pObj && pObj.precio !== undefined ? formatMoney(pObj.precio) : 'Sin precio asignado';
+    // Obtener precio en la lista de precios seleccionada
+    const pObj = match.precios?.find((p) => p.liprCod === selectedLiprCod);
+    const precioNum = pObj && pObj.precio !== undefined ? Number(pObj.precio) : 0;
+
+    if (precioNum <= 0) {
       setActionFeedback({
-        type: 'success',
-        message: `🔍 Producto seleccionado: ${match.descripcion} (${pTxt})`,
+        type: 'error',
+        message: `⚠️ El producto "${match.descripcion}" (${match.codigo}) no tiene precio asignado en la lista seleccionada o su precio es $0. No se pudo agregar.`,
       });
       setSearchArticuloText('');
-    } else if (filteredArticulos.length > 1) {
-      setActionFeedback({
-        type: 'success',
-        message: `📋 Se encontraron ${filteredArticulos.length} coincidencias. Selecciona en el catálogo.`,
+      return;
+    }
+
+    const token = localStorage.getItem('hotel_token');
+    try {
+      const res = await fetch('/api/pedidos/agregar-item', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          habitacionId: habitacion.id,
+          item: {
+            articuloCod: match.codigo.trim(),
+            artiCod: match.codigo.trim(),
+            descripcion: match.descripcion.trim(),
+            unidad: match.unidad || 'UND',
+            cantidad: 1,
+            precio: precioNum,
+            liprCod: selectedLiprCod,
+          },
+        }),
       });
-    } else {
-      alert(`⚠️ No se encontró ningún producto con el código de barras o nombre: "${query}"`);
+
+      if (res.ok) {
+        setSearchArticuloText('');
+        setActionFeedback({
+          type: 'success',
+          message: `⚡ Producto escaneado y agregado: ${match.descripcion} (1 x ${formatMoney(precioNum)})`,
+        });
+        await fetchRoomDetails();
+        if (onHabitacionUpdated) onHabitacionUpdated();
+      } else {
+        const data = await res.json().catch(() => ({}));
+        setActionFeedback({
+          type: 'error',
+          message: data.error || 'Error al agregar producto por código de barras.',
+        });
+      }
+    } catch (err: any) {
+      console.error('Error al agregar producto escaneado:', err);
+      setActionFeedback({
+        type: 'error',
+        message: err.message || 'Error de conexión al agregar producto.',
+      });
+    } finally {
+      setSearchArticuloText('');
     }
   };
 
@@ -1822,13 +1858,13 @@ export const ModalHabitacion = ({
                       {/* Buscador por nombre y código de barras */}
                       <div className="modal-form-group" style={{ marginBottom: '10px' }}>
                         <label className="modal-form-label">
-                          🔍 Buscar producto o 📷 Escanear código de barras:
+                          🔍 Escanear código de barras:
                         </label>
                         <div className="barcode-search-box-row">
                           <input
                             type="text"
                             className="modal-form-input barcode-search-input"
-                            placeholder="Escriba nombre, código o escanee con lector de código de barras..."
+                            placeholder="Escanee el código de barras con el lector..."
                             value={searchArticuloText}
                             onChange={(e) => setSearchArticuloText(e.target.value)}
                             onKeyDown={(e) => {
@@ -1844,7 +1880,7 @@ export const ModalHabitacion = ({
                               type="button"
                               className="btn-clear-search-text"
                               onClick={() => setSearchArticuloText('')}
-                              title="Limpiar búsqueda"
+                              title="Limpiar"
                             >
                               ✕
                             </button>
@@ -1855,7 +1891,7 @@ export const ModalHabitacion = ({
                       <div className="modal-form-row">
                         <div className="modal-form-group flex-2">
                           <label className="modal-form-label">
-                            Catálogo de Artículos {searchArticuloText ? `(${filteredArticulos.length} encontrados)` : ''}:
+                            Catálogo de Artículos:
                           </label>
                           <select
                             className="modal-form-select"
@@ -1863,7 +1899,7 @@ export const ModalHabitacion = ({
                             onChange={handleArticuloSelect}
                           >
                             <option value="">-- Seleccione un artículo o ingrese manual --</option>
-                            {filteredArticulos.map((a) => {
+                            {articulos.map((a) => {
                               const pObj = a.precios?.find((p) => p.liprCod === selectedLiprCod);
                               const precioTxt = pObj && pObj.precio !== undefined ? formatMoney(pObj.precio) : 'Sin precio en esta lista';
                               return (

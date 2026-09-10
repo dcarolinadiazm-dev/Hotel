@@ -36,7 +36,7 @@ export class TurnoController {
             const resumen = await TurnoService.getResumenCierre(idTurno);
             res.json(resumen);
         } catch (error: any) {
-            console.error('Error en TurnoController.getResumenCierre:', error.message);
+            console.error('Error en TurnoController.getResumenCierre:', error);
             res.status(500).json({ error: error.message || 'Error al obtener resumen de cierre Z' });
         }
     }

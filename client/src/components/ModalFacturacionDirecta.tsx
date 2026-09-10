@@ -268,16 +268,6 @@ export const ModalFacturacionDirecta: React.FC<ModalFacturacionDirectaProps> = (
 
   const [searchArticuloText, setSearchArticuloText] = useState<string>('');
 
-  const filteredArticulos = useMemo(() => {
-    if (!searchArticuloText.trim()) return articulos;
-    const q = searchArticuloText.trim().toLowerCase();
-    return articulos.filter((a) => {
-      const matchDesc = a.descripcion.toLowerCase().includes(q);
-      const matchCod = a.codigo.toLowerCase().includes(q);
-      const matchBar = a.codigosBarra && a.codigosBarra.some((b) => b.toLowerCase().includes(q));
-      return matchDesc || matchCod || matchBar;
-    });
-  }, [articulos, searchArticuloText]);
 
   const seleccionarArticulo = (found: ArticuloItem) => {
     setSelectedArticuloCod(found.codigo);
@@ -299,31 +289,65 @@ export const ModalFacturacionDirecta: React.FC<ModalFacturacionDirectaProps> = (
     const term = query.trim().toLowerCase();
     if (!term) return;
 
-    // 1. Coincidencia exacta por código de barras o código de artículo
-    const exactMatch = articulos.find(
+    // Buscar coincidencia exacta por código de barras o código de artículo
+    const match = articulos.find(
       (a) =>
         a.codigo.toLowerCase() === term ||
         (a.codigosBarra && a.codigosBarra.some((b) => b.toLowerCase() === term))
     );
 
-    // 2. Si no es exacto, buscar si hay una única coincidencia
-    const match = exactMatch || (filteredArticulos.length === 1 ? filteredArticulos[0] : null);
-
-    if (match) {
-      seleccionarArticulo(match);
-      setFeedback({
-        type: 'success',
-        message: `🔍 Producto seleccionado: ${match.descripcion} (${formatMoney(match.precio)})`,
-      });
+    if (!match) {
+      alert(`⚠️ No se encontró ningún producto con el código de barras: "${query.trim()}"`);
       setSearchArticuloText('');
-    } else if (filteredArticulos.length > 1) {
-      setFeedback({
-        type: 'success',
-        message: `📋 Se encontraron ${filteredArticulos.length} coincidencias. Selecciona en el catálogo.`,
-      });
-    } else {
-      alert(`⚠️ No se encontró ningún producto con el código de barras o nombre: "${query}"`);
+      return;
     }
+
+    // Obtener precio en la lista de precios seleccionada
+    let precioFinal = match.precio;
+    if (match.precios && match.precios.length > 0) {
+      const precioEnLista = match.precios.find((p) => p.liprCod === selectedLiprCod);
+      if (precioEnLista && precioEnLista.precio !== undefined) {
+        precioFinal = precioEnLista.precio;
+      }
+    }
+
+    if (precioFinal <= 0) {
+      alert(`⚠️ El artículo "${match.descripcion}" no tiene precio asignado en la lista seleccionada o su precio es $0. No se puede agregar.`);
+      setSearchArticuloText('');
+      return;
+    }
+
+    // Agregar de una vez al carrito con cantidad 1 (o incrementar +1 si ya existe)
+    setCartItems((prev) => {
+      const existing = prev.find(
+        (it) => it.articulo.toLowerCase() === match.codigo.toLowerCase() && it.lista === selectedLiprCod
+      );
+      if (existing) {
+        return prev.map((it) =>
+          it.id === existing.id ? { ...it, cantidad: it.cantidad + 1 } : it
+        );
+      }
+      const newItem: LineaCarrito = {
+        id: `${Date.now()}-${Math.random().toString(36).substring(2, 5)}`,
+        articulo: match.codigo.trim() || 'GEN-01',
+        descripcion: match.descripcion.trim() || match.codigo,
+        cantidad: 1,
+        precio: precioFinal,
+        descuento: 0,
+        dtoPorc: 0,
+        ivaPorc: match.ivaPorc || 0,
+        tiva: match.taivCod || 0,
+        lista: selectedLiprCod,
+        unidad: match.unidad || 'UND',
+      };
+      return [...prev, newItem];
+    });
+
+    setFeedback({
+      type: 'success',
+      message: `⚡ Producto escaneado y agregado: ${match.descripcion} (1 x ${formatMoney(precioFinal)})`,
+    });
+    setSearchArticuloText('');
   };
 
   const handleArticuloSelect = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -936,13 +960,13 @@ export const ModalFacturacionDirecta: React.FC<ModalFacturacionDirectaProps> = (
                     {/* Buscador por nombre y código de barras */}
                     <div className="modal-form-group" style={{ marginBottom: '10px' }}>
                       <label className="modal-form-label">
-                        🔍 Buscar producto o 📷 Escanear código de barras:
+                        🔍 Escanear código de barras:
                       </label>
                       <div className="barcode-search-box-row">
                         <input
                           type="text"
                           className="modal-form-input barcode-search-input"
-                          placeholder="Escriba nombre, código o escanee con lector de código de barras..."
+                          placeholder="Escanee el código de barras con el lector..."
                           value={searchArticuloText}
                           onChange={(e) => setSearchArticuloText(e.target.value)}
                           onKeyDown={(e) => {
@@ -958,7 +982,7 @@ export const ModalFacturacionDirecta: React.FC<ModalFacturacionDirectaProps> = (
                             type="button"
                             className="btn-clear-search-text"
                             onClick={() => setSearchArticuloText('')}
-                            title="Limpiar búsqueda"
+                            title="Limpiar"
                           >
                             ✕
                           </button>
@@ -969,7 +993,7 @@ export const ModalFacturacionDirecta: React.FC<ModalFacturacionDirectaProps> = (
                     <div className="modal-form-row">
                       <div className="modal-form-group flex-2">
                         <label className="modal-form-label">
-                          Catálogo de Artículos {searchArticuloText ? `(${filteredArticulos.length} encontrados)` : ''}:
+                          Catálogo de Artículos:
                         </label>
                         <select
                           className="modal-form-select"
@@ -977,7 +1001,7 @@ export const ModalFacturacionDirecta: React.FC<ModalFacturacionDirectaProps> = (
                           onChange={handleArticuloSelect}
                         >
                           <option value="">-- Seleccione un artículo o ingrese manual --</option>
-                          {filteredArticulos.map((a) => (
+                          {articulos.map((a) => (
                             <option key={a.codigo} value={a.codigo}>
                               {a.descripcion} ({formatMoney(a.precio)}) - {a.unidad} {a.ivaPorc ? `[IVA ${a.ivaPorc}%]` : ''}
                             </option>

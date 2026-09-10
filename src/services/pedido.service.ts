@@ -863,12 +863,16 @@ export class PedidoService {
                     console.warn('Aviso sincronizando FADE_DTOPORC/FADE_DTOMONTO/FADE_TOTAL/FADE_OBS:', dtoErr.message);
                 }
 
-                // 1. Contabilizar la Factura de Venta generada
-                console.log(`[FACTURACION-PASO-13] Contabilizando Factura de Venta ID ${idGenerado} (${prefijo})...`);
-                await ContabilidadService.contabilizarFactura(idGenerado, prefijo);
-
-                // 2. Garantizar sincronización exacta de formas de pago en FACTURAS_CONTADO_PAGO y RECIBOS_CAJA_PAGO
+                // 1. Garantizar sincronización exacta de formas de pago en FACTURAS_CONTADO_PAGO y RECIBOS_CAJA_PAGO
                 await PedidoService.syncFacturaPagos(idGenerado, listaPagos);
+
+                // 2. Contabilizar la Factura de Venta generada
+                try {
+                    console.log(`[FACTURACION-PASO-13] Contabilizando Factura de Venta ID ${idGenerado} (${prefijo})...`);
+                    await ContabilidadService.contabilizarFactura(idGenerado, prefijo);
+                } catch (contErr: any) {
+                    console.warn('Aviso contabilizando factura:', contErr.message);
+                }
 
                 // 3. Obtener abonos para sincronizar
                 const abonosResult = await AbonoService.getAbonos(habitacionId, clienteNit);
@@ -2444,12 +2448,16 @@ export class PedidoService {
                     }
                 } catch (dtoErr: any) { }
 
-                // 1. Contabilizar la Factura de Venta consolidada
-                console.log(`[FACTURACION-MULTI] Contabilizando Factura de Venta ID ${idGenerado} (${prefijo})...`);
-                await ContabilidadService.contabilizarFactura(idGenerado, prefijo);
-
-                // 2. Garantizar sincronización exacta de formas de pago en FACTURAS_CONTADO_PAGO y RECIBOS_CAJA_PAGO
+                // 1. Garantizar sincronización exacta de formas de pago en FACTURAS_CONTADO_PAGO y RECIBOS_CAJA_PAGO
                 await PedidoService.syncFacturaPagos(idGenerado, listaPagos);
+
+                // 2. Contabilizar la Factura de Venta consolidada
+                try {
+                    console.log(`[FACTURACION-MULTI] Contabilizando Factura de Venta ID ${idGenerado} (${prefijo})...`);
+                    await ContabilidadService.contabilizarFactura(idGenerado, prefijo);
+                } catch (contErr: any) {
+                    console.warn('Aviso contabilizando factura multi:', contErr.message);
+                }
 
                 // 3. Obtener abonos para sincronizar de todas las habitaciones consolidadas
                 let abonosList: any[] = [];

@@ -24,10 +24,19 @@ export const ModalCierreZ: React.FC<ModalCierreZProps> = ({
       setLoading(true);
       setError(null);
       try {
-        const res = await fetch(`/api/turnos/resumen-cierre/${idTurno}`);
-        const data = await res.json();
+        const token = localStorage.getItem('hotel_token');
+        const res = await fetch(`/api/turnos/resumen-cierre/${idTurno}`, {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        });
+        const text = await res.text();
+        let data: any = {};
+        try {
+          data = text ? JSON.parse(text) : {};
+        } catch {
+          throw new Error(`El servidor no devolvió una respuesta válida (${res.status} ${res.statusText}): ${text.slice(0, 80) || 'Sin datos'}`);
+        }
         if (!res.ok) {
-          throw new Error(data.error || 'Error al obtener resumen de Cierre Z');
+          throw new Error(data.error || `Error al obtener resumen de Cierre Z (${res.status})`);
         }
         setResumen(data);
       } catch (err: any) {
@@ -48,24 +57,35 @@ export const ModalCierreZ: React.FC<ModalCierreZProps> = ({
     setGuardando(true);
     setError(null);
     try {
+      const token = localStorage.getItem('hotel_token');
       const res = await fetch('/api/turnos/cierre', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
         body: JSON.stringify({
           idTurno,
           observaciones: observaciones.trim() || undefined,
         }),
       });
 
-      const data = await res.json();
+      const text = await res.text();
+      let data: any = {};
+      try {
+        data = text ? JSON.parse(text) : {};
+      } catch {
+        throw new Error(`El servidor no devolvió una respuesta válida (${res.status} ${res.statusText}): ${text.slice(0, 80) || 'Sin datos'}`);
+      }
+
       if (!res.ok) {
-        throw new Error(data.error || 'Error al procesar Cierre Z');
+        throw new Error(data.error || `Error al procesar Cierre Z (${res.status})`);
       }
 
       if (resumen) {
         const dataFinal: ResumenCierreZData = {
           ...resumen,
-          fechaCierre: data.resultado.fechaCierre,
+          fechaCierre: data.resultado?.fechaCierre || new Date().toISOString(),
           observaciones: observaciones.trim() || undefined,
         };
         onCierreCompletado(dataFinal);
@@ -152,6 +172,8 @@ export const ModalCierreZ: React.FC<ModalCierreZProps> = ({
 
               {/* Tarjetas de Totales */}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '10px', marginBottom: '20px' }}>
+                {/* FILA 1 */}
+                {/* 1. Base Inicial */}
                 <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '10px', padding: '12px' }}>
                   <span style={{ fontSize: '11px', fontWeight: 600, color: '#1e40af' }}>💵 Base Inicial</span>
                   <div style={{ fontSize: '17px', fontWeight: 800, color: '#1e3a8a', marginTop: '4px' }}>
@@ -159,34 +181,15 @@ export const ModalCierreZ: React.FC<ModalCierreZProps> = ({
                   </div>
                 </div>
 
-                <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '10px', padding: '12px' }}>
-                  <span style={{ fontSize: '11px', fontWeight: 600, color: '#166534' }}>🧾 Total Facturado</span>
-                  <div style={{ fontSize: '17px', fontWeight: 800, color: '#14532d', marginTop: '4px' }}>
-                    ${resumen.totalVentasFacturadas.toLocaleString('es-CO')}
+                {/* 2. Efectivo Esperado */}
+                <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '10px', padding: '12px' }}>
+                  <span style={{ fontSize: '11px', fontWeight: 600, color: '#92400e' }}>💰 Efectivo Esperado</span>
+                  <div style={{ fontSize: '17px', fontWeight: 800, color: '#b45309', marginTop: '4px' }}>
+                    ${resumen.totalEfectivoEsperado.toLocaleString('es-CO')}
                   </div>
                 </div>
 
-                <div style={{ background: '#faf5ff', border: '1px solid #e9d5ff', borderRadius: '10px', padding: '12px' }}>
-                  <span style={{ fontSize: '11px', fontWeight: 600, color: '#6b21a8' }}>💳 Total Recaudos</span>
-                  <div style={{ fontSize: '17px', fontWeight: 800, color: '#581c87', marginTop: '4px' }}>
-                    ${resumen.totalRecaudadoPagos.toLocaleString('es-CO')}
-                  </div>
-                </div>
-
-                <div style={{ background: '#f0fdfa', border: '1px solid #99f6e4', borderRadius: '10px', padding: '12px' }}>
-                  <span style={{ fontSize: '11px', fontWeight: 600, color: '#0f766e' }}>📥 Abonos del Turno</span>
-                  <div style={{ fontSize: '17px', fontWeight: 800, color: '#115e59', marginTop: '4px' }}>
-                    ${(resumen.totalAbonosTurno || 0).toLocaleString('es-CO')}
-                  </div>
-                </div>
-
-                <div style={{ background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: '10px', padding: '12px' }}>
-                  <span style={{ fontSize: '11px', fontWeight: 600, color: '#c2410c' }}>⏳ Abonos Antiguos</span>
-                  <div style={{ fontSize: '17px', fontWeight: 800, color: '#9a3412', marginTop: '4px' }}>
-                    ${(resumen.totalAbonosAntiguos || 0).toLocaleString('es-CO')}
-                  </div>
-                </div>
-
+                {/* 3. Consignaciones */}
                 <div style={{ background: '#f0f9ff', border: '1px solid #7dd3fc', borderRadius: '10px', padding: '12px' }}>
                   <span style={{ fontSize: '11px', fontWeight: 600, color: '#0369a1' }}>🏦 Consignaciones</span>
                   <div style={{ fontSize: '17px', fontWeight: 800, color: '#0c4a6e', marginTop: '4px' }}>
@@ -194,6 +197,7 @@ export const ModalCierreZ: React.FC<ModalCierreZProps> = ({
                   </div>
                 </div>
 
+                {/* 4. Cartera */}
                 <div style={{ background: '#fdf4ff', border: '1px solid #e879f9', borderRadius: '10px', padding: '12px' }}>
                   <span style={{ fontSize: '11px', fontWeight: 600, color: '#86198f' }}>📋 Cartera</span>
                   <div style={{ fontSize: '17px', fontWeight: 800, color: '#701a75', marginTop: '4px' }}>
@@ -201,10 +205,36 @@ export const ModalCierreZ: React.FC<ModalCierreZProps> = ({
                   </div>
                 </div>
 
-                <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '10px', padding: '12px' }}>
-                  <span style={{ fontSize: '11px', fontWeight: 600, color: '#92400e' }}>💰 Efectivo Esperado</span>
-                  <div style={{ fontSize: '17px', fontWeight: 800, color: '#b45309', marginTop: '4px' }}>
-                    ${resumen.totalEfectivoEsperado.toLocaleString('es-CO')}
+                {/* 5. Abonos del Turno */}
+                <div style={{ background: '#f0fdfa', border: '1px solid #99f6e4', borderRadius: '10px', padding: '12px' }}>
+                  <span style={{ fontSize: '11px', fontWeight: 600, color: '#0f766e' }}>📥 Abonos del Turno</span>
+                  <div style={{ fontSize: '17px', fontWeight: 800, color: '#115e59', marginTop: '4px' }}>
+                    ${(resumen.totalAbonosTurno || 0).toLocaleString('es-CO')}
+                  </div>
+                </div>
+
+                {/* FILA 2 */}
+                {/* 6. Total Recaudos */}
+                <div style={{ background: '#faf5ff', border: '1px solid #e9d5ff', borderRadius: '10px', padding: '12px' }}>
+                  <span style={{ fontSize: '11px', fontWeight: 600, color: '#6b21a8' }}>💳 Total Recaudos</span>
+                  <div style={{ fontSize: '17px', fontWeight: 800, color: '#581c87', marginTop: '4px' }}>
+                    ${resumen.totalRecaudadoPagos.toLocaleString('es-CO')}
+                  </div>
+                </div>
+
+                {/* 7. Total Facturado */}
+                <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '10px', padding: '12px' }}>
+                  <span style={{ fontSize: '11px', fontWeight: 600, color: '#166534' }}>🧾 Total Facturado</span>
+                  <div style={{ fontSize: '17px', fontWeight: 800, color: '#14532d', marginTop: '4px' }}>
+                    ${resumen.totalVentasFacturadas.toLocaleString('es-CO')}
+                  </div>
+                </div>
+
+                {/* 8. Abonos Antiguos */}
+                <div style={{ background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: '10px', padding: '12px' }}>
+                  <span style={{ fontSize: '11px', fontWeight: 600, color: '#c2410c' }}>⏳ Abonos Antiguos</span>
+                  <div style={{ fontSize: '17px', fontWeight: 800, color: '#9a3412', marginTop: '4px' }}>
+                    ${(resumen.totalAbonosAntiguos || 0).toLocaleString('es-CO')}
                   </div>
                 </div>
               </div>
@@ -246,7 +276,7 @@ export const ModalCierreZ: React.FC<ModalCierreZProps> = ({
                         return (
                           <tr style={{ background: '#f8fafc', borderTop: '2px solid #cbd5e1', fontWeight: 800 }}>
                             <td style={{ padding: '9px 12px', color: '#0f172a', fontWeight: 800 }}>
-                              Total Ventas
+                              Total Recaudado
                             </td>
                             <td style={{ padding: '9px 12px', textAlign: 'center', color: '#334155', fontWeight: 700 }}>
                               {totalTransacciones}

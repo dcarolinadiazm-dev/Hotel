@@ -219,27 +219,35 @@ export const ModalImpresionCierreZ: React.FC<ModalImpresionCierreZProps> = ({
                 <span className="pos-value bold">${data.turno.base.toLocaleString('es-CO')}</span>
               </div>
               <div className="pos-info-row">
-                <span className="pos-label">TOTAL FACTURADO:</span>
-                <span className="pos-value bold">${data.totalVentasFacturadas.toLocaleString('es-CO')}</span>
+                <span className="pos-label">EFECTIVO ESPERADO:</span>
+                <span className="pos-value bold" style={{ color: '#047857' }}>
+                  ${data.totalEfectivoEsperado.toLocaleString('es-CO')}
+                </span>
               </div>
               <div className="pos-info-row">
-                <span className="pos-label">TOTAL RECAUDOS:</span>
-                <span className="pos-value bold">${data.totalRecaudadoPagos.toLocaleString('es-CO')}</span>
+                <span className="pos-label">CONSIGNACIONES:</span>
+                <span className="pos-value bold">${(data.totalConsignaciones || 0).toLocaleString('es-CO')}</span>
+              </div>
+              <div className="pos-info-row">
+                <span className="pos-label">CARTERA:</span>
+                <span className="pos-value bold">${(data.totalCartera || 0).toLocaleString('es-CO')}</span>
               </div>
               <div className="pos-info-row">
                 <span className="pos-label">ABONOS DEL TURNO:</span>
                 <span className="pos-value bold">${(data.totalAbonosTurno || 0).toLocaleString('es-CO')}</span>
               </div>
+              <div className="pos-divider-dashed" />
+              <div className="pos-info-row">
+                <span className="pos-label">TOTAL RECAUDOS:</span>
+                <span className="pos-value bold">${data.totalRecaudadoPagos.toLocaleString('es-CO')}</span>
+              </div>
+              <div className="pos-info-row">
+                <span className="pos-label">TOTAL FACTURADO:</span>
+                <span className="pos-value bold">${data.totalVentasFacturadas.toLocaleString('es-CO')}</span>
+              </div>
               <div className="pos-info-row">
                 <span className="pos-label">ABONOS ANTIGUOS:</span>
                 <span className="pos-value bold">${(data.totalAbonosAntiguos || 0).toLocaleString('es-CO')}</span>
-              </div>
-              <div className="pos-divider-dashed" />
-              <div className="pos-info-row" style={{ fontSize: '12.5px', marginTop: '3px' }}>
-                <span className="pos-label">EFECTIVO ESPERADO:</span>
-                <span className="pos-value bold" style={{ color: '#047857' }}>
-                  ${data.totalEfectivoEsperado.toLocaleString('es-CO')}
-                </span>
               </div>
             </div>
 
@@ -275,7 +283,7 @@ export const ModalImpresionCierreZ: React.FC<ModalImpresionCierreZProps> = ({
                     const totalVentas = (data.pagosPorForma || []).reduce((acc, p) => acc + (Number(p.total) || 0), 0);
                     return (
                       <tr style={{ borderTop: '1px dashed #000', fontWeight: 'bold' }}>
-                        <td style={{ textAlign: 'left' }}>TOTAL VENTAS</td>
+                        <td style={{ textAlign: 'left' }}>TOTAL RECAUDADO</td>
                         <td style={{ textAlign: 'center' }}>{totalTransacciones}</td>
                         <td style={{ textAlign: 'right' }}>
                           ${totalVentas.toLocaleString('es-CO')}

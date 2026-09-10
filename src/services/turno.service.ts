@@ -238,14 +238,109 @@ export class TurnoService {
             }
         }
 
-        // 3. Consultar pagos directos de las facturas de este turno (FACTURAS_CONTADO_PAGO)
-        const pagosFacturas = factIds.length > 0
+        // 3. Consultar pagos de las facturas de este turno
+        // a) Pagos registrados en FACTURAS_CONTADO_PAGO
+        const pagosFacturasContado = factIds.length > 0
             ? await db('FACTURAS_CONTADO_PAGO')
                 .whereIn('FCNT_ID', factIds)
                 .andWhere(function () {
                     this.where('FCNP_ANULADO', '!=', 'S').orWhereNull('FCNP_ANULADO');
                 })
             : [];
+
+        // b) Pagos registrados en RECIBOS_CAJA_DETALLE + RECIBOS_CAJA_PAGO para las facturas (fallback de Firebird)
+        const rcFacturas = factIds.length > 0
+            ? await db('RECIBOS_CAJA_DETALLE')
+                .where('RCDE_TIPODOC', 31)
+                .whereIn('RCDE_IDDOC', factIds)
+                .andWhere(function () {
+                    this.where('RCDE_ANULADO', '!=', 'S').orWhereNull('RCDE_ANULADO');
+                })
+                .select('RECA_ID', 'RCDE_IDDOC')
+            : [];
+
+        const rcIdsFacturas = rcFacturas.map(r => r.RECA_ID);
+        const rcPagosFacturas = rcIdsFacturas.length > 0
+            ? await db('RECIBOS_CAJA_PAGO')
+                .whereIn('RECA_ID', rcIdsFacturas)
+                .andWhere(function () {
+                    this.where('RCPA_ANULADO', '!=', 'S').orWhereNull('RCPA_ANULADO');
+                })
+                .select('RECA_ID', 'FOPA_ID', 'RCPA_MONTO')
+            : [];
+
+        const recaToFactId = new Map<number, number>();
+        for (const rf of rcFacturas) {
+            recaToFactId.set(parseInt(String(rf.RECA_ID), 10), parseInt(String(rf.RCDE_IDDOC), 10));
+        }
+
+        // c) Anticipos / abonos aplicados (cruce) a las facturas
+        const crucesAbonosRows = factIds.length > 0
+            ? await db('APLICACION_CLIENTE_DETALLE')
+                .where('ACDE_TIPODOC', 31)
+                .whereIn('ACDE_IDDOC', factIds)
+                .andWhere(function () {
+                    this.where('ACDE_ANULADO', '!=', 'S').orWhereNull('ACDE_ANULADO');
+                })
+                .select('ACDE_IDDOC', 'ACDE_APLICADO')
+            : [];
+
+        // Agrupar formas de pago de facturas
+        const pagosFacturasConsolidados: Array<{ fopaId: number; monto: number }> = [];
+
+        const fcpByFact = new Map<number, Array<{ fopaId: number; monto: number }>>();
+        for (const r of pagosFacturasContado) {
+            const fid = parseInt(String(r.FCNT_ID), 10);
+            if (!fcpByFact.has(fid)) fcpByFact.set(fid, []);
+            fcpByFact.get(fid)!.push({
+                fopaId: parseInt(String(r.FOPA_ID), 10),
+                monto: parseFloat(String(r.FCNP_MONTO || 0))
+            });
+        }
+
+        const rcByFact = new Map<number, Array<{ fopaId: number; monto: number }>>();
+        for (const r of rcPagosFacturas) {
+            const rid = parseInt(String(r.RECA_ID), 10);
+            const fid = recaToFactId.get(rid);
+            if (fid) {
+                if (!rcByFact.has(fid)) rcByFact.set(fid, []);
+                rcByFact.get(fid)!.push({
+                    fopaId: parseInt(String(r.FOPA_ID), 10),
+                    monto: parseFloat(String(r.RCPA_MONTO || 0))
+                });
+            }
+        }
+
+        const crucesByFact = new Map<number, number>();
+        for (const r of crucesAbonosRows) {
+            const fid = parseInt(String(r.ACDE_IDDOC), 10);
+            crucesByFact.set(fid, (crucesByFact.get(fid) || 0) + Math.abs(parseFloat(String(r.ACDE_APLICADO || 0))));
+        }
+
+        for (const f of facturasEmitidasList) {
+            const fid = parseInt(String(f.FACT_ID), 10);
+            const totalFactura = parseFloat(String(f.FACT_TOTAL || 0));
+            const primaryFopa = parseInt(String(f.FACT_FORMAP || 1), 10) || 1;
+
+            if (fcpByFact.has(fid) && fcpByFact.get(fid)!.length > 0) {
+                for (const p of fcpByFact.get(fid)!) {
+                    pagosFacturasConsolidados.push(p);
+                }
+            } else if (rcByFact.has(fid) && rcByFact.get(fid)!.length > 0) {
+                for (const p of rcByFact.get(fid)!) {
+                    pagosFacturasConsolidados.push(p);
+                }
+            } else {
+                const abonoCruzado = crucesByFact.get(fid) || 0;
+                const saldoPendiente = Math.max(0, Math.round((totalFactura - abonoCruzado) * 100) / 100);
+                if (saldoPendiente > 0) {
+                    pagosFacturasConsolidados.push({
+                        fopaId: primaryFopa,
+                        monto: saldoPendiente
+                    });
+                }
+            }
+        }
 
         // 4. Consultar abonos registrados dentro de este turno
         const abonosRegistradosTurno = await db(tables.ANTICIPOS_CLIENTE)
@@ -316,9 +411,9 @@ export class TurnoService {
         // Consolidar pagos por cada forma (facturas emitidas en el turno + abonos registrados en el turno)
         const pagosAcumulados = new Map<number, { total: number; cantidad: number }>();
 
-        for (const pf of pagosFacturas) {
-            const fopaId = parseInt(String(pf.FOPA_ID), 10);
-            const monto = parseFloat(String(pf.FCNP_MONTO || '0'));
+        for (const pf of pagosFacturasConsolidados) {
+            const fopaId = pf.fopaId;
+            const monto = pf.monto;
             const actual = pagosAcumulados.get(fopaId) || { total: 0, cantidad: 0 };
             pagosAcumulados.set(fopaId, {
                 total: actual.total + monto,
@@ -360,7 +455,9 @@ export class TurnoService {
 
         totalRecaudadoPagos = Math.round(totalRecaudadoPagos * 100) / 100;
         totalEfectivoRecaudado = Math.round(totalEfectivoRecaudado * 100) / 100;
-        const totalEfectivoEsperado = Math.round((turno.BASE + totalEfectivoRecaudado) * 100) / 100;
+
+        // Efectivo Esperado: efectivo real recaudado durante el turno (sin sumar la base inicial para evitar confusión)
+        const totalEfectivoEsperado = totalEfectivoRecaudado;
 
         // Totales por categoría de forma de pago
         let totalConsignaciones = 0;
@@ -368,8 +465,9 @@ export class TurnoService {
 
         for (const fp of formasPagoRows) {
             const fopaId = parseInt(String(fp.FOPA_ID), 10);
-            const esConsigna = String(fp.FOPA_CONSIGNA || '').trim().toUpperCase() === 'S';
-            const esCartera = String(fp.FOPA_CARTERA || '').trim().toUpperCase() === 'S';
+            const nom = String(fp.FOPA_NOM || '').trim().toUpperCase();
+            const esConsigna = String(fp.FOPA_CONSIGNA || '').trim().toUpperCase() === 'S' || nom.includes('BANCO') || nom.includes('TRANSFERENCIA') || nom.includes('BANCOL');
+            const esCartera = String(fp.FOPA_CARTERA || '').trim().toUpperCase() === 'S' || nom.includes('CREDITO');
             const data = pagosAcumulados.get(fopaId) || { total: 0, cantidad: 0 };
             if (esConsigna) totalConsignaciones += data.total;
             else if (esCartera) totalCartera += data.total;
@@ -660,7 +758,18 @@ export class TurnoService {
         const base = parseFloat(String(turnoRow.BASE || '0'));
 
         const efectivoPago = pagosPorForma.find(p => p.formaPagoId === 1 || p.nombreForma.toUpperCase().includes('EFECTIVO'))?.total || 0;
-        const totalEfectivoEsperado = base + efectivoPago;
+        const totalEfectivoEsperado = efectivoPago;
+
+        let totalConsignaciones = 0;
+        let totalCartera = 0;
+        for (const p of pagosPorForma) {
+            const nom = p.nombreForma.toUpperCase();
+            if (nom.includes('BANCO') || nom.includes('TRANSFERENCIA') || nom.includes('BANCOL') || nom.includes('CONSIGNA')) {
+                totalConsignaciones += p.total;
+            } else if (nom.includes('CREDITO') || nom.includes('CARTERA')) {
+                totalCartera += p.total;
+            }
+        }
 
         return {
             turno: {
@@ -677,7 +786,10 @@ export class TurnoService {
             totalRecaudadoPagos,
             totalAbonosTurno: 0,
             totalAbonosAntiguos: 0,
+            totalEfectivoRecaudado: efectivoPago,
             totalEfectivoEsperado,
+            totalConsignaciones: Math.round(totalConsignaciones * 100) / 100,
+            totalCartera: Math.round(totalCartera * 100) / 100,
             facturasGeneradas,
             habitacionesEstado,
             totalesHabitaciones: {
