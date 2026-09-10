@@ -46,6 +46,8 @@ export class AuthController {
                     }
                     if (userRow.USER_CARGO) {
                         cargo = String(userRow.USER_CARGO).trim();
+                    } else if (userRow.USER_DEPARTAMENTO) {
+                        cargo = String(userRow.USER_DEPARTAMENTO).trim();
                     }
                 }
             } catch (e: any) { }
