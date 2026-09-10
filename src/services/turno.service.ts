@@ -218,24 +218,22 @@ export class TurnoService {
 
         const totalVentasFacturadas = facturasGeneradas.reduce((acc, f) => acc + f.total, 0);
 
-        // Determinar límites de recibos y anticipos para separar los de este turno vs turnos anteriores
-        let maxPrevRecaId = prevLimits['RC'] || 0;
+        // Determinar si hay un corte consecutivo válido registrado en este mismo día (por un turno previo cerrado hoy)
         let maxPrevAnclId = prevLimits['ANT'] || 0;
+        let cortePorFecha = false;
 
-        // Si maxPrevAnclId proviene de un turno anterior pero apunta a un anticipo de HOY (>= fechaInicioDia),
-        // significa que el turno previo absorbió registros de hoy. Lo reseteamos a 0 para recalcular.
         if (maxPrevAnclId > 0) {
             const prevAncl = await db(tables.ANTICIPOS_CLIENTE).where('ANCL_ID', maxPrevAnclId).select('ANCL_FECHA').first().catch(() => null);
             if (prevAncl?.ANCL_FECHA) {
                 const prevAnclDate = new Date(prevAncl.ANCL_FECHA);
-                if (!isNaN(prevAnclDate.getTime()) && prevAnclDate >= fechaInicioDia) {
+                // Si el anticipo límite es anterior a hoy, el corte para el turno de hoy debe ser el inicio del día
+                if (prevAnclDate < fechaInicioDia) {
+                    cortePorFecha = true;
                     maxPrevAnclId = 0;
                 }
             }
-        }
-
-        // Si no hay maxPrevAnclId válido, buscar en ANTICIPOS_CLIENTE el último anticipo previo a hoy
-        if (!maxPrevAnclId) {
+        } else {
+            // Verificar si hubo un turno anterior cerrado hoy mismo
             const prevTurnoRows = await db(tables.TURNO)
                 .where('ID_TURNO', '<', turno.ID_TURNO)
                 .where('ESTADO', 'Cerrado')
@@ -243,27 +241,17 @@ export class TurnoService {
                 .first();
 
             const fechaCierrePrev = prevTurnoRows?.FECHA_CIERRE ? new Date(prevTurnoRows.FECHA_CIERRE) : null;
-
-            if (fechaCierrePrev && fechaCierrePrev < fechaInicioDia) {
+            if (fechaCierrePrev && fechaCierrePrev >= fechaInicioDia) {
+                // Hubo un turno cerrado hoy, buscar el maximo anticipo hasta ese cierre
                 const maxPrevAncl = await db(tables.ANTICIPOS_CLIENTE)
                     .where('ANCL_FECHA', '<=', fechaCierrePrev)
                     .max('ANCL_ID as MAXA')
                     .first();
                 maxPrevAnclId = parseInt(String(maxPrevAncl?.MAXA || 0), 10);
             } else {
-                const maxPrevAncl = await db(tables.ANTICIPOS_CLIENTE)
-                    .where('ANCL_FECHA', '<', fechaInicioDia)
-                    .max('ANCL_ID as MAXA')
-                    .first();
-                maxPrevAnclId = parseInt(String(maxPrevAncl?.MAXA || 0), 10);
-            }
-        }
-
-        // Alinear maxPrevRecaId con el anticipo previo para consistencia estricta
-        if (maxPrevAnclId > 0) {
-            const anclRow = await db(tables.ANTICIPOS_CLIENTE).where('ANCL_ID', maxPrevAnclId).select('RECA_ID').first().catch(() => null);
-            if (anclRow?.RECA_ID) {
-                maxPrevRecaId = parseInt(String(anclRow.RECA_ID), 10);
+                // No hubo turno cerrado hoy, todos los anticipos con fecha de hoy pertenecen a este turno
+                cortePorFecha = true;
+                maxPrevAnclId = 0;
             }
         }
 
@@ -428,12 +416,10 @@ export class TurnoService {
                 this.where(`${tables.RECIBOS_CAJA}.RECA_ANULADO`, '!=', 'S').orWhereNull(`${tables.RECIBOS_CAJA}.RECA_ANULADO`);
             })
             .andWhere(function () {
-                if (maxPrevAnclId > 0) {
-                    this.where(`${tables.ANTICIPOS_CLIENTE}.ANCL_ID`, '>', maxPrevAnclId);
-                } else if (maxPrevRecaId > 0) {
-                    this.where(`${tables.RECIBOS_CAJA}.RECA_ID`, '>', maxPrevRecaId);
-                } else {
+                if (cortePorFecha || !maxPrevAnclId) {
                     this.where(`${tables.ANTICIPOS_CLIENTE}.ANCL_FECHA`, '>=', fechaInicioDia);
+                } else {
+                    this.where(`${tables.ANTICIPOS_CLIENTE}.ANCL_ID`, '>', maxPrevAnclId);
                 }
             })
             .select(
@@ -511,12 +497,10 @@ export class TurnoService {
                 this.where(`${tables.RECIBOS_CAJA}.RECA_ANULADO`, '!=', 'S').orWhereNull(`${tables.RECIBOS_CAJA}.RECA_ANULADO`);
             })
             .andWhere(function () {
-                if (maxPrevAnclId > 0) {
-                    this.where(`${tables.ANTICIPOS_CLIENTE}.ANCL_ID`, '<=', maxPrevAnclId);
-                } else if (maxPrevRecaId > 0) {
-                    this.where(`${tables.RECIBOS_CAJA}.RECA_ID`, '<=', maxPrevRecaId);
-                } else {
+                if (cortePorFecha || !maxPrevAnclId) {
                     this.where(`${tables.ANTICIPOS_CLIENTE}.ANCL_FECHA`, '<', fechaInicioDia);
+                } else {
+                    this.where(`${tables.ANTICIPOS_CLIENTE}.ANCL_ID`, '<=', maxPrevAnclId);
                 }
             })
             .whereNotIn(`${tables.ANTICIPOS_CLIENTE}.ANCL_ID`, appliedAnclIdsQuery)
