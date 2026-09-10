@@ -316,7 +316,7 @@ export const ModalHabitacion = ({
     if (m.totalAbonos !== undefined && m.totalAbonos !== null) {
       setTotalAbonos(m.totalAbonos);
     } else {
-      refreshAbonosTotal(m.documento);
+      refreshAbonosTotal(m.documento, m.idMovim);
     }
 
     // Si la reserva inicia en fecha futura (> hoy), el estado debe ser 'Reservada'
@@ -349,10 +349,14 @@ export const ModalHabitacion = ({
     setEstado('Reservada');
   };
 
-  const refreshAbonosTotal = (docNit?: string) => {
+  const refreshAbonosTotal = (docNit?: string, movId?: number | 'NUEVA') => {
     const token = localStorage.getItem('hotel_token');
     const nitParam = docNit !== undefined ? docNit : documento;
-    const query = nitParam && nitParam.trim() ? `?nit=${encodeURIComponent(nitParam.trim())}` : '';
+    const activeMovId = movId !== undefined ? movId : selectedMovimId;
+    const queryParams: string[] = [];
+    if (nitParam && nitParam.trim()) queryParams.push(`nit=${encodeURIComponent(nitParam.trim())}`);
+    if (activeMovId && activeMovId !== 'NUEVA') queryParams.push(`idMovim=${activeMovId}`);
+    const query = queryParams.length > 0 ? `?${queryParams.join('&')}` : '';
 
     return fetch(`/api/abonos/habitacion/${habitacion.id}${query}`, {
       headers: { Authorization: `Bearer ${token}` },
@@ -2363,10 +2367,11 @@ export const ModalHabitacion = ({
           huesped={huesped}
           documento={documento}
           totalFacturado={totalReserva}
+          idMovim={typeof selectedMovimId === 'number' ? selectedMovimId : undefined}
           onClose={() => setShowModalAbonos(false)}
           onAbonoRegistrado={() => {
-            refreshAbonosTotal(documento);
-            fetchRoomDetails();
+            refreshAbonosTotal(documento, typeof selectedMovimId === 'number' ? selectedMovimId : undefined);
+            fetchRoomDetails(typeof selectedMovimId === 'number' ? selectedMovimId : undefined);
             if (onHabitacionUpdated) onHabitacionUpdated();
           }}
         />

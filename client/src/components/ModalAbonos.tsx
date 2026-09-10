@@ -34,6 +34,7 @@ interface ModalAbonosProps {
   huesped: string;
   documento: string;
   totalFacturado?: number;
+  idMovim?: number;
   onClose: () => void;
   onAbonoRegistrado?: () => void;
 }
@@ -44,6 +45,7 @@ export const ModalAbonos: React.FC<ModalAbonosProps> = ({
   huesped,
   documento,
   totalFacturado,
+  idMovim,
   onClose,
   onAbonoRegistrado,
 }) => {
@@ -83,9 +85,12 @@ export const ModalAbonos: React.FC<ModalAbonosProps> = ({
   const fetchAbonos = async () => {
     const token = localStorage.getItem('hotel_token');
     try {
-      const url = documento
-        ? `/api/abonos/habitacion/${habitacionId}?nit=${encodeURIComponent(documento)}`
-        : `/api/abonos/habitacion/${habitacionId}`;
+      const queryParams: string[] = [];
+      if (documento && documento.trim()) queryParams.push(`nit=${encodeURIComponent(documento.trim())}`);
+      if (idMovim) queryParams.push(`idMovim=${idMovim}`);
+      const qs = queryParams.length > 0 ? `?${queryParams.join('&')}` : '';
+      const url = `/api/abonos/habitacion/${habitacionId}${qs}`;
+
       const res = await fetch(url, {
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -106,7 +111,7 @@ export const ModalAbonos: React.FC<ModalAbonosProps> = ({
       setLoading(false);
     };
     loadAll();
-  }, [habitacionId, documento]);
+  }, [habitacionId, documento, idMovim]);
 
   const selectedForma = formasPago.find((f) => f.id === selectedFopaId);
 
@@ -188,6 +193,7 @@ export const ModalAbonos: React.FC<ModalAbonosProps> = ({
           fopaId: selectedFopaId,
           concepto: concepto || `ABONO RESERVA HABITACION ${habitacionNumero}`,
           comprobanteNumero: comprobanteNumero || undefined,
+          idMovim: idMovim || undefined,
         }),
       });
 

@@ -359,7 +359,7 @@ export class HabitacionService {
 
             let mAbonos = 0;
             try {
-                mAbonos = await AbonoService.getTotalAbonos(habId, mDocumento);
+                mAbonos = await AbonoService.getTotalAbonos(habId, mDocumento, mId);
             } catch (abErr) {}
 
             movimientosList.push({

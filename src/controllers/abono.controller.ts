@@ -17,8 +17,9 @@ export class AbonoController {
     static async getAbonos(req: Request, res: Response) {
         const idHabitacion = String(req.params.id);
         const tercNit = req.query.nit ? String(req.query.nit) : undefined;
+        const idMovim = req.query.idMovim ? String(req.query.idMovim) : undefined;
         try {
-            const result = await AbonoService.getAbonos(idHabitacion, tercNit);
+            const result = await AbonoService.getAbonos(idHabitacion, tercNit, idMovim);
             res.json(result);
         } catch (error: any) {
             console.error(`Error en AbonoController.getAbonos (${idHabitacion}):`, error.message);
@@ -29,7 +30,7 @@ export class AbonoController {
     // POST /api/abonos
     static async registrarAbono(req: Request, res: Response) {
         try {
-            const { idHabitacion, tercNit, nombreCliente, monto, fopaId, concepto, banco, cuenta, comprobanteNumero } = req.body;
+            const { idHabitacion, tercNit, nombreCliente, monto, fopaId, concepto, banco, cuenta, comprobanteNumero, idMovim } = req.body;
             const usuario = (req as any).user?.username || 'SYSDBA';
 
             if (!idHabitacion || !tercNit || !monto || !fopaId) {
@@ -48,7 +49,8 @@ export class AbonoController {
                 usuario,
                 banco,
                 cuenta,
-                comprobanteNumero
+                comprobanteNumero,
+                idMovim
             });
 
             res.status(201).json(result);

@@ -14,6 +14,7 @@ export interface RegistrarAbonoPayload {
     banco?: string;
     cuenta?: string;
     comprobanteNumero?: string;
+    idMovim?: number | string;
 }
 
 export class AbonoService {
@@ -56,17 +57,44 @@ export class AbonoService {
                 .catch(() => null);
         }
 
-        if (!activeMov) {
-            const habNum = String(idHabitacion).trim();
+        const habNum = String(idHabitacion).trim();
+        let idHab = habNum;
+        let numHab = habNum;
+
+        if (!activeMov || !idHab) {
             const habRow = await db(tables.HABITACION)
                 .where('ID_HABITACION', habNum)
                 .orWhere('NUMERO', habNum)
                 .first()
                 .catch(() => null);
 
-            const idHab = habRow?.ID_HABITACION ? String(habRow.ID_HABITACION).trim() : habNum;
-            const numHab = habRow?.NUMERO ? String(habRow.NUMERO).trim() : habNum;
+            idHab = habRow?.ID_HABITACION ? String(habRow.ID_HABITACION).trim() : habNum;
+            numHab = habRow?.NUMERO ? String(habRow.NUMERO).trim() : habNum;
+        }
 
+        if (!activeMov && tercNit && tercNit.trim()) {
+            // Buscar movimiento activo de la habitación asociado a este cliente
+            activeMov = await db(tables.HABITACION_MOVIM)
+                .join(tables.DOC_INVENTARIO_WEB, `${tables.HABITACION_MOVIM}.DINW_ID`, `${tables.DOC_INVENTARIO_WEB}.DINW_ID`)
+                .where(function () {
+                    this.where(`${tables.HABITACION_MOVIM}.ID_HABITACION`, idHab)
+                        .orWhere(`${tables.HABITACION_MOVIM}.ID_HABITACION`, habNum)
+                        .orWhere(`${tables.HABITACION_MOVIM}.ID_HABITACION`, numHab);
+                })
+                .andWhere(`${tables.DOC_INVENTARIO_WEB}.DINW_NIT`, tercNit.trim())
+                .andWhere(function () {
+                    this.where(`${tables.HABITACION_MOVIM}.ESTADO`, 'Activo')
+                        .orWhereNull(`${tables.HABITACION_MOVIM}.ESTADO`)
+                        .orWhere(`${tables.HABITACION_MOVIM}.ESTADO`, 'Ocupada')
+                        .orWhere(`${tables.HABITACION_MOVIM}.ESTADO`, 'Reservada');
+                })
+                .select(`${tables.HABITACION_MOVIM}.*`)
+                .orderBy(`${tables.HABITACION_MOVIM}.ID_MOVIM`, 'desc')
+                .first()
+                .catch(() => null);
+        }
+
+        if (!activeMov) {
             // 1. Buscar si hay movimiento activo en HABITACION_MOVIM por ID o número de habitación
             activeMov = await db(tables.HABITACION_MOVIM)
                 .where(function () {
@@ -99,7 +127,7 @@ export class AbonoService {
 
         if (activeMov && activeMov.ID_MOVIM) {
             // Filtrar EXCLUSIVAMENTE los anticipos vinculados a ESTA reserva activa en HABITACION_MOVIM_ANTICIPOS
-            const movRows = await db(tables.HABITACION_MOVIM_ANTICIPOS)
+            let movQuery = db(tables.HABITACION_MOVIM_ANTICIPOS)
                 .join(tables.ANTICIPOS_CLIENTE, `${tables.HABITACION_MOVIM_ANTICIPOS}.ANCL_ID`, `${tables.ANTICIPOS_CLIENTE}.ANCL_ID`)
                 .leftJoin(tables.RECIBOS_CAJA, `${tables.ANTICIPOS_CLIENTE}.RECA_ID`, `${tables.RECIBOS_CAJA}.RECA_ID`)
                 .leftJoin(tables.RECIBOS_CAJA_PAGO, `${tables.RECIBOS_CAJA}.RECA_ID`, `${tables.RECIBOS_CAJA_PAGO}.RECA_ID`)
@@ -112,30 +140,38 @@ export class AbonoService {
                 .andWhere(function () {
                     this.where(`${tables.RECIBOS_CAJA}.RECA_ANULADO`, '!=', 'S')
                         .orWhereNull(`${tables.RECIBOS_CAJA}.RECA_ANULADO`);
-                })
-                .select(
-                    `${tables.HABITACION_MOVIM_ANTICIPOS}.ID_MOVIM_ANT`,
-                    `${tables.HABITACION_MOVIM_ANTICIPOS}.ID_MOVIM`,
-                    `${tables.HABITACION_MOVIM_ANTICIPOS}.ITEM_ID`,
-                    `${tables.ANTICIPOS_CLIENTE}.ANCL_ID`,
-                    `${tables.ANTICIPOS_CLIENTE}.PREF_PRE as ANCL_PREF`,
-                    `${tables.ANTICIPOS_CLIENTE}.ANCL_NUMERO`,
-                    `${tables.ANTICIPOS_CLIENTE}.ANCL_FECHA`,
-                    `${tables.ANTICIPOS_CLIENTE}.ANCL_BASE`,
-                    `${tables.ANTICIPOS_CLIENTE}.ANCL_CONC`,
-                    `${tables.ANTICIPOS_CLIENTE}.ANCL_ANULADO`,
-                    `${tables.RECIBOS_CAJA}.RECA_ID`,
-                    `${tables.RECIBOS_CAJA}.PREF_PRE as RECA_PREF`,
-                    `${tables.RECIBOS_CAJA}.RECA_NUMERO`,
-                    `${tables.RECIBOS_CAJA}.TERC_NIT`,
-                    `${tables.RECIBOS_CAJA}.RECA_NOMTERC`,
-                    `${tables.RECIBOS_CAJA_PAGO}.FOPA_ID`,
-                    `${tables.FORMAS_PAGO}.FOPA_NOM`,
-                    `${tables.RECIBOS_CAJA_PAGO}.RCPA_BANCO`,
-                    `${tables.RECIBOS_CAJA_PAGO}.RCPA_CUENTA`,
-                    `${tables.RECIBOS_CAJA_PAGO}.RCPA_NUMERO`
-                )
-                .orderBy(`${tables.HABITACION_MOVIM_ANTICIPOS}.ITEM_ID`, 'asc');
+                });
+
+            if (tercNit && tercNit.trim()) {
+                movQuery = movQuery.andWhere(function () {
+                    this.where(`${tables.RECIBOS_CAJA}.TERC_NIT`, tercNit.trim())
+                        .orWhereNull(`${tables.RECIBOS_CAJA}.TERC_NIT`);
+                });
+            }
+
+            const movRows = await movQuery.select(
+                `${tables.HABITACION_MOVIM_ANTICIPOS}.ID_MOVIM_ANT`,
+                `${tables.HABITACION_MOVIM_ANTICIPOS}.ID_MOVIM`,
+                `${tables.HABITACION_MOVIM_ANTICIPOS}.ITEM_ID`,
+                `${tables.ANTICIPOS_CLIENTE}.ANCL_ID`,
+                `${tables.ANTICIPOS_CLIENTE}.PREF_PRE as ANCL_PREF`,
+                `${tables.ANTICIPOS_CLIENTE}.ANCL_NUMERO`,
+                `${tables.ANTICIPOS_CLIENTE}.ANCL_FECHA`,
+                `${tables.ANTICIPOS_CLIENTE}.ANCL_BASE`,
+                `${tables.ANTICIPOS_CLIENTE}.ANCL_CONC`,
+                `${tables.ANTICIPOS_CLIENTE}.ANCL_ANULADO`,
+                `${tables.RECIBOS_CAJA}.RECA_ID`,
+                `${tables.RECIBOS_CAJA}.PREF_PRE as RECA_PREF`,
+                `${tables.RECIBOS_CAJA}.RECA_NUMERO`,
+                `${tables.RECIBOS_CAJA}.TERC_NIT`,
+                `${tables.RECIBOS_CAJA}.RECA_NOMTERC`,
+                `${tables.RECIBOS_CAJA_PAGO}.FOPA_ID`,
+                `${tables.FORMAS_PAGO}.FOPA_NOM`,
+                `${tables.RECIBOS_CAJA_PAGO}.RCPA_BANCO`,
+                `${tables.RECIBOS_CAJA_PAGO}.RCPA_CUENTA`,
+                `${tables.RECIBOS_CAJA_PAGO}.RCPA_NUMERO`
+            )
+            .orderBy(`${tables.HABITACION_MOVIM_ANTICIPOS}.ITEM_ID`, 'asc');
 
             for (const r of movRows) {
                 const anclIdVal = parseInt(String(r.ANCL_ID || 0), 10);
@@ -216,7 +252,7 @@ export class AbonoService {
 
     // 3. Registrar Abono en las 4 Tablas de Firebird + HABITACION_MOVIM_ANTICIPOS
     static async registrarAbono(payload: RegistrarAbonoPayload) {
-        const { idHabitacion, tercNit, monto, fopaId, concepto, nombreCliente, usuario } = payload;
+        const { idHabitacion, tercNit, monto, fopaId, concepto, nombreCliente, usuario, idMovim } = payload;
 
         if (!tercNit || !tercNit.trim()) {
             throw new Error('El documento/NIT del cliente es obligatorio para registrar el abono.');
@@ -237,6 +273,8 @@ export class AbonoService {
             throw new Error('Forma de pago no encontrada en Firebird.');
         }
 
+        let targetMov: any = null;
+
         // Validar que el abono no exceda el total facturado / valor de la reserva
         try {
             const habNum = String(idHabitacion).trim();
@@ -249,25 +287,46 @@ export class AbonoService {
             const idHab = habRow?.ID_HABITACION ? String(habRow.ID_HABITACION).trim() : habNum;
             const numHab = habRow?.NUMERO ? String(habRow.NUMERO).trim() : habNum;
 
-            const activeMov = await db(tables.HABITACION_MOVIM)
-                .where(function () {
-                    this.where('ID_HABITACION', idHab)
-                        .orWhere('ID_HABITACION', habNum)
-                        .orWhere('ID_HABITACION', numHab);
-                })
-                .andWhere(function () {
-                    this.where('ESTADO', 'Activo')
-                        .orWhereNull('ESTADO')
-                        .orWhere('ESTADO', 'Ocupada')
-                        .orWhere('ESTADO', 'Reservada');
-                })
-                .orderBy('ID_MOVIM', 'desc')
-                .first();
+            if (idMovim) {
+                targetMov = await db(tables.HABITACION_MOVIM).where('ID_MOVIM', idMovim).first().catch(() => null);
+            }
+
+            if (!targetMov && tercNit && tercNit.trim()) {
+                targetMov = await db(tables.HABITACION_MOVIM)
+                    .join(tables.DOC_INVENTARIO_WEB, `${tables.HABITACION_MOVIM}.DINW_ID`, `${tables.DOC_INVENTARIO_WEB}.DINW_ID`)
+                    .where(function () {
+                        this.where(`${tables.HABITACION_MOVIM}.ID_HABITACION`, idHab)
+                            .orWhere(`${tables.HABITACION_MOVIM}.ID_HABITACION`, habNum)
+                            .orWhere(`${tables.HABITACION_MOVIM}.ID_HABITACION`, numHab);
+                    })
+                    .andWhere(`${tables.DOC_INVENTARIO_WEB}.DINW_NIT`, tercNit.trim())
+                    .select(`${tables.HABITACION_MOVIM}.*`)
+                    .orderBy(`${tables.HABITACION_MOVIM}.ID_MOVIM`, 'desc')
+                    .first()
+                    .catch(() => null);
+            }
+
+            if (!targetMov) {
+                targetMov = await db(tables.HABITACION_MOVIM)
+                    .where(function () {
+                        this.where('ID_HABITACION', idHab)
+                            .orWhere('ID_HABITACION', habNum)
+                            .orWhere('ID_HABITACION', numHab);
+                    })
+                    .andWhere(function () {
+                        this.where('ESTADO', 'Activo')
+                            .orWhereNull('ESTADO')
+                            .orWhere('ESTADO', 'Ocupada')
+                            .orWhere('ESTADO', 'Reservada');
+                    })
+                    .orderBy('ID_MOVIM', 'desc')
+                    .first();
+            }
 
             let totalReserva = 0;
-            if (activeMov && activeMov.DINW_ID) {
+            if (targetMov && targetMov.DINW_ID) {
                 const dets = await db(tables.DOC_INVENTARIO_DET_WEB)
-                    .where('DINW_ID', activeMov.DINW_ID)
+                    .where('DINW_ID', targetMov.DINW_ID)
                     .andWhere(function () {
                         this.where('DIWD_ANULADO', '!=', 'S').orWhereNull('DIWD_ANULADO');
                     })
@@ -282,7 +341,7 @@ export class AbonoService {
             }
 
             if (totalReserva > 0) {
-                const abonosRes = await this.getAbonos(idHabitacion, tercNit);
+                const abonosRes = await this.getAbonos(idHabitacion, tercNit, targetMov?.ID_MOVIM);
                 const totalAbonadoPrevio = abonosRes.totalAbonado || 0;
 
                 if (montoNum > totalReserva) {
@@ -470,34 +529,11 @@ export class AbonoService {
         // 5. Registrar en HABITACION_MOVIM_ANTICIPOS vinculando la reserva activa
         let itemIdRegistrado = 1;
         try {
-            const habRow = await db(tables.HABITACION)
-                .where('ID_HABITACION', idHabitacion)
-                .orWhere('NUMERO', idHabitacion)
-                .first()
-                .catch(() => null);
-            const idHab = habRow?.ID_HABITACION ? String(habRow.ID_HABITACION).trim() : String(idHabitacion).trim();
-            const numHab = habRow?.NUMERO ? String(habRow.NUMERO).trim() : String(idHabitacion).trim();
-
-            const activeMov = await db(tables.HABITACION_MOVIM)
-                .where(function () {
-                    this.where('ID_HABITACION', idHab)
-                        .orWhere('ID_HABITACION', idHabitacion)
-                        .orWhere('ID_HABITACION', numHab);
-                })
-                .andWhere(function () {
-                    this.where('ESTADO', 'Activo')
-                        .orWhereNull('ESTADO')
-                        .orWhere('ESTADO', 'Ocupada')
-                        .orWhere('ESTADO', 'Reservada');
-                })
-                .orderBy('ID_MOVIM', 'desc')
-                .first();
-
-            if (activeMov && activeMov.ID_MOVIM) {
+            if (targetMov && targetMov.ID_MOVIM) {
                 // Calcular consecutivo ITEM_ID para este ID_MOVIM
                 const maxItemResult = await db.raw(
                     `SELECT COALESCE(MAX(ITEM_ID), 0) AS MAX_ITEM FROM HABITACION_MOVIM_ANTICIPOS WHERE ID_MOVIM = ?`,
-                    [activeMov.ID_MOVIM]
+                    [targetMov.ID_MOVIM]
                 );
                 const itemRows = maxItemResult.rows ? maxItemResult.rows : (Array.isArray(maxItemResult) ? maxItemResult : [maxItemResult]);
                 const curItem = parseInt(String(itemRows[0]?.MAX_ITEM ?? itemRows[0]?.max_item ?? 0), 10);
@@ -513,7 +549,7 @@ export class AbonoService {
 
                 await db(tables.HABITACION_MOVIM_ANTICIPOS).insert({
                     ID_MOVIM_ANT: nextMovAntId,
-                    ID_MOVIM: activeMov.ID_MOVIM,
+                    ID_MOVIM: targetMov.ID_MOVIM,
                     ANCL_ID: anclId,
                     ITEM_ID: itemIdRegistrado
                 });
