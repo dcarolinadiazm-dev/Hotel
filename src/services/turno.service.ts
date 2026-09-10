@@ -353,8 +353,8 @@ export class TurnoService {
             const factNumero = `${String(f.PREF_PRE || '0000').trim()}-${String(f.FACT_NUMERO || '').trim()}`;
             const cliente = String(f.FACT_NOMTERC || f.FACT_NOMCLIENTE || f.TERC_NIT || 'CLIENTE').trim();
 
-            if (fcpByFact.has(fid) && fcpByFact.get(fid)!.length > 0) {
-                for (const p of fcpByFact.get(fid)!) {
+            if (rcByFact.has(fid) && rcByFact.get(fid)!.length > 0) {
+                for (const p of rcByFact.get(fid)!) {
                     pagosFacturasConsolidados.push({
                         ...p,
                         factId: fid,
@@ -362,8 +362,8 @@ export class TurnoService {
                         cliente
                     });
                 }
-            } else if (rcByFact.has(fid) && rcByFact.get(fid)!.length > 0) {
-                for (const p of rcByFact.get(fid)!) {
+            } else if (fcpByFact.has(fid) && fcpByFact.get(fid)!.length > 0) {
+                for (const p of fcpByFact.get(fid)!) {
                     pagosFacturasConsolidados.push({
                         ...p,
                         factId: fid,
