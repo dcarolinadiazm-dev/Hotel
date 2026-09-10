@@ -464,28 +464,6 @@ export class TurnoService {
             recaToFopaMap.set(rid, { fopaId: fid, nombre: nom });
         }
 
-        const detalleAbonosTurno = abonosRegistradosTurno.map(a => {
-            const rid = parseInt(String(a.RECA_ID || 0), 10);
-            const aid = parseInt(String(a.ANCL_ID || 0), 10);
-            const fopaInfo = recaToFopaMap.get(rid) || { fopaId: 1, nombre: 'Efectivo' };
-            const habNum = anclToHabMap.get(aid) || extractHabFromConc(String(a.ANCL_CONC || ''));
-            const monto = parseFloat(String(a.RECA_MONTO || 0));
-
-            return {
-                reciboId: rid,
-                reciboNumero: String(a.RECA_NUMERO || '').trim(),
-                anticipoId: aid,
-                anticipoNumero: String(a.ANCL_NUMERO || '').trim(),
-                habitacionNumero: habNum,
-                clienteNombre: String(a.RECA_NOMTERC || a.TERC_NIT || '').trim(),
-                tercNit: String(a.TERC_NIT || '').trim(),
-                formaPagoId: fopaInfo.fopaId,
-                formaPagoNombre: fopaInfo.nombre,
-                monto: Math.round(monto * 100) / 100,
-                fecha: a.RECA_FECHA ? String(a.RECA_FECHA) : undefined
-            };
-        });
-
         // 5. Consultar abonos antiguos de otros turnos que NO se han facturado aún
         const appliedAnclIdsQuery = db('APLICACION_CLIENTE_DETALLE')
             .where('ACDE_TIPODOC', 45)
@@ -523,6 +501,75 @@ export class TurnoService {
                 `${tables.ANTICIPOS_CLIENTE}.TERC_NIT`
             );
 
+        // Consultar timestamps de creación en AUDITORIA para los recibos de abono
+        const allAbonoRecaIds = [
+            ...abonosRegistradosTurno.map(a => parseInt(String(a.RECA_ID || 0), 10)),
+            ...habsConAbono.map(a => parseInt(String(a.RECA_ID || 0), 10))
+        ].filter(id => id > 0);
+
+        const audiRecaRows = allAbonoRecaIds.length > 0
+            ? await db('AUDITORIA')
+                .where('TIDO_COD', 61)
+                .whereIn('AUDI_IDDOC', allAbonoRecaIds)
+                .where('AUDI_OPER', 'I')
+                .select('AUDI_IDDOC', 'AUDI_HORA')
+                .catch(() => [])
+            : [];
+
+        const recaHoraMap = new Map<number, string>();
+        for (const row of audiRecaRows) {
+            if (row.AUDI_HORA) {
+                const d = new Date(row.AUDI_HORA);
+                if (!isNaN(d.getTime())) {
+                    const day = String(d.getDate()).padStart(2, '0');
+                    const month = String(d.getMonth() + 1).padStart(2, '0');
+                    const year = d.getFullYear();
+                    let hours = d.getHours();
+                    const minutes = String(d.getMinutes()).padStart(2, '0');
+                    const ampm = hours >= 12 ? 'PM' : 'AM';
+                    hours = hours % 12;
+                    hours = hours ? hours : 12;
+                    const strHours = String(hours).padStart(2, '0');
+                    recaHoraMap.set(parseInt(String(row.AUDI_IDDOC), 10), `${day}/${month}/${year} ${strHours}:${minutes} ${ampm}`);
+                }
+            }
+        }
+
+        const formatFechaAbono = (dVal: any, rid: number): string => {
+            if (recaHoraMap.has(rid)) {
+                return recaHoraMap.get(rid)!;
+            }
+            if (!dVal) return '';
+            const d = new Date(dVal);
+            if (isNaN(d.getTime())) return String(dVal);
+            const day = String(d.getDate()).padStart(2, '0');
+            const month = String(d.getMonth() + 1).padStart(2, '0');
+            const year = d.getFullYear();
+            return `${day}/${month}/${year}`;
+        };
+
+        const detalleAbonosTurno = abonosRegistradosTurno.map(a => {
+            const rid = parseInt(String(a.RECA_ID || 0), 10);
+            const aid = parseInt(String(a.ANCL_ID || 0), 10);
+            const fopaInfo = recaToFopaMap.get(rid) || { fopaId: 1, nombre: 'Efectivo' };
+            const habNum = anclToHabMap.get(aid) || extractHabFromConc(String(a.ANCL_CONC || ''));
+            const monto = parseFloat(String(a.RECA_MONTO || 0));
+
+            return {
+                reciboId: rid,
+                reciboNumero: String(a.RECA_NUMERO || '').trim(),
+                anticipoId: aid,
+                anticipoNumero: String(a.ANCL_NUMERO || '').trim(),
+                habitacionNumero: habNum,
+                clienteNombre: String(a.RECA_NOMTERC || a.TERC_NIT || '').trim(),
+                tercNit: String(a.TERC_NIT || '').trim(),
+                formaPagoId: fopaInfo.fopaId,
+                formaPagoNombre: fopaInfo.nombre,
+                monto: Math.round(monto * 100) / 100,
+                fecha: formatFechaAbono(a.RECA_FECHA, rid)
+            };
+        });
+
         const totalAbonosAntiguos = Math.round(habsConAbono.reduce((sum, a) => sum + (parseFloat(String(a.RECA_MONTO || 0))), 0) * 100) / 100;
 
         const detalleAbonosAntiguos = habsConAbono.map(a => {
@@ -540,7 +587,7 @@ export class TurnoService {
                 clienteNombre: String(a.RECA_NOMTERC || a.TERC_NIT || '').trim(),
                 tercNit: String(a.TERC_NIT || '').trim(),
                 monto: Math.round(monto * 100) / 100,
-                fecha: a.RECA_FECHA ? String(a.RECA_FECHA) : undefined
+                fecha: formatFechaAbono(a.RECA_FECHA, rid)
             };
         });
 

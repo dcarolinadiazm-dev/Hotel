@@ -519,6 +519,7 @@ export const ModalCierreZ: React.FC<ModalCierreZProps> = ({
                     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12.5px' }}>
                       <thead>
                         <tr style={{ background: '#f0fdfa', borderBottom: '2px solid #99f6e4', color: '#115e59', textAlign: 'left' }}>
+                          <th style={{ padding: '8px 10px', fontWeight: 700 }}>Fecha / Hora</th>
                           <th style={{ padding: '8px 10px', fontWeight: 700 }}>Recibo</th>
                           <th style={{ padding: '8px 10px', fontWeight: 700 }}>Anticipo</th>
                           <th style={{ padding: '8px 10px', fontWeight: 700 }}>Habitación</th>
@@ -530,13 +531,16 @@ export const ModalCierreZ: React.FC<ModalCierreZProps> = ({
                       <tbody>
                         {(!resumen.detalleAbonosTurno || resumen.detalleAbonosTurno.length === 0) ? (
                           <tr>
-                            <td colSpan={6} style={{ padding: '20px', textAlign: 'center', color: '#64748b' }}>
+                            <td colSpan={7} style={{ padding: '20px', textAlign: 'center', color: '#64748b' }}>
                               No hay abonos registrados en este turno.
                             </td>
                           </tr>
                         ) : (
                           resumen.detalleAbonosTurno.map((a, idx) => (
                             <tr key={idx} style={{ borderBottom: '1px solid #f1f5f9', background: idx % 2 === 0 ? '#fff' : '#f8fafc' }}>
+                              <td style={{ padding: '8px 10px', fontSize: '11.5px', color: '#475569', whiteSpace: 'nowrap' }}>
+                                📅 {a.fecha || '—'}
+                              </td>
                               <td style={{ padding: '8px 10px', fontWeight: 600, color: '#334155' }}>RC #{a.reciboNumero}</td>
                               <td style={{ padding: '8px 10px', color: '#64748b' }}>ANT #{a.anticipoNumero}</td>
                               <td style={{ padding: '8px 10px' }}>
@@ -562,7 +566,7 @@ export const ModalCierreZ: React.FC<ModalCierreZProps> = ({
                       </tbody>
                       <tfoot>
                         <tr style={{ background: '#ccfbf1', borderTop: '2px solid #99f6e4', fontWeight: 800, color: '#115e59' }}>
-                          <td colSpan={5} style={{ padding: '10px', textAlign: 'right' }}>TOTAL ABONOS DEL TURNO:</td>
+                          <td colSpan={6} style={{ padding: '10px', textAlign: 'right' }}>TOTAL ABONOS DEL TURNO:</td>
                           <td style={{ padding: '10px', textAlign: 'right', fontSize: '14px' }}>
                             ${(resumen.totalAbonosTurno || 0).toLocaleString('es-CO')}
                           </td>
@@ -823,6 +827,7 @@ export const ModalCierreZ: React.FC<ModalCierreZProps> = ({
                     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12.5px' }}>
                       <thead>
                         <tr style={{ background: '#fff7ed', borderBottom: '2px solid #fed7aa', color: '#9a3412', textAlign: 'left' }}>
+                          <th style={{ padding: '8px 10px', fontWeight: 700 }}>Fecha / Hora</th>
                           <th style={{ padding: '8px 10px', fontWeight: 700 }}>Recibo</th>
                           <th style={{ padding: '8px 10px', fontWeight: 700 }}>Anticipo</th>
                           <th style={{ padding: '8px 10px', fontWeight: 700 }}>Habitación</th>
@@ -833,13 +838,16 @@ export const ModalCierreZ: React.FC<ModalCierreZProps> = ({
                       <tbody>
                         {(!resumen.detalleAbonosAntiguos || resumen.detalleAbonosAntiguos.length === 0) ? (
                           <tr>
-                            <td colSpan={5} style={{ padding: '20px', textAlign: 'center', color: '#64748b' }}>
+                            <td colSpan={6} style={{ padding: '20px', textAlign: 'center', color: '#64748b' }}>
                               No hay abonos antiguos pendientes de facturar.
                             </td>
                           </tr>
                         ) : (
                           resumen.detalleAbonosAntiguos.map((a, idx) => (
                             <tr key={idx} style={{ borderBottom: '1px solid #f1f5f9', background: idx % 2 === 0 ? '#fff' : '#f8fafc' }}>
+                              <td style={{ padding: '8px 10px', fontSize: '11.5px', color: '#7c2d12', whiteSpace: 'nowrap' }}>
+                                📅 {a.fecha || '—'}
+                              </td>
                               <td style={{ padding: '8px 10px', fontWeight: 600, color: '#334155' }}>RC #{a.reciboNumero}</td>
                               <td style={{ padding: '8px 10px', color: '#64748b' }}>ANT #{a.anticipoNumero}</td>
                               <td style={{ padding: '8px 10px' }}>
@@ -860,7 +868,7 @@ export const ModalCierreZ: React.FC<ModalCierreZProps> = ({
                       </tbody>
                       <tfoot>
                         <tr style={{ background: '#ffedd5', borderTop: '2px solid #fed7aa', fontWeight: 800, color: '#9a3412' }}>
-                          <td colSpan={4} style={{ padding: '10px', textAlign: 'right' }}>TOTAL ABONOS ANTIGUOS:</td>
+                          <td colSpan={5} style={{ padding: '10px', textAlign: 'right' }}>TOTAL ABONOS ANTIGUOS:</td>
                           <td style={{ padding: '10px', textAlign: 'right', fontSize: '14px' }}>
                             ${(resumen.totalAbonosAntiguos || 0).toLocaleString('es-CO')}
                           </td>
