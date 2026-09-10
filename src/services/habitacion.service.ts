@@ -309,7 +309,9 @@ export class HabitacionService {
             }));
 
             const mTotal = mItems.reduce((sum, item) => sum + item.subtotal, 0);
-            const mRoomDetail = mDetails.find((d: any) => d.DIWD_ITEM === 1 || String(d.DIWD_REF || '').trim() === ref) || mDetails[0];
+            const mRoomDetail = mDetails.find((d: any) => d.DIWD_ITEM === 1)
+                || mDetails.find((d: any) => String(d.DIWD_ARTICULO || '').trim() === String(hab.ARTI_COD || '').trim())
+                || mDetails[0];
             const mLiprCod = mRoomDetail?.DIWD_LISTA ? parseInt(String(mRoomDetail.DIWD_LISTA), 10) : defaultLipr;
             const mPrecioNoche = (mRoomDetail?.DIWD_COSTO !== undefined && mRoomDetail?.DIWD_COSTO !== null)
                 ? parseFloat(String(mRoomDetail.DIWD_COSTO))
@@ -613,8 +615,9 @@ export class HabitacionService {
             const existingRoomItem = await db(tables.DOC_INVENTARIO_DET_WEB)
                 .where({ DINW_ID: dinwId, DIWD_ANULADO: 'N' })
                 .andWhere(function () {
-                    this.where('DIWD_ITEM', 1).orWhere('DIWD_REF', `HAB-${habNumero}`);
+                    this.where('DIWD_ITEM', 1).orWhere('DIWD_ARTICULO', artiCod);
                 })
+                .orderBy('DIWD_ITEM', 'asc')
                 .first();
 
             const countDetails = await db(tables.DOC_INVENTARIO_DET_WEB)
