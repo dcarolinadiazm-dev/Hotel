@@ -16,6 +16,9 @@ router.post('/enviar-facturar-multiples', verifyToken, PedidoController.enviarAF
 // Facturar venta directa de productos (POS sin habitación)
 router.post('/facturar-directo', verifyToken, PedidoController.facturarDirecto);
 
+// Verificar si una factura directa reciente ya fue creada (recuperación ante Failed to fetch / desconexión)
+router.get('/verificar-reciente', verifyToken, PedidoController.verificarFacturaReciente);
+
 // Agregar nuevo ítem al carrito de habitación
 router.post('/agregar-item', verifyToken, PedidoController.agregarConsumo);
 

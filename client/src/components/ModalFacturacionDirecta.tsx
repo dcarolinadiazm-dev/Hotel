@@ -166,6 +166,7 @@ export const ModalFacturacionDirecta: React.FC<ModalFacturacionDirectaProps> = (
   const [formasPago, setFormasPago] = useState<FormaPagoItem[]>([]);
   const [lineasPago, setLineasPago] = useState<LineaPago[]>([]);
   const [showConfirmModal, setShowConfirmModal] = useState<boolean>(false);
+  const [activeRequestId, setActiveRequestId] = useState<string>('');
 
   // Impresión
   const [impresionData, setImpresionData] = useState<{ tipo: 'FACTURA' | 'REMISION'; idDoc: number } | null>(null);
@@ -182,6 +183,7 @@ export const ModalFacturacionDirecta: React.FC<ModalFacturacionDirectaProps> = (
     setCustomPrecio(0);
     setSearchArticuloText('');
     setShowConfirmModal(false);
+    setActiveRequestId('');
     setFeedback(null);
   };
 
@@ -570,6 +572,7 @@ export const ModalFacturacionDirecta: React.FC<ModalFacturacionDirectaProps> = (
         monto: totalPagar,
       },
     ]);
+    setActiveRequestId(`pos-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`);
     setShowConfirmModal(true);
   };
 
@@ -604,6 +607,7 @@ export const ModalFacturacionDirecta: React.FC<ModalFacturacionDirectaProps> = (
     setProcessing(true);
     setFeedback(null);
     const token = localStorage.getItem('hotel_token');
+    const reqId = activeRequestId || `pos-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
 
     try {
       const res = await fetch('/api/pedidos/facturar-directo', {
@@ -630,6 +634,7 @@ export const ModalFacturacionDirecta: React.FC<ModalFacturacionDirectaProps> = (
           prefijo: selectedPrefijo,
           pagos: lineasPago.map((l) => ({ formaPagoId: l.formaPagoId, monto: Number(l.monto) || 0 })),
           observaciones: observaciones.trim() || undefined,
+          requestId: reqId,
         }),
       });
 
@@ -649,6 +654,41 @@ export const ModalFacturacionDirecta: React.FC<ModalFacturacionDirectaProps> = (
         onClose();
       }
     } catch (err: any) {
+      // Detección de error de conexión / microcorte de red / "Failed to fetch"
+      const errMsg = String(err?.message || '');
+      const isNetworkError =
+        err?.name === 'TypeError' ||
+        errMsg.toLowerCase().includes('fetch') ||
+        errMsg.toLowerCase().includes('network') ||
+        errMsg.toLowerCase().includes('load failed');
+
+      if (isNetworkError) {
+        console.warn('Intermitencia de red detectada al facturar. Verificando si el servidor alcanzó a procesar la factura...');
+        try {
+          // Esperar 1.5s para que la transacción de Firebird termine de consolidarse en el backend
+          await new Promise((resolve) => setTimeout(resolve, 1500));
+          const verifyRes = await fetch(
+            `/api/pedidos/verificar-reciente?clienteNit=${encodeURIComponent(selectedNit)}&total=${totalPagar}&requestId=${encodeURIComponent(reqId)}`,
+            { headers: { Authorization: `Bearer ${token}` } }
+          );
+          if (verifyRes.ok) {
+            const verifyData = await verifyRes.json();
+            if (verifyData.encontrada && verifyData.factura?.idDoc) {
+              alert(`⚠️ Hubo una intermitencia de red ("Failed to fetch"), pero el servidor registró exitosamente la Factura #${verifyData.factura.numDoc || verifyData.factura.idDoc}. Se abrirá el comprobante para impresión.`);
+              setShowConfirmModal(false);
+              handleResetForm();
+              if (onFacturaGenerada) {
+                onFacturaGenerada();
+              }
+              setImpresionData({ tipo: 'FACTURA', idDoc: verifyData.factura.idDoc });
+              return;
+            }
+          }
+        } catch (verifyErr) {
+          console.warn('Error al verificar factura reciente tras corte de red:', verifyErr);
+        }
+      }
+
       alert(err.message || 'Error al procesar la factura');
     } finally {
       setProcessing(false);

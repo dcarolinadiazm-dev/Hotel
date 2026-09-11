@@ -30,6 +30,17 @@ export async function parseFirebirdBlob(val: any): Promise<string> {
     return String(val).trim();
 }
 
+interface RecentDirectSale {
+    idDoc: number;
+    numDoc: string;
+    total: number;
+    totalBase: number;
+    totalIva: number;
+    mensaje: string;
+    timestamp: number;
+}
+const recentDirectSalesCache = new Map<string, RecentDirectSale>();
+
 export class PedidoService {
 
     // Obtener Punto de Venta y Bodega activos
@@ -1012,7 +1023,8 @@ export class PedidoService {
         formaPagoId?: number,
         prefijoParam?: string,
         pagosParam?: Array<{ formaPagoId: number; monto: number }>,
-        observacionesParam?: string
+        observacionesParam?: string,
+        requestId?: string
     ) {
         if (!items || items.length === 0) {
             throw new Error('El carrito no contiene productos para facturar');
@@ -1020,6 +1032,29 @@ export class PedidoService {
 
         const nit = clienteNit ? String(clienteNit).trim() : '800003122';
         const nom = clienteNom ? String(clienteNom).trim() : 'Cliente General';
+
+        // 1. Control de Idempotencia por requestId
+        if (requestId && recentDirectSalesCache.has(requestId)) {
+            const cached = recentDirectSalesCache.get(requestId)!;
+            console.log(`[ANTI-DUPLICIDAD] Petición repetida detectada (requestId: ${requestId}). Retornando Factura existente #${cached.numDoc}`);
+            return cached;
+        }
+
+        // 2. Control de Idempotencia por contenido idéntico en los últimos 45 segundos
+        const totalAprox = items.reduce((acc, it) => acc + (it.precio - (it.descuento || 0)) * it.cantidad, 0);
+        for (const [cachedId, cached] of recentDirectSalesCache.entries()) {
+            const ageMs = Date.now() - cached.timestamp;
+            if (ageMs < 45000 && Math.abs(cached.total - totalAprox) < 1) {
+                try {
+                    const factCheck = await db('FACTURAS').where('FACT_ID', cached.idDoc).first();
+                    if (factCheck && String(factCheck.TERC_NIT || '').trim() === nit) {
+                        console.warn(`[ANTI-DUPLICIDAD] Venta idéntica detectada hace ${Math.round(ageMs / 1000)}s para cliente ${nit}, total $${cached.total}. Retornando Factura existente #${cached.numDoc}`);
+                        if (requestId) recentDirectSalesCache.set(requestId, cached);
+                        return cached;
+                    }
+                } catch (e) {}
+            }
+        }
 
         // Asegurar que el tercero exista como cliente
         try {
@@ -1349,14 +1384,78 @@ export class PedidoService {
             }
         }
 
-        return {
+        const resultadoFinal = {
             idDoc: idGenerado,
             numDoc: numDocGenerado,
             total: totalDoc,
             totalBase,
             totalIva,
-            mensaje: `Factura de Venta #${numDocGenerado} generada exitosamente.`
+            mensaje: `Factura de Venta #${numDocGenerado} generada exitosamente.`,
+            timestamp: Date.now()
         };
+
+        if (requestId) {
+            recentDirectSalesCache.set(requestId, resultadoFinal);
+        }
+        // Limpiar ventas viejas (> 10 minutos)
+        if (recentDirectSalesCache.size > 80) {
+            const now = Date.now();
+            for (const [k, v] of recentDirectSalesCache.entries()) {
+                if (now - v.timestamp > 10 * 60 * 1000) recentDirectSalesCache.delete(k);
+            }
+        }
+
+        return resultadoFinal;
+    }
+
+    // Verificar si una factura reciente fue procesada exitosamente en el servidor (para recuperarse de caídas de red "Failed to fetch")
+    static async verificarFacturaReciente(clienteNit?: string, total?: number, requestId?: string) {
+        // 1. Revisar caché de peticiones recientes
+        if (requestId && recentDirectSalesCache.has(requestId)) {
+            const cached = recentDirectSalesCache.get(requestId)!;
+            return {
+                encontrada: true,
+                factura: {
+                    idDoc: cached.idDoc,
+                    numDoc: cached.numDoc,
+                    total: cached.total
+                }
+            };
+        }
+
+        // 2. Consultar en la tabla FACTURAS los registros más recientes
+        if (clienteNit && total !== undefined && total > 0) {
+            try {
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+
+                const fact = await db('FACTURAS')
+                    .where('TERC_NIT', String(clienteNit).trim())
+                    .andWhere('FACT_FECHA', '>=', today)
+                    .andWhere(function () {
+                        this.whereBetween('FACT_TOTAL', [total - 1, total + 1]);
+                    })
+                    .orderBy('FACT_ID', 'desc')
+                    .first();
+
+                if (fact) {
+                    const pref = fact.PREF_PRE ? String(fact.PREF_PRE).trim() : '';
+                    const num = fact.FACT_NUMERO ? String(fact.FACT_NUMERO).trim() : String(fact.FACT_ID);
+                    return {
+                        encontrada: true,
+                        factura: {
+                            idDoc: parseInt(String(fact.FACT_ID), 10),
+                            numDoc: pref ? `${pref}-${num}` : num,
+                            total: parseFloat(String(fact.FACT_TOTAL || total))
+                        }
+                    };
+                }
+            } catch (e: any) {
+                console.warn('Aviso en verificarFacturaReciente:', e.message);
+            }
+        }
+
+        return { encontrada: false };
     }
 
     // 4. Reporte de Facturas de Venta consultando directamente la tabla FACTURAS

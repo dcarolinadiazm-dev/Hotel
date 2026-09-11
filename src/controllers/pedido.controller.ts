@@ -85,8 +85,8 @@ export class PedidoController {
 
     // POST /api/pedidos/facturar-directo
     static async facturarDirecto(req: Request, res: Response) {
-        const { clienteNit, clienteNom, items, formaPagoId, prefijo, pagos, observaciones } = req.body;
-        console.log(`[HTTP-REQUEST] POST /api/pedidos/facturar-directo recibido para cliente: ${clienteNit || 'General'}, items: ${items?.length || 0}, prefijo: ${prefijo || 'default'}`);
+        const { clienteNit, clienteNom, items, formaPagoId, prefijo, pagos, observaciones, requestId } = req.body;
+        console.log(`[HTTP-REQUEST] POST /api/pedidos/facturar-directo recibido para cliente: ${clienteNit || 'General'}, items: ${items?.length || 0}, prefijo: ${prefijo || 'default'}, requestId: ${requestId || 'none'}`);
         if (!items || !Array.isArray(items) || items.length === 0) {
             return res.status(400).json({ error: 'El carrito no contiene productos para facturar' });
         }
@@ -99,13 +99,30 @@ export class PedidoController {
                 formaPagoId ? parseInt(String(formaPagoId), 10) : undefined,
                 prefijo ? String(prefijo).trim() : undefined,
                 pagos,
-                observaciones ? String(observaciones).trim() : undefined
+                observaciones ? String(observaciones).trim() : undefined,
+                requestId ? String(requestId).trim() : undefined
             );
             console.log(`[HTTP-RESPONSE] POST /api/pedidos/facturar-directo completado exitosamente:`, resultado);
             res.json(resultado);
         } catch (error: any) {
             console.error('Error en PedidoController.facturarDirecto:', error.message);
             res.status(400).json({ error: error.message || 'Error al facturar productos' });
+        }
+    }
+
+    // GET /api/pedidos/verificar-reciente
+    static async verificarFacturaReciente(req: Request, res: Response) {
+        const { clienteNit, total, requestId } = req.query;
+        try {
+            const resultado = await PedidoService.verificarFacturaReciente(
+                clienteNit ? String(clienteNit).trim() : undefined,
+                total ? parseFloat(String(total)) : undefined,
+                requestId ? String(requestId).trim() : undefined
+            );
+            res.json(resultado);
+        } catch (error: any) {
+            console.error('Error en PedidoController.verificarFacturaReciente:', error.message);
+            res.status(500).json({ error: error.message });
         }
     }
 

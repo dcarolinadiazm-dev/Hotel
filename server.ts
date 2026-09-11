@@ -15,7 +15,7 @@ const PORT = process.env.PORT || 3001;
 
 // Middlewares globales
 app.use(cors({
-    origin: '*',
+    origin: true,
     credentials: true,
 }));
 
