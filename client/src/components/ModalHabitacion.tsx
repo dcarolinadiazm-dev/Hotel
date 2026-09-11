@@ -393,7 +393,16 @@ export const ModalHabitacion = ({
           const targetId = preferredMovimId ?? (selectedMovimId !== 'NUEVA' ? selectedMovimId : undefined);
           let target = targetId ? movs.find((m) => m.idMovim === targetId) : undefined;
           if (!target) {
-            target = (data.peweId ? movs.find((m) => m.dinwId === data.peweId) : null) || movs[movs.length - 1] || movs[0];
+            // Priorizar movimiento EN CURSO de hoy (FECHA_RESERVA <= hoy <= FECHA_SALIDA) sobre reservas futuras
+            const now = new Date();
+            const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+            const currentStay = movs.find((m) => {
+              const fRes = String(m.fechaReserva || '').split('T')[0];
+              const fSal = m.fechaSalida ? String(m.fechaSalida).split('T')[0] : '';
+              return fRes <= todayStr && (!fSal || fSal >= todayStr);
+            });
+
+            target = currentStay || (data.peweId ? movs.find((m) => m.dinwId === data.peweId) : null) || movs[0];
           }
           if (target) {
             cargarMovimientoEnFormulario(target);
@@ -680,6 +689,7 @@ export const ModalHabitacion = ({
         },
         body: JSON.stringify({
           habitacionId: habitacion.id,
+          peweId: peweId || undefined,
           item: {
             articuloCod: match.codigo.trim(),
             artiCod: match.codigo.trim(),
@@ -800,6 +810,7 @@ export const ModalHabitacion = ({
         },
         body: JSON.stringify({
           habitacionId: habitacion.id,
+          peweId: peweId || undefined,
           item: {
             articuloCod: selectedArticuloCod ? selectedArticuloCod.trim() : undefined,
             artiCod: selectedArticuloCod ? selectedArticuloCod.trim() : undefined,

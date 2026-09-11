@@ -206,7 +206,21 @@ export class PedidoService {
     }
 
     // Obtener o inicializar el DOC_INVENTARIO_WEB activo (borrador/carrito) de una habitación
-    static async getActiveDinw(habitacionId: string, habNumero: string, nit?: string, huesped?: string): Promise<number> {
+    static async getActiveDinw(habitacionId: string, habNumero: string, nit?: string, huesped?: string, specificDinwId?: number): Promise<number> {
+        // 0. Si se especificó un dinwId (peweId) puntual y sigue activo en DOC_INVENTARIO_WEB, usarlo directamente
+        if (specificDinwId && specificDinwId > 0) {
+            const checkSpecific = await db(tables.DOC_INVENTARIO_WEB)
+                .where('DINW_ID', specificDinwId)
+                .andWhere(function () {
+                    this.whereNull('DINW_IDDOC').orWhere('DINW_IDDOC', 0);
+                })
+                .andWhere('DINW_ANULADO', 'N')
+                .first();
+            if (checkSpecific?.DINW_ID) {
+                return checkSpecific.DINW_ID;
+            }
+        }
+
         const ref = `HAB-${habNumero}`;
 
         // 1. Buscar en todos los movimientos activos de la habitación
@@ -214,8 +228,24 @@ export class PedidoService {
             .where('ID_HABITACION', habitacionId)
             .andWhere(function () {
                 this.where('ESTADO', 'Activo').orWhereNull('ESTADO');
-            })
-            .orderBy('ID_MOVIM', 'desc');
+            });
+
+        // Ordenar priorizando la reserva EN CURSO de hoy (FECHA_RESERVA <= hoy <= FECHA_SALIDA) sobre reservas futuras
+        const now = new Date();
+        const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+        activeMovs.sort((a, b) => {
+            const aRes = String(a.FECHA_RESERVA || '').split('T')[0];
+            const aSal = a.FECHA_SALIDA ? String(a.FECHA_SALIDA).split('T')[0] : '';
+            const aIsToday = aRes <= todayStr && (!aSal || aSal >= todayStr);
+
+            const bRes = String(b.FECHA_RESERVA || '').split('T')[0];
+            const bSal = b.FECHA_SALIDA ? String(b.FECHA_SALIDA).split('T')[0] : '';
+            const bIsToday = bRes <= todayStr && (!bSal || bSal >= todayStr);
+
+            if (aIsToday && !bIsToday) return -1;
+            if (!aIsToday && bIsToday) return 1;
+            return (b.ID_MOVIM || 0) - (a.ID_MOVIM || 0);
+        });
 
         // Priorizar el movimiento que tenga un DINW_ID con detalles activos cargados
         for (const mov of activeMovs) {
@@ -416,13 +446,17 @@ export class PedidoService {
     }
 
     // 1. Agregar nuevo ítem al carrito directamente en DOC_INVENTARIO_DET_WEB
-    static async agregarConsumo(habitacionId: string, item: { articuloCod?: string; artiCod?: string; codigo?: string; descripcion: string; unidad?: string; cantidad: number; precio: number; liprCod?: number }) {
+    static async agregarConsumo(
+        habitacionId: string,
+        item: { articuloCod?: string; artiCod?: string; codigo?: string; descripcion: string; unidad?: string; cantidad: number; precio: number; liprCod?: number },
+        peweId?: number
+    ) {
         const hab = await db(tables.HABITACION).where('ID_HABITACION', habitacionId).first();
         const habNumero = hab?.NUMERO ? String(hab.NUMERO).trim() : habitacionId;
         const nit = hab?.DOCUMENTO ? String(hab.DOCUMENTO).trim() : '800003122';
         const nom = hab?.HUESPED ? String(hab.HUESPED).trim() : 'Huésped General';
 
-        const dinwId = await this.getActiveDinw(habitacionId, habNumero, nit, nom);
+        const dinwId = await this.getActiveDinw(habitacionId, habNumero, nit, nom, peweId);
 
         const artiCod = (item.articuloCod || item.artiCod || item.codigo || '').trim() || '001';
 

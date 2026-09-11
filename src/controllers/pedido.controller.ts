@@ -128,7 +128,7 @@ export class PedidoController {
 
     // POST /api/pedidos/agregar-item
     static async agregarConsumo(req: Request, res: Response) {
-        const { habitacionId, item } = req.body;
+        const { habitacionId, item, peweId } = req.body;
         if (!habitacionId || !item || !item.descripcion) {
             return res.status(400).json({ error: 'habitacionId y datos del item son requeridos' });
         }
@@ -139,7 +139,8 @@ export class PedidoController {
         }
 
         try {
-            const resultado = await PedidoService.agregarConsumo(String(habitacionId), item);
+            const parsedPeweId = peweId ? parseInt(String(peweId), 10) : undefined;
+            const resultado = await PedidoService.agregarConsumo(String(habitacionId), item, parsedPeweId);
             res.json(resultado);
         } catch (error: any) {
             console.error('Error en PedidoController.agregarConsumo:', error.message);
