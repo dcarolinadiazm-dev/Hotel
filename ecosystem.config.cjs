@@ -1,10 +1,12 @@
+const path = require('path');
+
 module.exports = {
   apps: [
     {
       name: 'hotel-app',
-      script: 'cmd.exe',
-      args: '/c npm run server',
-      cwd: 'C:\\SYSplus\\Hotel',
+      script: path.join(__dirname, 'node_modules', 'tsx', 'dist', 'cli.mjs'),
+      args: 'server.ts',
+      cwd: __dirname,
       watch: false,
       env: {
         NODE_ENV: 'production',
