@@ -174,7 +174,7 @@ export class TurnoService {
             .where(function () {
                 let hasCondition = false;
                 for (const [pref, maxNum] of Object.entries(prevLimits)) {
-                    if (pref !== 'ANT' && pref !== 'RC') {
+                    if (pref !== 'ANT' && pref !== 'RC' && pref !== 'DEV') {
                         hasCondition = true;
                         this.orWhere(function () {
                             this.where('PREF_PRE', pref).andWhere(db.raw('CAST(FACT_NUMERO AS INTEGER) > ?', [maxNum]));
@@ -766,6 +766,65 @@ export class TurnoService {
             totalConsignaciones: Math.round((totalFacturasConsigna + totalAbonosConsigna) * 100) / 100
         };
 
+        // 5b. Consultar devoluciones de ventas registradas en este turno (DEVOLUCIONES_VENTAS con TIDO_COD = 33)
+        let maxPrevDevtId = prevLimits['DEV'] || 0;
+        if (!maxPrevDevtId) {
+            const maxPrevDevRow = await db(tables.DEVOLUCIONES_VENTAS)
+                .where('TIDO_COD', 33)
+                .where('DEVT_FECHA', '<', fechaInicioDia)
+                .max('DEVT_ID as MAXD')
+                .first()
+                .catch(() => null);
+            maxPrevDevtId = parseInt(String(maxPrevDevRow?.MAXD || 0), 10);
+        }
+
+        const devolucionesTurnoRows = await db(tables.DEVOLUCIONES_VENTAS)
+            .where('TIDO_COD', 33)
+            .andWhere(function () {
+                this.where('DEVT_ANULADO', '!=', 'S').orWhereNull('DEVT_ANULADO');
+            })
+            .andWhere(function () {
+                if (maxPrevDevtId > 0) {
+                    this.where('DEVT_ID', '>', maxPrevDevtId);
+                } else {
+                    this.where('DEVT_FECHA', '>=', fechaInicioDia);
+                }
+            })
+            .orderBy('DEVT_ID', 'asc');
+
+        const formatFechaDev = (dVal: any): string => {
+            if (!dVal) return '—';
+            const d = new Date(dVal);
+            if (isNaN(d.getTime())) return String(dVal);
+            const day = String(d.getDate()).padStart(2, '0');
+            const month = String(d.getMonth() + 1).padStart(2, '0');
+            const year = d.getFullYear();
+            return `${day}/${month}/${year}`;
+        };
+
+        const detalleDevoluciones = devolucionesTurnoRows.map((d: any) => {
+            const devId = parseInt(String(d.DEVT_ID || 0), 10);
+            const total = parseFloat(String(d.DEVT_TOTAL || 0));
+            const obs = Buffer.isBuffer(d.DEVT_OBS) ? d.DEVT_OBS.toString('utf8').trim() : String(d.DEVT_OBS || '').trim();
+
+            return {
+                devolucionId: devId,
+                prefijo: String(d.PREF_PRE || '').trim(),
+                numero: String(d.DEVT_NUMERO || '').trim(),
+                fecha: formatFechaDev(d.DEVT_FECHA),
+                facturaNumero: d.DEVT_FACTURA ? String(d.DEVT_FACTURA).trim() : undefined,
+                facturaId: d.DEVT_FACTID ? parseInt(String(d.DEVT_FACTID), 10) : undefined,
+                tercNit: String(d.TERC_NIT || '').trim(),
+                clienteNombre: String(d.DEVT_NOMTERC || 'CONSUMIDOR FINAL').trim(),
+                total: Math.round(total * 100) / 100,
+                iva: parseFloat(String(d.DEVT_IVAMONTO || 0)),
+                observaciones: obs || undefined,
+                usuario: d.DEVT_USUARIO ? String(d.DEVT_USUARIO).trim() : undefined
+            };
+        });
+
+        const totalDevoluciones = Math.round(detalleDevoluciones.reduce((sum, d) => sum + d.total, 0) * 100) / 100;
+
         return {
             turno: {
                 idTurno: turno.ID_TURNO,
@@ -785,6 +844,8 @@ export class TurnoService {
             totalEfectivoEsperado,
             totalConsignaciones,
             totalCartera,
+            totalDevoluciones,
+            detalleDevoluciones,
             facturasGeneradas,
             habitacionesEstado,
             totalesHabitaciones: {
@@ -852,7 +913,7 @@ export class TurnoService {
 
         // Si algún prefijo de facturas no emitió en este turno, asegurar que conserve el FACTFIN histórico
         for (const [pref, maxNum] of Object.entries(prevLimits)) {
-            if (pref !== 'ANT' && pref !== 'RC') {
+            if (pref !== 'ANT' && pref !== 'RC' && pref !== 'DEV') {
                 const yaGrabado = resumen.facturasGeneradas.some(fg => fg.prefijo === pref);
                 if (!yaGrabado && maxNum > 0) {
                     await db(tables.TURNO_DET_FACTURAS).insert({
@@ -894,6 +955,20 @@ export class TurnoService {
                 FACTFIN: maxCurrentAnclId,
                 CANTIDAD: 0,
                 TOTAL: resumen.totalAbonosTurno
+            }).catch(() => {});
+        }
+
+        const maxDevRow = await db(tables.DEVOLUCIONES_VENTAS).where('TIDO_COD', 33).max('DEVT_ID as MAXD').first().catch(() => null);
+        const maxCurrentDevtId = parseInt(String(maxDevRow?.MAXD || '0'), 10);
+        if (maxCurrentDevtId > 0) {
+            await db(tables.TURNO_DET_FACTURAS).insert({
+                ID_TURNO: idTurno,
+                ID_ITEM: itemFact++,
+                PREF: 'DEV',
+                FACTINI: maxCurrentDevtId,
+                FACTFIN: maxCurrentDevtId,
+                CANTIDAD: resumen.detalleDevoluciones?.length || 0,
+                TOTAL: resumen.totalDevoluciones || 0
             }).catch(() => {});
         }
 
@@ -992,13 +1067,58 @@ export class TurnoService {
             cantidadTransacciones: 0
         }));
 
-        const facturasGeneradas = facturasRows.map((f: any) => ({
-            prefijo: String(f.PREF || '').trim(),
-            facturaInicial: parseInt(String(f.FACTINI || '0'), 10),
-            facturaFinal: parseInt(String(f.FACTFIN || '0'), 10),
-            cantidad: parseInt(String(f.CANTIDAD || '0'), 10),
-            total: parseFloat(String(f.TOTAL || '0'))
-        }));
+        const facturasGeneradas = facturasRows
+            .filter((f: any) => !['RC', 'ANT', 'DEV'].includes(String(f.PREF || '').trim()))
+            .map((f: any) => ({
+                prefijo: String(f.PREF || '').trim(),
+                facturaInicial: parseInt(String(f.FACTINI || '0'), 10),
+                facturaFinal: parseInt(String(f.FACTFIN || '0'), 10),
+                cantidad: parseInt(String(f.CANTIDAD || '0'), 10),
+                total: parseFloat(String(f.TOTAL || '0'))
+            }));
+
+        const devRow = facturasRows.find((f: any) => String(f.PREF || '').trim() === 'DEV');
+        let totalDevoluciones = 0;
+        let detalleDevoluciones: any[] = [];
+        if (devRow) {
+            totalDevoluciones = parseFloat(String(devRow.TOTAL || '0'));
+            const cantDev = parseInt(String(devRow.CANTIDAD || '0'), 10);
+            if (cantDev > 0) {
+                const prevDevRow = await db(tables.TURNO_DET_FACTURAS)
+                    .where('ID_TURNO', '<', idTurno)
+                    .where('PREF', 'DEV')
+                    .orderBy('ID_TURNO', 'desc')
+                    .first()
+                    .catch(() => null);
+                const minDevId = prevDevRow ? parseInt(String(prevDevRow.FACTFIN || '0'), 10) : 0;
+                const maxDevId = parseInt(String(devRow.FACTFIN || '0'), 10);
+
+                const devsCerrado = await db(tables.DEVOLUCIONES_VENTAS)
+                    .where('TIDO_COD', 33)
+                    .where('DEVT_ID', '>', minDevId)
+                    .where('DEVT_ID', '<=', maxDevId)
+                    .andWhere(function () {
+                        this.where('DEVT_ANULADO', '!=', 'S').orWhereNull('DEVT_ANULADO');
+                    })
+                    .orderBy('DEVT_ID', 'asc')
+                    .catch(() => []);
+
+                detalleDevoluciones = devsCerrado.map((d: any) => ({
+                    devolucionId: parseInt(String(d.DEVT_ID), 10),
+                    prefijo: String(d.PREF_PRE || '').trim(),
+                    numero: String(d.DEVT_NUMERO || '').trim(),
+                    fecha: d.DEVT_FECHA ? new Date(d.DEVT_FECHA).toLocaleDateString('es-CO') : '—',
+                    facturaNumero: d.DEVT_FACTURA ? String(d.DEVT_FACTURA).trim() : undefined,
+                    facturaId: d.DEVT_FACTID ? parseInt(String(d.DEVT_FACTID), 10) : undefined,
+                    tercNit: String(d.TERC_NIT || '').trim(),
+                    clienteNombre: String(d.DEVT_NOMTERC || 'CONSUMIDOR FINAL').trim(),
+                    total: parseFloat(String(d.DEVT_TOTAL || 0)),
+                    iva: parseFloat(String(d.DEVT_IVAMONTO || 0)),
+                    observaciones: Buffer.isBuffer(d.DEVT_OBS) ? d.DEVT_OBS.toString('utf8').trim() : String(d.DEVT_OBS || '').trim(),
+                    usuario: d.DEVT_USUARIO ? String(d.DEVT_USUARIO).trim() : undefined
+                }));
+            }
+        }
 
         let disponibles = 0;
         let ocupadas = 0;
@@ -1058,6 +1178,8 @@ export class TurnoService {
             totalEfectivoEsperado,
             totalConsignaciones: Math.round(totalConsignaciones * 100) / 100,
             totalCartera: Math.round(totalCartera * 100) / 100,
+            totalDevoluciones,
+            detalleDevoluciones,
             facturasGeneradas,
             habitacionesEstado,
             totalesHabitaciones: {

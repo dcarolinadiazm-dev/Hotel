@@ -146,6 +146,21 @@ export interface ITurnoResumenCierre {
         totalAbonos: number;
         totalConsignaciones: number;
     };
+    totalDevoluciones?: number;
+    detalleDevoluciones?: Array<{
+        devolucionId: number;
+        prefijo: string;
+        numero: string;
+        fecha: string;
+        facturaNumero?: string;
+        facturaId?: number;
+        tercNit: string;
+        clienteNombre: string;
+        total: number;
+        iva?: number;
+        observaciones?: string;
+        usuario?: string;
+    }>;
 }
 
 export interface ITurnoAperturaPayload {

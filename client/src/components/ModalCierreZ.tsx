@@ -18,7 +18,7 @@ export const ModalCierreZ: React.FC<ModalCierreZProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [observaciones, setObservaciones] = useState<string>('');
   const [guardando, setGuardando] = useState<boolean>(false);
-  const [modalDetalle, setModalDetalle] = useState<'abonosTurno' | 'efectivo' | 'consignaciones' | 'abonosAntiguos' | null>(null);
+  const [modalDetalle, setModalDetalle] = useState<'abonosTurno' | 'efectivo' | 'consignaciones' | 'abonosAntiguos' | 'devoluciones' | null>(null);
 
   useEffect(() => {
     const fetchResumen = async () => {
@@ -254,6 +254,18 @@ export const ModalCierreZ: React.FC<ModalCierreZProps> = ({
                     ${(resumen.totalAbonosAntiguos || 0).toLocaleString('es-CO')}
                   </div>
                 </div>
+
+                {/* 9. Total Devoluciones */}
+                <div
+                  style={{ background: '#fff1f2', border: '1px solid #fecdd3', borderRadius: '10px', padding: '12px', cursor: 'pointer', transition: 'all 0.15s ease' }}
+                  onDoubleClick={() => setModalDetalle('devoluciones')}
+                  title="Haga doble clic para ver el detalle de Devoluciones"
+                >
+                  <span style={{ fontSize: '11px', fontWeight: 600, color: '#be123c' }}>🔄 Total Devoluciones</span>
+                  <div style={{ fontSize: '17px', fontWeight: 800, color: '#9f1239', marginTop: '4px' }}>
+                    ${(resumen.totalDevoluciones || 0).toLocaleString('es-CO')}
+                  </div>
+                </div>
               </div>
 
 
@@ -459,7 +471,9 @@ export const ModalCierreZ: React.FC<ModalCierreZProps> = ({
                     ? 'linear-gradient(135deg, #d97706 0%, #b45309 100%)'
                     : modalDetalle === 'consignaciones'
                     ? 'linear-gradient(135deg, #0284c7 0%, #0369a1 100%)'
-                    : 'linear-gradient(135deg, #ea580c 0%, #c2410c 100%)',
+                    : modalDetalle === 'abonosAntiguos'
+                    ? 'linear-gradient(135deg, #ea580c 0%, #c2410c 100%)'
+                    : 'linear-gradient(135deg, #e11d48 0%, #9f1239 100%)',
                 color: '#fff',
                 display: 'flex',
                 justifyContent: 'space-between',
@@ -472,12 +486,14 @@ export const ModalCierreZ: React.FC<ModalCierreZProps> = ({
                   {modalDetalle === 'efectivo' && '💰 Detalle de Efectivo Esperado'}
                   {modalDetalle === 'consignaciones' && '🏦 Detalle de Consignaciones y Transferencias'}
                   {modalDetalle === 'abonosAntiguos' && '⏳ Detalle de Abonos Antiguos (Pendientes de Facturación)'}
+                  {modalDetalle === 'devoluciones' && '🔄 Detalle de Devoluciones de Ventas (TIDO 33)'}
                 </h3>
                 <p style={{ margin: '2px 0 0 0', fontSize: '12px', opacity: 0.9 }}>
                   {modalDetalle === 'abonosTurno' && 'Relación de anticipos registrados durante este turno'}
                   {modalDetalle === 'efectivo' && 'Facturas y abonos recibidos en efectivo en este turno'}
                   {modalDetalle === 'consignaciones' && 'Facturas y abonos recibidos por banco, transferencia o consignación'}
                   {modalDetalle === 'abonosAntiguos' && 'Anticipos de fechas o turnos previos que siguen en habitaciones activas'}
+                  {modalDetalle === 'devoluciones' && 'Relación de devoluciones en ventas registradas durante este turno'}
                 </p>
               </div>
               <button
@@ -871,6 +887,86 @@ export const ModalCierreZ: React.FC<ModalCierreZProps> = ({
                           <td colSpan={5} style={{ padding: '10px', textAlign: 'right' }}>TOTAL ABONOS ANTIGUOS:</td>
                           <td style={{ padding: '10px', textAlign: 'right', fontSize: '14px' }}>
                             ${(resumen.totalAbonosAntiguos || 0).toLocaleString('es-CO')}
+                          </td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* CASO 5: DEVOLUCIONES DE VENTAS */}
+              {modalDetalle === 'devoluciones' && (
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                    <span style={{ fontSize: '13px', fontWeight: 700, color: '#be123c' }}>
+                      🔄 Devoluciones Registradas en el Turno ({resumen.detalleDevoluciones?.length || 0})
+                    </span>
+                    <span style={{ fontSize: '16px', fontWeight: 800, color: '#9f1239' }}>
+                      Total: ${(resumen.totalDevoluciones || 0).toLocaleString('es-CO')}
+                    </span>
+                  </div>
+
+                  <div style={{ border: '1px solid #e2e8f0', borderRadius: '8px', overflow: 'hidden' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12.5px' }}>
+                      <thead>
+                        <tr style={{ background: '#fff1f2', borderBottom: '2px solid #fecdd3', color: '#9f1239', textAlign: 'left' }}>
+                          <th style={{ padding: '8px 10px', fontWeight: 700 }}>Fecha</th>
+                          <th style={{ padding: '8px 10px', fontWeight: 700 }}>Devolución #</th>
+                          <th style={{ padding: '8px 10px', fontWeight: 700 }}>Factura Afectada</th>
+                          <th style={{ padding: '8px 10px', fontWeight: 700 }}>Cliente / Tercero</th>
+                          <th style={{ padding: '8px 10px', fontWeight: 700 }}>Usuario</th>
+                          <th style={{ padding: '8px 10px', fontWeight: 700 }}>Observaciones</th>
+                          <th style={{ padding: '8px 10px', fontWeight: 700, textAlign: 'right' }}>Total</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(!resumen.detalleDevoluciones || resumen.detalleDevoluciones.length === 0) ? (
+                          <tr>
+                            <td colSpan={7} style={{ padding: '20px', textAlign: 'center', color: '#64748b' }}>
+                              No hay devoluciones registradas en este turno.
+                            </td>
+                          </tr>
+                        ) : (
+                          resumen.detalleDevoluciones.map((d, idx) => (
+                            <tr key={idx} style={{ borderBottom: '1px solid #f1f5f9', background: idx % 2 === 0 ? '#fff' : '#f8fafc' }}>
+                              <td style={{ padding: '8px 10px', fontSize: '11.5px', color: '#475569', whiteSpace: 'nowrap' }}>
+                                📅 {d.fecha || '—'}
+                              </td>
+                              <td style={{ padding: '8px 10px', fontWeight: 600, color: '#334155' }}>
+                                {d.prefijo ? `${d.prefijo}-` : ''}{d.numero}
+                              </td>
+                              <td style={{ padding: '8px 10px' }}>
+                                {d.facturaNumero ? (
+                                  <span style={{ background: '#f1f5f9', color: '#334155', padding: '2px 7px', borderRadius: '4px', fontWeight: 600, fontSize: '11.5px' }}>
+                                    Fact #{d.facturaNumero}
+                                  </span>
+                                ) : (
+                                  <span style={{ color: '#94a3b8' }}>—</span>
+                                )}
+                              </td>
+                              <td style={{ padding: '8px 10px', color: '#1e293b' }}>
+                                <div style={{ fontWeight: 600 }}>{d.clienteNombre || 'CONSUMIDOR FINAL'}</div>
+                                {d.tercNit && <div style={{ fontSize: '11px', color: '#64748b' }}>NIT: {d.tercNit}</div>}
+                              </td>
+                              <td style={{ padding: '8px 10px', color: '#475569', fontSize: '12px' }}>
+                                {d.usuario || '—'}
+                              </td>
+                              <td style={{ padding: '8px 10px', color: '#475569', fontSize: '11.5px', maxWidth: '200px', wordBreak: 'break-word' }}>
+                                {d.observaciones || '—'}
+                              </td>
+                              <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 800, color: '#be123c' }}>
+                                ${d.total.toLocaleString('es-CO')}
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                      <tfoot>
+                        <tr style={{ background: '#ffe4e6', borderTop: '2px solid #fecdd3', fontWeight: 800, color: '#9f1239' }}>
+                          <td colSpan={6} style={{ padding: '10px', textAlign: 'right' }}>TOTAL DEVOLUCIONES:</td>
+                          <td style={{ padding: '10px', textAlign: 'right', fontSize: '14px' }}>
+                            ${(resumen.totalDevoluciones || 0).toLocaleString('es-CO')}
                           </td>
                         </tr>
                       </tfoot>

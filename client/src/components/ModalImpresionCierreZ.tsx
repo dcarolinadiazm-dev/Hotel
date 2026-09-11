@@ -24,6 +24,7 @@ export interface ResumenCierreZData {
   totalEfectivoEsperado: number;
   totalConsignaciones?: number;
   totalCartera?: number;
+  totalDevoluciones?: number;
   facturasGeneradas: Array<{
     prefijo: string;
     facturaInicial: number;
@@ -100,6 +101,20 @@ export interface ResumenCierreZData {
     totalAbonos: number;
     totalConsignaciones: number;
   };
+  detalleDevoluciones?: Array<{
+    devolucionId: number;
+    prefijo: string;
+    numero: string;
+    fecha: string;
+    facturaNumero?: string;
+    facturaId?: number;
+    tercNit: string;
+    clienteNombre: string;
+    total: number;
+    iva?: number;
+    observaciones?: string;
+    usuario?: string;
+  }>;
 }
 
 interface ModalImpresionCierreZProps {
@@ -311,6 +326,10 @@ export const ModalImpresionCierreZ: React.FC<ModalImpresionCierreZProps> = ({
                 <span className="pos-label">ABONOS ANTIGUOS:</span>
                 <span className="pos-value bold">${(data.totalAbonosAntiguos || 0).toLocaleString('es-CO')}</span>
               </div>
+              <div className="pos-info-row">
+                <span className="pos-label">TOTAL DEVOLUCIONES:</span>
+                <span className="pos-value bold">${(data.totalDevoluciones || 0).toLocaleString('es-CO')}</span>
+              </div>
             </div>
 
             <div className="pos-divider-double" />
@@ -480,6 +499,51 @@ export const ModalImpresionCierreZ: React.FC<ModalImpresionCierreZProps> = ({
                         <td colSpan={2} style={{ textAlign: 'left' }}>TOTAL ANTIGUOS</td>
                         <td style={{ textAlign: 'right' }}>
                           ${(data.totalAbonosAntiguos || 0).toLocaleString('es-CO')}
+                        </td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              </>
+            )}
+
+            {/* Devoluciones */}
+            {data.detalleDevoluciones && data.detalleDevoluciones.length > 0 && (
+              <>
+                <div className="pos-divider-solid" />
+                <div style={{ margin: '6px 0' }}>
+                  <p style={{ textAlign: 'center', fontWeight: 'bold', fontSize: '11px', textTransform: 'uppercase', marginBottom: '4px' }}>
+                    DEVOLUCIONES EN VENTAS ({data.detalleDevoluciones.length})
+                  </p>
+                  <table className="pos-items-table">
+                    <thead>
+                      <tr>
+                        <th style={{ textAlign: 'left', width: '30%' }}>Dev / Fact</th>
+                        <th style={{ textAlign: 'left', width: '40%' }}>Cliente</th>
+                        <th style={{ textAlign: 'right', width: '30%' }}>Total</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {data.detalleDevoluciones.map((d, i) => (
+                        <tr key={i}>
+                          <td style={{ textAlign: 'left', fontWeight: 'bold' }}>
+                            {d.prefijo ? `${d.prefijo}-` : ''}{d.numero}<br />
+                            {d.facturaNumero && <span style={{ fontSize: '9px', fontWeight: 'normal' }}>Fac {d.facturaNumero}</span>}
+                          </td>
+                          <td style={{ textAlign: 'left' }}>
+                            <span style={{ fontSize: '9px', color: '#555' }}>{(d.clienteNombre || '').slice(0, 16)}</span>
+                          </td>
+                          <td style={{ textAlign: 'right', fontWeight: 'bold' }}>
+                            ${d.total.toLocaleString('es-CO')}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot>
+                      <tr style={{ borderTop: '1px dashed #000', fontWeight: 'bold' }}>
+                        <td colSpan={2} style={{ textAlign: 'left' }}>TOTAL DEV</td>
+                        <td style={{ textAlign: 'right' }}>
+                          ${(data.totalDevoluciones || 0).toLocaleString('es-CO')}
                         </td>
                       </tr>
                     </tfoot>
