@@ -593,6 +593,7 @@ export const Habitaciones = ({
                   <div className="title-with-badge">
                     <h1 className="rooms-main-title">Habitaciones</h1>
                     <button
+                      type="button"
                       className="btn-add-room-inline"
                       onClick={handleOpenCreateModal}
                       title="Crear Nueva Habitación"
@@ -600,6 +601,7 @@ export const Habitaciones = ({
                       + Crear Habitación
                     </button>
                     <button
+                      type="button"
                       className="btn-facturar-inline"
                       onClick={() => setShowFacturarDirectoModal(true)}
                       title="Facturar productos sin habitación (Venta directa / POS)"

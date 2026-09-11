@@ -170,12 +170,30 @@ export const ModalFacturacionDirecta: React.FC<ModalFacturacionDirectaProps> = (
   // Impresión
   const [impresionData, setImpresionData] = useState<{ tipo: 'FACTURA' | 'REMISION'; idDoc: number } | null>(null);
 
+  const handleResetForm = () => {
+    setCartItems([]);
+    setSelectedNit('');
+    setSelectedNombre('');
+    setObservaciones('');
+    setLineasPago([]);
+    setSelectedArticuloCod('');
+    setCustomDescripcion('');
+    setCustomCantidad(1);
+    setCustomPrecio(0);
+    setSearchArticuloText('');
+    setShowConfirmModal(false);
+    setFeedback(null);
+  };
+
+  const handleCloseModal = () => {
+    handleResetForm();
+    onClose();
+  };
+
   useEffect(() => {
     if (!isOpen) return;
     setLoading(true);
-    setFeedback(null);
-    setCartItems([]);
-    setObservaciones('');
+    handleResetForm();
 
     const token = localStorage.getItem('hotel_token');
 
@@ -577,6 +595,7 @@ export const ModalFacturacionDirecta: React.FC<ModalFacturacionDirectaProps> = (
   const diferenciaPagos = totalPagar - totalPagosAsignados;
 
   const handleExecuteFacturarDirecto = async () => {
+    if (processing) return;
     if (!esTotalCuadrado) {
       alert('El total asignado en las formas de pago debe cuadrar exactamente con el total de la factura');
       return;
@@ -618,19 +637,16 @@ export const ModalFacturacionDirecta: React.FC<ModalFacturacionDirectaProps> = (
       if (!res.ok) throw new Error(data.error || 'Error al generar la factura directa');
 
       setShowConfirmModal(false);
-      setFeedback({
-        type: 'success',
-        message: `🎉 ¡Factura de Venta #${data.numDoc || ''} generada exitosamente!`,
-      });
-      setCartItems([]);
-      setObservaciones('');
-
-      if (data.idDoc) {
-        setImpresionData({ tipo: 'FACTURA', idDoc: data.idDoc });
-      }
+      handleResetForm();
 
       if (onFacturaGenerada) {
         onFacturaGenerada();
+      }
+
+      if (data.idDoc) {
+        setImpresionData({ tipo: 'FACTURA', idDoc: data.idDoc });
+      } else {
+        onClose();
       }
     } catch (err: any) {
       alert(err.message || 'Error al procesar la factura');
@@ -685,7 +701,7 @@ export const ModalFacturacionDirecta: React.FC<ModalFacturacionDirectaProps> = (
               <h2 className="modal-dialog-title">🧾 Facturación Directa de Productos (POS)</h2>
               <span className="badge-pewe-modal">⚡ Venta Mostrador</span>
             </div>
-            <button className="btn-modal-close-x" onClick={onClose} title="Cerrar ventana">
+            <button className="btn-modal-close-x" onClick={handleCloseModal} title="Cerrar ventana">
               ✕
             </button>
           </div>
@@ -1351,7 +1367,10 @@ export const ModalFacturacionDirecta: React.FC<ModalFacturacionDirectaProps> = (
         <ModalImpresionPOS
           tipoDoc={impresionData.tipo}
           idDoc={impresionData.idDoc}
-          onClose={() => setImpresionData(null)}
+          onClose={() => {
+            setImpresionData(null);
+            handleCloseModal();
+          }}
         />
       )}
     </>
