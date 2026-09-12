@@ -155,10 +155,15 @@ async function ajustarFactura(numeroFactura: string, nitCliente: string) {
     console.log(`ℹ️ APLICACION_CLIENTE_DETALLE ya tenía ${existingDets.length} detalle(s) registrado(s).`);
   }
 
-  // 8. Asegurar saldos finales en SALDOS_DOC_CARTERA
+  // 8. Asegurar saldos finales en SALDOS_DOC_CARTERA de la Factura
   await db('SALDOS_DOC_CARTERA')
     .where({ SDCA_TIPOREF: 31, SDCA_IDREF: factId })
     .update({ SDCA_ABONO: montoAplicar, SDCA_MONTO: totalDoc });
+
+  // 9. Asegurar que el registro original del anticipo tenga SDCA_ABONO = 0
+  // para que al sumarse con la fila de la aplicación (-montoAplicar), el saldo final en CARTERA_CLIENTE sea exactamente 0
+  await db.raw(`UPDATE SALDOS_DOC_CARTERA SET SDCA_ABONO = 0 WHERE SDCA_TIPOREF = 45 AND SDCA_IDREF = ${anclId} AND SDCA_MONTO < 0`);
+  console.log(`✅ Saldo en cartera de Anticipo ${anclNum} y Factura ${factNum} verificado en $0`);
 
   console.log(`🎉 FACTURA ${factNum} AJUSTADA Y CRUZADA EXITOSAMENTE`);
 }
