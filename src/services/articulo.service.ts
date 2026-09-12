@@ -191,6 +191,51 @@ export class ArticuloService {
             };
         });
     }
+
+    // Consultar existencias de un artículo mediante el procedimiento EXISTENCIAS_UNIDAD_BOD
+    static async getExistencia(artiCod: string, bodega?: string, unidad?: string): Promise<{ existencia: number; reservado: number; ordenado: number; bodega: string; unidad: string }> {
+        try {
+            let targetBodega = bodega;
+            if (!targetBodega) {
+                try {
+                    const pv = await db(tables.PUNTO_VENTA).where('PTVT_ACTIVO', 'S').first();
+                    if (pv && pv.BODE_COD) targetBodega = String(pv.BODE_COD).trim();
+                    else {
+                        const firstPv = await db(tables.PUNTO_VENTA).first();
+                        if (firstPv && firstPv.BODE_COD) targetBodega = String(firstPv.BODE_COD).trim();
+                    }
+                } catch { }
+            }
+            if (!targetBodega) targetBodega = '1';
+
+            let targetUnidad = unidad;
+            if (!targetUnidad) {
+                try {
+                    const art = await db(tables.ARTICULO).where('ARTI_COD', artiCod).select('ARTI_UNIDAD').first();
+                    if (art && art.ARTI_UNIDAD) targetUnidad = String(art.ARTI_UNIDAD).trim();
+                } catch { }
+            }
+            if (!targetUnidad) targetUnidad = 'UND';
+
+            const raw = await db.raw(
+                'SELECT BODEGA, EXISTENCIA, RESERVADO, ORDENADO, STAND FROM EXISTENCIAS_UNIDAD_BOD(?, CURRENT_DATE, ?, ?)',
+                [artiCod.trim(), targetUnidad.trim(), targetBodega.trim()]
+            );
+            const rows = raw.rows ? raw.rows : (Array.isArray(raw) ? raw : [raw]);
+            const row = rows[0];
+
+            return {
+                existencia: row && row.EXISTENCIA !== null && row.EXISTENCIA !== undefined ? parseFloat(String(row.EXISTENCIA)) : 0,
+                reservado: row && row.RESERVADO !== null && row.RESERVADO !== undefined ? parseFloat(String(row.RESERVADO)) : 0,
+                ordenado: row && row.ORDENADO !== null && row.ORDENADO !== undefined ? parseFloat(String(row.ORDENADO)) : 0,
+                bodega: targetBodega,
+                unidad: targetUnidad
+            };
+        } catch (e: any) {
+            console.warn('Aviso consultando EXISTENCIAS_UNIDAD_BOD:', e.message);
+            return { existencia: 0, reservado: 0, ordenado: 0, bodega: bodega || '1', unidad: unidad || 'UND' };
+        }
+    }
 }
 
 

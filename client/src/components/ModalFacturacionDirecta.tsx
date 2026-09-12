@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ModalImpresionPOS } from './ModalImpresionPOS';
 import { ClienteSearchSelect } from './ClienteSearchSelect';
+import { checkArticleStockAndAlert } from '../utils/stockValidator';
 
 interface ModalFacturacionDirectaProps {
   isOpen: boolean;
@@ -305,7 +306,7 @@ export const ModalFacturacionDirecta: React.FC<ModalFacturacionDirectaProps> = (
     setCustomCantidad(1);
   };
 
-  const handleBarcodeScanOrSearch = (query: string) => {
+  const handleBarcodeScanOrSearch = async (query: string) => {
     const term = query.trim().toLowerCase();
     if (!term) return;
 
@@ -336,6 +337,9 @@ export const ModalFacturacionDirecta: React.FC<ModalFacturacionDirectaProps> = (
       setSearchArticuloText('');
       return;
     }
+
+    // Validar existencias mediante el procedimiento EXISTENCIAS_UNIDAD_BOD
+    await checkArticleStockAndAlert(match.codigo, match.descripcion, match.unidad);
 
     // Agregar de una vez al carrito con cantidad 1 (o incrementar +1 si ya existe)
     setCartItems((prev) => {
@@ -385,7 +389,7 @@ export const ModalFacturacionDirecta: React.FC<ModalFacturacionDirectaProps> = (
     }
   };
 
-  const handleAddItemToCart = () => {
+  const handleAddItemToCart = async () => {
     if (!selectedArticuloCod && !customDescripcion.trim()) {
       alert('Seleccione un artículo o ingrese una descripción');
       return;
@@ -397,6 +401,16 @@ export const ModalFacturacionDirecta: React.FC<ModalFacturacionDirectaProps> = (
     if (customPrecio <= 0) {
       alert('El precio del artículo debe ser mayor a cero ($0). No se pueden agregar productos con precio en cero.');
       return;
+    }
+
+    // Validar existencias mediante el procedimiento EXISTENCIAS_UNIDAD_BOD
+    if (selectedArticuloCod) {
+      const found = articulos.find((a) => a.codigo === selectedArticuloCod);
+      await checkArticleStockAndAlert(
+        selectedArticuloCod,
+        customDescripcion.trim() || selectedArticuloCod,
+        found?.unidad || customUnidad
+      );
     }
 
     const newItem: LineaCarrito = {

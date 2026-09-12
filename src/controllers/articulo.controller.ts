@@ -42,5 +42,23 @@ export class ArticuloController {
             res.status(500).json({ error: 'Error al consultar precio del artículo' });
         }
     }
+
+    static async getExistencia(req: Request, res: Response) {
+        const { artiCod, bodega, unidad } = req.query;
+        if (!artiCod) {
+            return res.status(400).json({ error: 'artiCod es obligatorio' });
+        }
+        try {
+            const resultado = await ArticuloService.getExistencia(
+                String(artiCod).trim(),
+                bodega ? String(bodega).trim() : undefined,
+                unidad ? String(unidad).trim() : undefined
+            );
+            res.json(resultado);
+        } catch (error: any) {
+            console.error('Error en ArticuloController.getExistencia:', error.message);
+            res.status(500).json({ error: 'Error al consultar existencias del artículo' });
+        }
+    }
 }
 

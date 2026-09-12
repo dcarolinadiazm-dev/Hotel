@@ -3,6 +3,7 @@ import type { Habitacion } from './Habitaciones';
 import { ModalAbonos } from './ModalAbonos';
 import { ModalImpresionPOS } from './ModalImpresionPOS';
 import { ClienteSearchSelect } from './ClienteSearchSelect';
+import { checkArticleStockAndAlert } from '../utils/stockValidator';
 
 
 interface Tercero {
@@ -679,6 +680,9 @@ export const ModalHabitacion = ({
       return;
     }
 
+    // Validar existencias mediante el procedimiento EXISTENCIAS_UNIDAD_BOD
+    await checkArticleStockAndAlert(match.codigo, match.descripcion, match.unidad);
+
     const token = localStorage.getItem('hotel_token');
     try {
       const res = await fetch('/api/pedidos/agregar-item', {
@@ -798,6 +802,16 @@ export const ModalHabitacion = ({
         message: '⚠️ No se puede agregar al carrito un producto con precio en cero ($0). Selecciona un artículo con precio o asigna un valor mayor a cero.',
       });
       return;
+    }
+
+    // Validar existencias mediante el procedimiento EXISTENCIAS_UNIDAD_BOD
+    if (selectedArticuloCod) {
+      const found = articulos.find((a) => a.codigo === selectedArticuloCod);
+      await checkArticleStockAndAlert(
+        selectedArticuloCod,
+        customDescripcion.trim() || selectedArticuloCod,
+        found?.unidad || customUnidad
+      );
     }
 
     const token = localStorage.getItem('hotel_token');

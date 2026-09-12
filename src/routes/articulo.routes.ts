@@ -6,6 +6,7 @@ const router = Router();
 
 router.get('/listas-precios', verifyToken, ArticuloController.getListasPrecios);
 router.get('/precio', verifyToken, ArticuloController.getPrecio);
+router.get('/existencia', verifyToken, ArticuloController.getExistencia);
 router.get('/', verifyToken, ArticuloController.getAll);
 
 export default router;

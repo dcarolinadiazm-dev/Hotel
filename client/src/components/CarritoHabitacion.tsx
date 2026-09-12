@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import type { Habitacion } from './Habitaciones';
 import { getUserDisplayName } from '../utils/user.utils';
+import { checkArticleStockAndAlert } from '../utils/stockValidator';
 
 interface ConsumoItem {
   id: number;
@@ -99,6 +100,15 @@ export const CarritoHabitacion = ({
     if (!customDescripcion.trim()) {
       alert('Por favor ingrese o seleccione un producto');
       return;
+    }
+
+    // Validar existencias mediante el procedimiento EXISTENCIAS_UNIDAD_BOD
+    if (selectedArticuloCod) {
+      await checkArticleStockAndAlert(
+        selectedArticuloCod,
+        customDescripcion.trim() || selectedArticuloCod,
+        customUnidad
+      );
     }
 
     const token = localStorage.getItem('hotel_token');
