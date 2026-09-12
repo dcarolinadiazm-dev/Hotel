@@ -27,8 +27,10 @@ const clientDistPath = path.join(__dirname, 'client', 'dist');
 if (fs.existsSync(clientDistPath)) {
     app.use(express.static(clientDistPath, {
         setHeaders: (res, filePath) => {
-            if (filePath.endsWith('.html')) {
+            if (filePath.endsWith('.html') || filePath.endsWith('sw.js') || filePath.endsWith('.json')) {
                 res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+                res.setHeader('Pragma', 'no-cache');
+                res.setHeader('Expires', '0');
             }
         }
     }));
