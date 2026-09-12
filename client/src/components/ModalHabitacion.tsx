@@ -968,6 +968,36 @@ export const ModalHabitacion = ({
         throw new Error(data.error || 'Error al procesar factura en el servidor');
       }
     } catch (err: any) {
+      const isNetworkError = err?.name === 'TypeError' || err?.message?.includes('Failed to fetch') || err?.message?.includes('NetworkError');
+      if (isNetworkError) {
+        // Ante intermitencia de Wi-Fi en la recepción, verificar si el servidor completó la facturación
+        try {
+          await new Promise((r) => setTimeout(r, 1500));
+          const checkRes = await fetch(`/api/habitaciones`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          if (checkRes.ok) {
+            const habs = await checkRes.json();
+            const currentHab = Array.isArray(habs)
+              ? habs.find((h: any) => String(h.id) === String(habitacion.id) || String(h.numero) === String(habitacion.numero))
+              : null;
+            if (currentHab && currentHab.estado === 'Disponible') {
+              setActionFeedback({
+                type: 'success',
+                message: `🎉 ¡Factura procesada con Éxito en el servidor! La habitación ha quedado Disponible.`,
+              });
+              if (onHabitacionUpdated) onHabitacionUpdated();
+              setTimeout(() => {
+                onClose();
+              }, 2000);
+              return;
+            }
+          }
+        } catch (verifyErr) {
+          console.warn('No se pudo verificar estado tras error de red:', verifyErr);
+        }
+      }
+
       setActionFeedback({
         type: 'error',
         message: `❌ Error al procesar: ${err.message}`,
