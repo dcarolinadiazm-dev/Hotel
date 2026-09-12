@@ -441,24 +441,33 @@ export const ModalImpresionPOS: React.FC<ModalImpresionPOSProps> = ({
                 )}
 
                 {/* Formas de Pago del Recibo de Caja */}
-                {doc.formasPago && doc.formasPago.length > 0 ? (
-                  <div className="pos-payment-breakdown" style={{ marginTop: '4px' }}>
-                    <div className="pos-total-row">
-                      <span className="bold">{doc.abonos && doc.abonos.length > 0 ? 'FORMAS DE PAGO (RECIBO DE CAJA):' : 'FORMAS DE PAGO:'}</span>
-                    </div>
-                    {doc.formasPago.map((fp, i) => (
-                      <div key={i} className="pos-total-row" style={{ paddingLeft: '6px', fontSize: '9pt' }}>
-                        <span>• {fp.nombre}:</span>
-                        <span className="bold">{formatMoney(fp.monto)}</span>
+                {(() => {
+                  const pagosValidos = (doc.formasPago || []).filter((fp) => (fp.monto || 0) > 0);
+                  if (pagosValidos.length > 0) {
+                    return (
+                      <div className="pos-payment-breakdown" style={{ marginTop: '4px' }}>
+                        <div className="pos-total-row">
+                          <span className="bold">{doc.abonos && doc.abonos.length > 0 ? 'FORMAS DE PAGO (RECIBO DE CAJA):' : 'FORMAS DE PAGO:'}</span>
+                        </div>
+                        {pagosValidos.map((fp, i) => (
+                          <div key={i} className="pos-total-row" style={{ paddingLeft: '6px', fontSize: '9pt' }}>
+                            <span>• {fp.nombre}:</span>
+                            <span className="bold">{formatMoney(fp.monto)}</span>
+                          </div>
+                        ))}
                       </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="pos-total-row pos-payment-method">
-                    <span className="bold">FORMA DE PAGO:</span>
-                    <span className="bold pos-payment-badge">{doc.formaPago.toUpperCase()}</span>
-                  </div>
-                )}
+                    );
+                  }
+                  if (!doc.abonos || doc.abonos.length === 0) {
+                    return (
+                      <div className="pos-total-row pos-payment-method">
+                        <span className="bold">FORMA DE PAGO:</span>
+                        <span className="bold pos-payment-badge">{(doc.formaPago || 'EFECTIVO').toUpperCase()}</span>
+                      </div>
+                    );
+                  }
+                  return null;
+                })()}
               </div>
 
               <div className="pos-divider-double"></div>

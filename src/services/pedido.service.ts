@@ -959,12 +959,20 @@ export class PedidoService {
                 // 1. Obtener abonos para sincronizar
                 const abonosResult = await AbonoService.getAbonos(habitacionId, clienteNit);
                 const abonosList = abonosResult?.abonos || [];
+                const totalAbonosAplicados = abonosList.reduce((acc, a) => acc + (parseFloat(String(a.monto)) || 0), 0);
+                const saldoRestanteDoc = Math.max(0, totalDoc - totalAbonosAplicados);
 
                 // 2. Sincronizar el Recibo de Caja y Aplicación de Anticipos si hay abonos disponibles
                 if (abonosList && abonosList.length > 0) {
                     console.log(`[FACTURACION-PASO-14] Sincronizando Recibo de Caja y Aplicación de Anticipos...`);
                     await PedidoService.syncReciboCajaFactura(idGenerado, totalDoc, abonosList, listaPagos, prefijo);
-                    await PedidoService.syncFacturaPagos(idGenerado, listaPagos);
+                    if (saldoRestanteDoc > 0) {
+                        // Solo sincronizar formas de pago por el saldo restante no cubierto por abonos
+                        await PedidoService.syncFacturaPagos(idGenerado, listaPagos);
+                    } else {
+                        // Si el anticipo cubre el 100%, eliminar cualquier forma de pago de contado generada por el SP
+                        await db('FACTURAS_CONTADO_PAGO').where('FCNT_ID', idGenerado).del().catch(() => { });
+                    }
                 } else {
                     // Garantizar sincronización exacta de formas de pago en FACTURAS_CONTADO_PAGO y RECIBOS_CAJA_PAGO
                     await PedidoService.syncFacturaPagos(idGenerado, listaPagos);
@@ -2283,15 +2291,22 @@ export class PedidoService {
 
         const totalAbonos = abonosList.reduce((acc, a) => acc + (a.monto || 0), 0);
 
-        if (pagosList.length === 1 && abonosList.length === 0 && pagosList[0].monto < totalPagar) {
-            pagosList[0].monto = totalPagar;
-        } else if (pagosList.length === 0 && abonosList.length === 0) {
-            pagosList = [{ nombre: formaPagoStr || 'EFECTIVO', monto: totalPagar }];
+        if (totalAbonos >= totalPagar && totalPagar > 0) {
+            pagosList = [];
+        } else {
+            pagosList = pagosList.filter(p => (p.monto || 0) > 0);
+            if (pagosList.length === 1 && abonosList.length === 0 && pagosList[0].monto < totalPagar) {
+                pagosList[0].monto = totalPagar;
+            } else if (pagosList.length === 0 && abonosList.length === 0) {
+                pagosList = [{ nombre: formaPagoStr || 'EFECTIVO', monto: totalPagar }];
+            }
         }
 
         let formaPagoFinalStr = formaPagoStr;
         if (pagosList.length > 0) {
             formaPagoFinalStr = pagosList.map(p => `${p.nombre}: $${Math.round(p.monto).toLocaleString('es-CO')}`).join(' / ');
+        } else if (abonosList.length > 0) {
+            formaPagoFinalStr = 'ANTICIPOS / ABONOS';
         }
 
         const cleanStr = (s?: any) => {
