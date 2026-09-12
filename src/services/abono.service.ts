@@ -558,6 +558,13 @@ export class AbonoService {
             console.warn('Aviso al insertar en HABITACION_MOVIM_ANTICIPOS:', e);
         }
 
+        // Asegurar que el saldo original del anticipo en SALDOS_DOC_CARTERA mantenga SDCA_ABONO = 0
+        // para que al momento de cruzarse con la factura dé saldo 0 en CARTERA_CLIENTE
+        await db.raw(
+            'UPDATE SALDOS_DOC_CARTERA SET SDCA_ABONO = 0 WHERE SDCA_TIPOREF = 45 AND SDCA_IDREF = ? AND SDCA_MONTO < 0',
+            [anclId]
+        ).catch(() => { });
+
         // Nota: Los abonos se registran con prefijo ANT y no se contabilizan (se contabiliza luego la factura/aplicación)
 
         return {

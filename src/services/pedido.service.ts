@@ -700,6 +700,12 @@ export class PedidoService {
             dinwId = await this.getActiveDinw(habitacionId, habNumero, nit, nombreCliente);
         }
 
+        // Obtener el movimiento exacto vinculado a este DINW_ID para garantizar seguimiento preciso de abonos
+        const currentMov = await db(tables.HABITACION_MOVIM)
+            .where('DINW_ID', dinwId)
+            .first()
+            .catch(() => null);
+
         // Asegurar que el documento contenga detalles antes de procesar
         const details = await db(tables.DOC_INVENTARIO_DET_WEB)
             .where({ DINW_ID: dinwId, DIWD_ANULADO: 'N' })
@@ -956,8 +962,8 @@ export class PedidoService {
                     console.warn('Aviso sincronizando FADE_DTOPORC/FADE_DTOMONTO/FADE_TOTAL/FADE_OBS:', dtoErr.message);
                 }
 
-                // 1. Obtener abonos para sincronizar
-                const abonosResult = await AbonoService.getAbonos(habitacionId, clienteNit);
+                // 1. Obtener abonos para sincronizar pasando el ID de movimiento exacto
+                const abonosResult = await AbonoService.getAbonos(habitacionId, clienteNit, currentMov?.ID_MOVIM);
                 const abonosList = abonosResult?.abonos || [];
                 const totalAbonosAplicados = abonosList.reduce((acc, a) => acc + (parseFloat(String(a.monto)) || 0), 0);
                 const saldoRestanteDoc = Math.max(0, totalDoc - totalAbonosAplicados);
@@ -1004,17 +1010,10 @@ export class PedidoService {
 
         // Marcar el movimiento en HABITACION_MOVIM como Facturado y asignar ID_DOC y TIPO = 31.
         try {
-            const activeMov = await db(tables.HABITACION_MOVIM)
-                .where('ID_HABITACION', String(habitacionId))
-                .andWhere(function () {
-                    this.where('ESTADO', 'Activo').orWhereNull('ESTADO');
-                })
-                .orderBy('ID_MOVIM', 'desc')
-                .first();
-
-            if (activeMov) {
+            const movIdToUpdate = currentMov?.ID_MOVIM;
+            if (movIdToUpdate) {
                 await db(tables.HABITACION_MOVIM)
-                    .where('ID_MOVIM', activeMov.ID_MOVIM)
+                    .where('ID_MOVIM', movIdToUpdate)
                     .update({
                         ID_DOC: idGenerado || dinwId,
                         DINW_ID: dinwId,
