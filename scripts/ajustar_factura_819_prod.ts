@@ -180,6 +180,9 @@ async function run() {
     // Ajustar Factura 819
     await ajustarFactura('819', '1066572184');
 
+    // Ajustar Factura 838
+    await ajustarFactura('838', '33487888');
+
     console.log('\n====================================================');
     console.log('🎉 TODAS LAS FACTURAS FUERON AJUSTADAS CORRECTAMENTE');
     console.log('====================================================\n');
