@@ -818,6 +818,10 @@ export class PedidoService {
 
         const nowFecha = new Date();
 
+        // Identificar si la venta incluye o es totalmente a crédito (cartera)
+        const carteraFopaSet = await PedidoService.getCarteraFormasPagoIds();
+        const esVentaCredito = carteraFopaSet.has(primaryFopaId) || listaPagos.some(p => carteraFopaSet.has(parseInt(String(p.formaPagoId), 10)));
+
         // Actualizar encabezado antes de invocar el procedimiento (fijando fecha de factura actual)
         const updateHeaderPayload: any = {
             DINW_TIPO: 31,
@@ -831,6 +835,7 @@ export class PedidoService {
             DINW_IVAMONTO: totalIva,
             DINW_MONTO: totalDoc,
             DINW_FORMAP: primaryFopaId,
+            DINW_CONTADO: esVentaCredito ? 'N' : 'S',
             DINW_IMPINC: 'S',
             DINW_IVAINC: 'S'
         };
@@ -840,10 +845,11 @@ export class PedidoService {
         // Garantizar que los consecutivos de Facturas y Recibos de Caja estén sincronizados
         await PedidoService.syncConsecutivos(prefijo);
 
-        // Preparar caja y formas de pago en DOC_INVENTARIO_PAGO_WEB antes de llamar al SP
+        // Preparar caja y formas de pago en DOC_INVENTARIO_PAGO_WEB antes de llamar al SP (solo pagos contado/bancos)
         try {
             await db('DOC_INVENTARIO_PAGO_WEB').where('DINW_ID', dinwId).del().catch(() => { });
-            if (listaPagos && listaPagos.length > 0) {
+            const pagosContadoPrep = listaPagos.filter(p => !carteraFopaSet.has(parseInt(String(p.formaPagoId), 10)));
+            if (pagosContadoPrep && pagosContadoPrep.length > 0) {
                 let cajaId = 1;
                 let codbco = '';
                 try {
@@ -853,8 +859,8 @@ export class PedidoService {
                     if (cajaRow?.CAJA_FPBCO) codbco = String(cajaRow.CAJA_FPBCO).trim();
                 } catch (e) { }
 
-                for (let i = 0; i < listaPagos.length; i++) {
-                    const p = listaPagos[i];
+                for (let i = 0; i < pagosContadoPrep.length; i++) {
+                    const p = pagosContadoPrep[i];
                     const isEfectivo = p.formaPagoId === 1;
                     let numBco = '';
 
@@ -917,7 +923,7 @@ export class PedidoService {
             try {
                 try {
                     const curFact = await db('FACTURAS').where('FACT_ID', idGenerado).first();
-                    if (curFact && (Math.abs(Number(curFact.FACT_TOTAL) - totalDoc) > 0.01 || curFact.FACT_FORMAP !== primaryFopaId)) {
+                    if (curFact && (Math.abs(Number(curFact.FACT_TOTAL) - totalDoc) > 0.01 || curFact.FACT_FORMAP !== primaryFopaId || curFact.FACT_CONTADO !== (esVentaCredito ? 'N' : 'S'))) {
                         const subtotalFactura = Math.round((totalDoc - totalIva) * 100) / 100;
                         await db('FACTURAS')
                             .where('FACT_ID', idGenerado)
@@ -928,6 +934,7 @@ export class PedidoService {
                                 FACT_IVAMONTO: totalIva,
                                 FACT_SUBTOTAL: subtotalFactura,
                                 FACT_FORMAP: primaryFopaId,
+                                FACT_CONTADO: esVentaCredito ? 'N' : 'S',
                                 FACT_OBS: Buffer.from(obsString, 'utf-8')
                             });
                     }
@@ -990,8 +997,11 @@ export class PedidoService {
                 } else {
                     // Garantizar sincronización exacta de formas de pago en FACTURAS_CONTADO_PAGO y RECIBOS_CAJA_PAGO
                     await PedidoService.syncFacturaPagos(idGenerado, listaPagos);
-                    console.log(`[FACTURACION-PASO-14] Contabilizando Recibo de Caja generado con la factura...`);
-                    await PedidoService.contabilizarReciboDeFactura(idGenerado, prefijo);
+                    const tieneContado = listaPagos.some(p => !carteraFopaSet.has(parseInt(String(p.formaPagoId), 10)) && Number(p.monto) > 0);
+                    if (tieneContado) {
+                        console.log(`[FACTURACION-PASO-14] Contabilizando Recibo de Caja generado con la factura...`);
+                        await PedidoService.contabilizarReciboDeFactura(idGenerado, prefijo);
+                    }
                 }
 
                 // 4. Contabilizar la Factura de Venta generada
@@ -1483,6 +1493,11 @@ export class PedidoService {
             DINW_COBRADOR: 1
         };
 
+        // Identificar si la venta incluye o es totalmente a crédito (cartera)
+        const carteraFopaSet = await PedidoService.getCarteraFormasPagoIds();
+        const esVentaCredito = carteraFopaSet.has(primaryFopaId) || listaPagos.some(p => carteraFopaSet.has(parseInt(String(p.formaPagoId), 10)));
+        (dinwHeaderData as any).DINW_CONTADO = esVentaCredito ? 'N' : 'S';
+
         const existingDinwRow = await db(tables.DOC_INVENTARIO_WEB).where('DINW_ID', dinwId).first();
         if (existingDinwRow) {
             await db(tables.DOC_INVENTARIO_WEB).where('DINW_ID', dinwId).update(dinwHeaderData);
@@ -1499,10 +1514,11 @@ export class PedidoService {
         // Garantizar que los consecutivos de Facturas y Recibos de Caja estén sincronizados
         await PedidoService.syncConsecutivos(prefijo);
 
-        // Preparar caja y formas de pago en DOC_INVENTARIO_PAGO_WEB antes de llamar al SP
+        // Preparar caja y formas de pago en DOC_INVENTARIO_PAGO_WEB antes de llamar al SP (solo contado/bancos)
         try {
             await db('DOC_INVENTARIO_PAGO_WEB').where('DINW_ID', dinwId).del().catch(() => { });
-            if (listaPagos && listaPagos.length > 0) {
+            const pagosContadoPrep = listaPagos.filter(p => !carteraFopaSet.has(parseInt(String(p.formaPagoId), 10)));
+            if (pagosContadoPrep && pagosContadoPrep.length > 0) {
                 let cajaId2 = 1;
                 let codbco2 = '';
                 try {
@@ -1512,8 +1528,8 @@ export class PedidoService {
                     if (cajaRow?.CAJA_FPBCO) codbco2 = String(cajaRow.CAJA_FPBCO).trim();
                 } catch (e) { }
 
-                for (let i = 0; i < listaPagos.length; i++) {
-                    const p = listaPagos[i];
+                for (let i = 0; i < pagosContadoPrep.length; i++) {
+                    const p = pagosContadoPrep[i];
                     const isEfectivo = p.formaPagoId === 1;
                     let numBco = '';
 
@@ -1596,7 +1612,7 @@ export class PedidoService {
 
                 try {
                     const curFact = await db('FACTURAS').where('FACT_ID', idGenerado).first();
-                    if (curFact && (Math.abs(Number(curFact.FACT_TOTAL) - totalDoc) > 0.01 || curFact.FACT_FORMAP !== primaryFopaId)) {
+                    if (curFact && (Math.abs(Number(curFact.FACT_TOTAL) - totalDoc) > 0.01 || curFact.FACT_FORMAP !== primaryFopaId || curFact.FACT_CONTADO !== (esVentaCredito ? 'N' : 'S'))) {
                         const nowFecha = new Date();
                         const subtotalFactura = Math.round((totalDoc - totalIva) * 100) / 100;
                         await db('FACTURAS')
@@ -1608,6 +1624,7 @@ export class PedidoService {
                                 FACT_IVAMONTO: totalIva,
                                 FACT_SUBTOTAL: subtotalFactura,
                                 FACT_FORMAP: primaryFopaId,
+                                FACT_CONTADO: esVentaCredito ? 'N' : 'S',
                                 FACT_OBS: Buffer.from(obsString, 'utf-8')
                             });
                     }
@@ -1649,9 +1666,12 @@ export class PedidoService {
                 // 2. Garantizar sincronización exacta de formas de pago en FACTURAS_CONTADO_PAGO
                 await PedidoService.syncFacturaPagos(idGenerado, listaPagos);
 
-                // 3. Sincronizar y Contabilizar el Recibo de Caja de la Factura POS
-                console.log(`[FACTURA-POS-PASO-8] Contabilizando Recibo de Caja de la Factura POS...`);
-                await PedidoService.contabilizarReciboDeFactura(idGenerado, prefijo);
+                // 3. Sincronizar y Contabilizar el Recibo de Caja de la Factura POS (solo si hubo pago de contado)
+                const tieneContado = listaPagos.some(p => !carteraFopaSet.has(parseInt(String(p.formaPagoId), 10)) && Number(p.monto) > 0);
+                if (tieneContado) {
+                    console.log(`[FACTURA-POS-PASO-8] Contabilizando Recibo de Caja de la Factura POS...`);
+                    await PedidoService.contabilizarReciboDeFactura(idGenerado, prefijo);
+                }
             } catch (syncErr: any) {
                 console.error('Error sincronizando facturarDirecto:', syncErr.message);
             }
@@ -2814,6 +2834,10 @@ export class PedidoService {
             listaPagos[0].monto = totalDoc;
         }
 
+        // Identificar si la venta incluye o es totalmente a crédito (cartera)
+        const carteraFopaSet = await PedidoService.getCarteraFormasPagoIds();
+        const esVentaCredito = carteraFopaSet.has(primaryFopaId) || listaPagos.some(p => carteraFopaSet.has(parseInt(String(p.formaPagoId), 10)));
+
         // Insertar encabezado maestro consolidado en DOC_INVENTARIO_WEB
         const nowFecha = new Date();
         await db(tables.DOC_INVENTARIO_WEB).insert({
@@ -2835,6 +2859,7 @@ export class PedidoService {
             DINW_IVAMONTO: totalIva,
             DINW_MONTO: totalDoc,
             DINW_FORMAP: primaryFopaId,
+            DINW_CONTADO: esVentaCredito ? 'N' : 'S',
             DINW_ANULADO: 'N',
             DINW_IMPINC: 'S',
             DINW_IVAINC: 'S',
@@ -2884,10 +2909,11 @@ export class PedidoService {
         // Garantizar que los consecutivos de Facturas y Recibos de Caja estén sincronizados
         await PedidoService.syncConsecutivos(prefijo);
 
-        // Preparar caja y formas de pago en DOC_INVENTARIO_PAGO_WEB antes de llamar al SP
+        // Preparar caja y formas de pago en DOC_INVENTARIO_PAGO_WEB antes de llamar al SP (solo contado/bancos)
         try {
             await db('DOC_INVENTARIO_PAGO_WEB').where('DINW_ID', masterDinwId).del().catch(() => { });
-            if (listaPagos && listaPagos.length > 0) {
+            const pagosContadoPrep = listaPagos.filter(p => !carteraFopaSet.has(parseInt(String(p.formaPagoId), 10)));
+            if (pagosContadoPrep && pagosContadoPrep.length > 0) {
                 let cajaId3 = 1;
                 let codbco3 = '';
                 try {
@@ -2897,8 +2923,8 @@ export class PedidoService {
                     if (cajaRow?.CAJA_FPBCO) codbco3 = String(cajaRow.CAJA_FPBCO).trim();
                 } catch (e) { }
 
-                for (let i = 0; i < listaPagos.length; i++) {
-                    const p = listaPagos[i];
+                for (let i = 0; i < pagosContadoPrep.length; i++) {
+                    const p = pagosContadoPrep[i];
                     const isEfectivo = p.formaPagoId === 1;
                     let numBco = '';
 
@@ -2961,7 +2987,7 @@ export class PedidoService {
             try {
                 try {
                     const curFact = await db('FACTURAS').where('FACT_ID', idGenerado).first();
-                    if (curFact && (Math.abs(Number(curFact.FACT_TOTAL) - totalDoc) > 0.01 || curFact.FACT_FORMAP !== primaryFopaId)) {
+                    if (curFact && (Math.abs(Number(curFact.FACT_TOTAL) - totalDoc) > 0.01 || curFact.FACT_FORMAP !== primaryFopaId || curFact.FACT_CONTADO !== (esVentaCredito ? 'N' : 'S'))) {
                         const nowFecha = new Date();
                         const subtotalFactura = Math.round((totalDoc - totalIva) * 100) / 100;
                         await db('FACTURAS')
@@ -2973,6 +2999,7 @@ export class PedidoService {
                                 FACT_IVAMONTO: totalIva,
                                 FACT_SUBTOTAL: subtotalFactura,
                                 FACT_FORMAP: primaryFopaId,
+                                FACT_CONTADO: esVentaCredito ? 'N' : 'S',
                                 FACT_OBS: Buffer.from(obsGeneral, 'utf-8')
                             });
                     }
@@ -3037,8 +3064,11 @@ export class PedidoService {
                 } else {
                     // Garantizar sincronización exacta de formas de pago en FACTURAS_CONTADO_PAGO y RECIBOS_CAJA_PAGO
                     await PedidoService.syncFacturaPagos(idGenerado, listaPagos);
-                    console.log(`[FACTURACION-MULTI] Contabilizando Recibo de Caja generado...`);
-                    await PedidoService.contabilizarReciboDeFactura(idGenerado, prefijo);
+                    const tieneContado = listaPagos.some(p => !carteraFopaSet.has(parseInt(String(p.formaPagoId), 10)) && Number(p.monto) > 0);
+                    if (tieneContado) {
+                        console.log(`[FACTURACION-MULTI] Contabilizando Recibo de Caja generado...`);
+                        await PedidoService.contabilizarReciboDeFactura(idGenerado, prefijo);
+                    }
                 }
 
                 // 4. Contabilizar la Factura de Venta consolidada
@@ -3120,18 +3150,37 @@ export class PedidoService {
         }
     }
 
+    // Obtener IDs de formas de pago que son a Crédito / Cartera
+    static async getCarteraFormasPagoIds(): Promise<Set<number>> {
+        const formasDb = await db('FORMAS_PAGO').select('FOPA_ID', 'FOPA_NOM', 'FOPA_CARTERA').catch(() => []);
+        const carteraSet = new Set<number>();
+        for (const fp of formasDb) {
+            const esCartera = String(fp.FOPA_CARTERA || '').trim().toUpperCase() === 'S' ||
+                              String(fp.FOPA_NOM || '').toUpperCase().includes('CREDITO');
+            if (esCartera) {
+                carteraSet.add(parseInt(String(fp.FOPA_ID), 10));
+            }
+        }
+        return carteraSet;
+    }
+
     // Sincronizar fielmente las formas de pago en FACTURAS_CONTADO_PAGO y RECIBOS_CAJA_PAGO
     static async syncFacturaPagos(idDoc: number, listaPagos: Array<{ formaPagoId: number; monto: number }>) {
         if (!idDoc || !listaPagos || listaPagos.length === 0) return;
 
         try {
-            const existing = await db('FACTURAS_CONTADO_PAGO').where('FCNT_ID', idDoc).orderBy('FCNP_ITEM', 'asc');
-            const matches = existing.length === listaPagos.length && existing.every((row: any, idx: number) => {
-                return parseInt(String(row.FOPA_ID), 10) === listaPagos[idx].formaPagoId &&
-                    Math.abs(parseFloat(String(row.FCNP_MONTO)) - listaPagos[idx].monto) < 1;
-            });
+            const carteraSet = await PedidoService.getCarteraFormasPagoIds();
+            const pagosContado = listaPagos.filter(p => !carteraSet.has(parseInt(String(p.formaPagoId), 10)));
+            const pagosCredito = listaPagos.filter(p => carteraSet.has(parseInt(String(p.formaPagoId), 10)));
+            const totalContado = pagosContado.reduce((acc, p) => acc + (parseFloat(String(p.monto)) || 0), 0);
+            const totalCredito = pagosCredito.reduce((acc, p) => acc + (parseFloat(String(p.monto)) || 0), 0);
+            const esVentaCredito = pagosCredito.length > 0;
 
-            const totalPagos = listaPagos.reduce((acc, p) => acc + (parseFloat(String(p.monto)) || 0), 0);
+            const existing = await db('FACTURAS_CONTADO_PAGO').where('FCNT_ID', idDoc).orderBy('FCNP_ITEM', 'asc');
+            const matches = existing.length === pagosContado.length && existing.every((row: any, idx: number) => {
+                return parseInt(String(row.FOPA_ID), 10) === pagosContado[idx].formaPagoId &&
+                    Math.abs(parseFloat(String(row.FCNP_MONTO)) - pagosContado[idx].monto) < 1;
+            });
 
             // Obtener datos de caja y banco
             let cajaId = 1;
@@ -3145,21 +3194,27 @@ export class PedidoService {
 
             const nowFecha = new Date();
 
+            // 1. Asegurar temporalmente SDCA_ABONO en 0 para que los triggers FACTURAS_AU / FACTURAS_CONTADO_PAGO_AI
+            // no disparen excepciones de DOCUMENTO_CON_ABONOS o DOCUMENTO_ABONO_MAYOR
+            await db('SALDOS_DOC_CARTERA')
+                .where({ SDCA_TIPOREF: 31, SDCA_IDREF: idDoc })
+                .update({ SDCA_ABONO: 0 })
+                .catch(() => { });
+
+            // 2. Sincronizar FACT_CONTADO en FACTURAS ('N' si incluye crédito, 'S' si es 100% contado)
+            if (esVentaCredito) {
+                await db('FACTURAS').where('FACT_ID', idDoc).update({ FACT_CONTADO: 'N' }).catch(() => { });
+            } else {
+                await db('FACTURAS').where('FACT_ID', idDoc).update({ FACT_CONTADO: 'S' }).catch(() => { });
+            }
+
+            // 3. Ajustar registros en FACTURAS_CONTADO_PAGO (solo pagos de contado/bancos, NO crédito)
             if (!matches) {
-                console.log(`[PAGOS] Ajustando formas de pago en FACTURAS_CONTADO_PAGO para Factura ID ${idDoc}. Formas enviadas: ${listaPagos.length}, en BD: ${existing.length}`);
-
-                // Asegurar que SALDOS_DOC_CARTERA tenga saldo disponible para que el trigger
-                // FACTURAS_CONTADO_PAGO_AI / RECIBOS_CAJA_DETALLE_AI no lance DOCUMENTO_ABONO_MAYOR
-                await db('SALDOS_DOC_CARTERA')
-                    .where({ SDCA_TIPOREF: 31, SDCA_IDREF: idDoc })
-                    .update({ SDCA_ABONO: 0 })
-                    .catch(() => { });
-
-                // Eliminar registros incompletos o desactualizados
+                console.log(`[PAGOS] Ajustando formas de pago en FACTURAS_CONTADO_PAGO para Factura ID ${idDoc}. Formas contado: ${pagosContado.length}, en BD: ${existing.length}`);
                 await db('FACTURAS_CONTADO_PAGO').where('FCNT_ID', idDoc).del();
 
-                for (let i = 0; i < listaPagos.length; i++) {
-                    const p = listaPagos[i];
+                for (let i = 0; i < pagosContado.length; i++) {
+                    const p = pagosContado[i];
                     const isEfectivo = p.formaPagoId === 1;
                     let numBco = '';
                     if (!isEfectivo && codbco) {
@@ -3189,22 +3244,48 @@ export class PedidoService {
                 }
             }
 
-            // Sincronizar el recibo de caja de contado con el total exacto de las formas de pago
+            // 4. Calcular cruces de anticipos previos si existen
+            const cruceDet = await db('APLICACION_CLIENTE_DETALLE')
+                .where({ ACDE_TIPODOC: 31, ACDE_IDDOC: idDoc })
+                .andWhere(function () {
+                    this.where('ACDE_ANULADO', '!=', 'S').orWhereNull('ACDE_ANULADO');
+                })
+                .select('ACDE_APLICADO')
+                .catch(() => []);
+            const totalCruces = cruceDet.reduce((sum: number, r: any) => sum + Math.abs(parseFloat(String(r.ACDE_APLICADO || 0))), 0);
+
+            // 5. Actualizar SALDOS_DOC_CARTERA con el saldo y abono definitivo
+            const sdcCur = await db('SALDOS_DOC_CARTERA')
+                .where({ SDCA_TIPOREF: 31, SDCA_IDREF: idDoc })
+                .first();
+            const montoDoc = sdcCur ? parseFloat(String(sdcCur.SDCA_MONTO || 0)) : (totalContado + totalCredito);
+            const totalAbonoFinal = Math.round((totalContado + totalCruces) * 100) / 100;
+            const saldoDocFinal = Math.max(0, Math.round((montoDoc - totalAbonoFinal) * 100) / 100);
+
+            await db('SALDOS_DOC_CARTERA')
+                .where({ SDCA_TIPOREF: 31, SDCA_IDREF: idDoc })
+                .update({
+                    SDCA_ABONO: totalAbonoFinal,
+                    SDCA_SALDO: saldoDocFinal
+                })
+                .catch(() => { });
+
+            // 6. Sincronizar el recibo de caja de contado
             const rcdRow = await db('RECIBOS_CAJA_DETALLE')
                 .where({ RCDE_TIPODOC: 31, RCDE_IDDOC: idDoc, RCDE_ANULADO: 'N' })
                 .first();
-            if (rcdRow && rcdRow.RECA_ID && totalPagos > 0) {
-                await db('RECIBOS_CAJA').where('RECA_ID', rcdRow.RECA_ID).update({ RECA_MONTO: totalPagos }).catch(() => { });
-                await db('RECIBOS_CAJA_DETALLE').where({ RECA_ID: rcdRow.RECA_ID, RCDE_TIPODOC: 31, RCDE_IDDOC: idDoc }).update({ RCDE_ABONO: totalPagos }).catch(() => { });
-                await db('SALDOS_DOC_CARTERA').where({ SDCA_TIPOREF: 31, SDCA_IDREF: idDoc }).update({ SDCA_ABONO: totalPagos }).catch(() => { });
 
-                // Asegurar que RECIBOS_CAJA_PAGO tenga todas las líneas de pago
+            if (totalContado > 0 && rcdRow && rcdRow.RECA_ID) {
+                await db('RECIBOS_CAJA').where('RECA_ID', rcdRow.RECA_ID).update({ RECA_MONTO: totalContado }).catch(() => { });
+                await db('RECIBOS_CAJA_DETALLE').where({ RECA_ID: rcdRow.RECA_ID, RCDE_TIPODOC: 31, RCDE_IDDOC: idDoc }).update({ RCDE_ABONO: totalContado }).catch(() => { });
+
+                // Asegurar que RECIBOS_CAJA_PAGO tenga todas las líneas de pago de contado
                 try {
                     const rcPagos = await db('RECIBOS_CAJA_PAGO').where('RECA_ID', rcdRow.RECA_ID);
-                    if (rcPagos.length !== listaPagos.length) {
+                    if (rcPagos.length !== pagosContado.length) {
                         await db('RECIBOS_CAJA_PAGO').where('RECA_ID', rcdRow.RECA_ID).del().catch(() => { });
-                        for (let i = 0; i < listaPagos.length; i++) {
-                            const p = listaPagos[i];
+                        for (let i = 0; i < pagosContado.length; i++) {
+                            const p = pagosContado[i];
                             const isEfectivo = p.formaPagoId === 1;
                             await db('RECIBOS_CAJA_PAGO').insert({
                                 RECA_ID: rcdRow.RECA_ID,
@@ -3222,8 +3303,11 @@ export class PedidoService {
                         }
                     }
                 } catch (rcpaErr: any) { }
-            } else {
-                await db('SALDOS_DOC_CARTERA').where({ SDCA_TIPOREF: 31, SDCA_IDREF: idDoc }).update({ SDCA_ABONO: totalPagos }).catch(() => { });
+            } else if (totalContado === 0 && rcdRow && rcdRow.RECA_ID) {
+                // Si la factura es 100% crédito y el procedimiento generó un recibo de caja vacío por defecto, limpiarlo
+                await db('RECIBOS_CAJA_PAGO').where('RECA_ID', rcdRow.RECA_ID).del().catch(() => { });
+                await db('RECIBOS_CAJA_DETALLE').where('RECA_ID', rcdRow.RECA_ID).del().catch(() => { });
+                await db('RECIBOS_CAJA').where('RECA_ID', rcdRow.RECA_ID).del().catch(() => { });
             }
         } catch (err: any) {
             console.warn('[PAGOS] Aviso en syncFacturaPagos:', err.message);
