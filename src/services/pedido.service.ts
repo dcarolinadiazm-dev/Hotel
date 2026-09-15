@@ -2996,12 +2996,15 @@ export class PedidoService {
                 }
             }
 
-            // CRÍTICO: Siempre sincronizar SALDOS_DOC_CARTERA con saldoPagado (tanto si hay RC como si no)
-            // para que SDCA_SALDO sea igual a montoAplicarTotal y el trigger APLICACION_CLIENTE_DETALLE_AI
-            // no lance DOCUMENTO_ABONO_MAYOR al aplicar los anticipos
+            // CRÍTICO: Siempre sincronizar SALDOS_DOC_CARTERA para que SDCA_SALDO sea igual a montoAplicarTotal
+            // y el trigger APLICACION_CLIENTE_DETALLE_AI permita la aplicación sin DOCUMENTO_ABONO_MAYOR
             await db('SALDOS_DOC_CARTERA')
                 .where({ SDCA_TIPOREF: 31, SDCA_IDREF: idDoc })
-                .update({ SDCA_ABONO: saldoPagado })
+                .update({
+                    SDCA_MONTO: Math.abs(parseFloat(String(factRow?.FACT_TOTAL || montoAplicarTotal + saldoPagado))),
+                    SDCA_SALDO: Math.abs(montoAplicarTotal),
+                    SDCA_ABONO: saldoPagado
+                })
                 .catch(() => { });
 
             // PASO B: REGISTRO DE APLICACION DE CLIENTE (TIDO_COD = 43)
@@ -3069,6 +3072,15 @@ export class PedidoService {
                         await db(tables.ANTICIPOS_CLIENTE)
                             .where('ANCL_ID', anclIdVal)
                             .update({ TERC_NIT: clienteNit })
+                            .catch(() => { });
+
+                        // Asegurar saldo negativo disponible en SALDOS_DOC_CARTERA para el anticipo
+                        await db('SALDOS_DOC_CARTERA')
+                            .where({ SDCA_TIPOREF: 45, SDCA_IDREF: anclIdVal })
+                            .update({
+                                SDCA_SALDO: -Math.abs(aplicadoEsteAbono),
+                                SDCA_ABONO: 0
+                            })
                             .catch(() => { });
                     }
 

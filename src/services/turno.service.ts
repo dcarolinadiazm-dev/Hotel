@@ -151,6 +151,19 @@ export class TurnoService {
             }
         }
 
+        // Si el turno ya está cerrado, obtener los límites superiores grabados en TURNO_DET_FACTURAS
+        const isClosed = String(turno.ESTADO || '').trim() === 'Cerrado';
+        const currentLimits: { [pref: string]: number } = {};
+        if (isClosed) {
+            const curTurnoFactRows = await db(tables.TURNO_DET_FACTURAS)
+                .where('ID_TURNO', turno.ID_TURNO)
+                .select('PREF', 'FACTFIN')
+                .catch(() => []);
+            for (const r of curTurnoFactRows) {
+                currentLimits[String(r.PREF).trim()] = parseInt(String(r.FACTFIN), 10);
+            }
+        }
+
         // 1. Obtener todas las formas de pago configuradas
         const formasPagoRows = await db(tables.FORMAS_PAGO)
             .where(function () {
@@ -178,14 +191,25 @@ export class TurnoService {
                         hasCondition = true;
                         this.orWhere(function () {
                             this.where('PREF_PRE', pref).andWhere(db.raw('CAST(FACT_NUMERO AS INTEGER) > ?', [maxNum]));
+                            if (isClosed && currentLimits[pref] !== undefined) {
+                                this.andWhere(db.raw('CAST(FACT_NUMERO AS INTEGER) <= ?', [currentLimits[pref]]));
+                            }
                         });
                     }
                 }
                 if (!hasCondition) {
                     this.where('FACT_FECHA', '>=', fechaInicioDia);
+                    if (isClosed && turno.FECHA_CIERRE) {
+                        this.andWhere('FACT_FECHA', '<=', turno.FECHA_CIERRE);
+                    }
                 }
             })
             .andWhere('FACT_FECHA', '>=', fechaInicioDia)
+            .andWhere(function () {
+                if (isClosed && turno.FECHA_CIERRE) {
+                    this.where('FACT_FECHA', '<=', turno.FECHA_CIERRE);
+                }
+            })
             .andWhere(function () {
                 this.where('FACT_ANULADO', '!=', 'S').orWhereNull('FACT_ANULADO');
             })
@@ -431,6 +455,12 @@ export class TurnoService {
                 if (maxPrevAnclId > 0) {
                     this.where(`${tables.ANTICIPOS_CLIENTE}.ANCL_ID`, '>', maxPrevAnclId);
                 }
+                if (isClosed && currentLimits['ANT']) {
+                    this.where(`${tables.ANTICIPOS_CLIENTE}.ANCL_ID`, '<=', currentLimits['ANT']);
+                }
+                if (isClosed && turno.FECHA_CIERRE) {
+                    this.where(`${tables.ANTICIPOS_CLIENTE}.ANCL_FECHA`, '<=', turno.FECHA_CIERRE);
+                }
             })
             .select(
                 `${tables.RECIBOS_CAJA}.RECA_ID`,
@@ -667,32 +697,55 @@ export class TurnoService {
         totalConsignaciones = Math.round(totalConsignaciones * 100) / 100;
         totalCartera = Math.round(totalCartera * 100) / 100;
 
-        // 6. Consultar estado actual de las habitaciones
-        const habitaciones = await HabitacionService.getAllHabitaciones();
-
+        // 6. Consultar estado de las habitaciones (histórico si está cerrado, o actual si está abierto)
         let disponibles = 0;
         let ocupadas = 0;
         let reservadas = 0;
         let inhabilitadas = 0;
+        let habitacionesEstado: Array<{ id: string; numero: string; estado: string; huesped?: string; totalPendiente: number }> = [];
 
-        const habitacionesEstado = habitaciones.map(h => {
-            const e = h.estado.toLowerCase().trim();
-            if (e === 'disponible') disponibles++;
-            else if (e === 'ocupada') ocupadas++;
-            else if (e === 'reservada') reservadas++;
-            else inhabilitadas++;
+        if (isClosed) {
+            const habsRows = await db(tables.TURNO_DET_HABITACIONES).where('ID_TURNO', turno.ID_TURNO).orderBy('ID_ITEM', 'asc').catch(() => []);
+            if (habsRows && habsRows.length > 0) {
+                for (const h of habsRows) {
+                    const e = String(h.ESTADO || '').toLowerCase().trim();
+                    if (e === 'disponible') disponibles++;
+                    else if (e === 'ocupada') ocupadas++;
+                    else if (e === 'reservada') reservadas++;
+                    else inhabilitadas++;
 
-            return {
-                id: h.id,
-                numero: h.numero,
-                estado: h.estado,
-                huesped: h.huesped || undefined,
-                totalPendiente: h.total || 0
-            };
-        });
+                    habitacionesEstado.push({
+                        id: String(h.ID_HABITACION || '').trim(),
+                        numero: String(h.NUMERO || '').trim(),
+                        estado: String(h.ESTADO || '').trim(),
+                        huesped: h.HUESPED ? String(h.HUESPED).trim() : undefined,
+                        totalPendiente: parseFloat(String(h.TOTAL_PENDIENTE || '0'))
+                    });
+                }
+            }
+        }
 
-        const totalReservasFuturas = habitaciones.reduce((sum, h) => sum + (h.totalReservasFuturas || 0), 0);
-        reservadas += totalReservasFuturas;
+        if (habitacionesEstado.length === 0) {
+            const habitaciones = await HabitacionService.getAllHabitaciones();
+            habitacionesEstado = habitaciones.map(h => {
+                const e = h.estado.toLowerCase().trim();
+                if (e === 'disponible') disponibles++;
+                else if (e === 'ocupada') ocupadas++;
+                else if (e === 'reservada') reservadas++;
+                else inhabilitadas++;
+
+                return {
+                    id: h.id,
+                    numero: h.numero,
+                    estado: h.estado,
+                    huesped: h.huesped || undefined,
+                    totalPendiente: h.total || 0
+                };
+            });
+
+            const totalReservasFuturas = habitaciones.reduce((sum, h) => sum + (h.totalReservasFuturas || 0), 0);
+            reservadas += totalReservasFuturas;
+        }
 
         const isEfectivoFopa = (fopaId: number) => {
             const nom = (formasMap.get(fopaId) || '').toUpperCase();
@@ -789,6 +842,12 @@ export class TurnoService {
                 } else {
                     this.where('DEVT_FECHA', '>=', fechaInicioDia);
                 }
+                if (isClosed && currentLimits['DEV']) {
+                    this.where('DEVT_ID', '<=', currentLimits['DEV']);
+                }
+                if (isClosed && turno.FECHA_CIERRE) {
+                    this.where('DEVT_FECHA', '<=', turno.FECHA_CIERRE);
+                }
             })
             .orderBy('DEVT_ID', 'asc');
 
@@ -834,7 +893,9 @@ export class TurnoService {
                 estado: turno.ESTADO,
                 observacionesApertura: turno.OBSERVACIONES
             },
-            fechaCierreEstimada: new Date().toISOString(),
+            fechaCierre: isClosed && turno.FECHA_CIERRE ? String(turno.FECHA_CIERRE) : undefined,
+            fechaCierreEstimada: isClosed && turno.FECHA_CIERRE ? String(turno.FECHA_CIERRE) : new Date().toISOString(),
+            observaciones: turno.OBSERVACIONES || undefined,
             pagosPorForma,
             totalVentasFacturadas,
             totalRecaudadoPagos,

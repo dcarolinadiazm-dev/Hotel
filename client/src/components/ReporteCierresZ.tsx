@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 import { ModalImpresionCierreZ, type ResumenCierreZData } from './ModalImpresionCierreZ';
+import { ModalCierreZ } from './ModalCierreZ';
 import { getUserDisplayName, getUserCargo } from '../utils/user.utils';
 
 export interface TurnoReporteItem {
@@ -41,6 +42,7 @@ export const ReporteCierresZ = ({
   const [localSidebarOpen, setLocalSidebarOpen] = useState(false);
   const [selectedTicketData, setSelectedTicketData] = useState<ResumenCierreZData | null>(null);
   const [cargandoTicket, setCargandoTicket] = useState<boolean>(false);
+  const [turnoModalDetalleId, setTurnoModalDetalleId] = useState<number | null>(null);
 
   const sidebarOpen = controlledSidebarOpen !== undefined ? controlledSidebarOpen : localSidebarOpen;
   const toggleSidebar = onToggleSidebar || (() => setLocalSidebarOpen((prev) => !prev));
@@ -507,28 +509,52 @@ export const ReporteCierresZ = ({
                           </span>
                         </td>
                         <td style={{ padding: '12px 14px', textAlign: 'center' }}>
-                          <button
-                            type="button"
-                            onClick={() => handleReimprimirTurno(t.idTurno)}
-                            disabled={cargandoTicket}
-                            title="Reimprimir Tirilla de Cierre Z"
-                            style={{
-                              background: 'linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%)',
-                              color: '#ffffff',
-                              border: 'none',
-                              padding: '6px 12px',
-                              borderRadius: '6px',
-                              fontSize: '12px',
-                              fontWeight: 700,
-                              cursor: 'pointer',
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '4px',
-                              boxShadow: '0 2px 4px rgba(124, 58, 237, 0.2)',
-                            }}
-                          >
-                            🖨️ Reimprimir
-                          </button>
+                          <div style={{ display: 'inline-flex', gap: '6px', alignItems: 'center', justifyContent: 'center' }}>
+                            <button
+                              type="button"
+                              onClick={() => setTurnoModalDetalleId(t.idTurno)}
+                              title="Ver Modal Cierre Z de este Turno"
+                              style={{
+                                background: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)',
+                                color: '#ffffff',
+                                border: 'none',
+                                padding: '6px 12px',
+                                borderRadius: '6px',
+                                fontSize: '12px',
+                                fontWeight: 700,
+                                cursor: 'pointer',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                boxShadow: '0 2px 4px rgba(37, 99, 235, 0.2)',
+                                transition: 'transform 0.1s ease',
+                              }}
+                            >
+                              🔍 Ver Detalle
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleReimprimirTurno(t.idTurno)}
+                              disabled={cargandoTicket}
+                              title="Reimprimir Tirilla de Cierre Z"
+                              style={{
+                                background: 'linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%)',
+                                color: '#ffffff',
+                                border: 'none',
+                                padding: '6px 12px',
+                                borderRadius: '6px',
+                                fontSize: '12px',
+                                fontWeight: 700,
+                                cursor: 'pointer',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                boxShadow: '0 2px 4px rgba(124, 58, 237, 0.2)',
+                              }}
+                            >
+                              🖨️ Reimprimir
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     );
@@ -539,6 +565,17 @@ export const ReporteCierresZ = ({
           </div>
         </main>
       </div>
+
+      {/* Modal Cierre Z (Ver Detalle Consolidado) */}
+      {turnoModalDetalleId !== null && (
+        <ModalCierreZ
+          idTurno={turnoModalDetalleId}
+          user={user}
+          readOnly={true}
+          onClose={() => setTurnoModalDetalleId(null)}
+          onReimprimir={() => handleReimprimirTurno(turnoModalDetalleId)}
+        />
+      )}
 
       {/* Modal de Impresión POS de Cierre Z */}
       {selectedTicketData && (

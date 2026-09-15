@@ -48,6 +48,8 @@ export interface ITurnoResumenCierre {
         observacionesApertura?: string;
     };
     fechaCierreEstimada: string;
+    fechaCierre?: string;
+    observaciones?: string;
     pagosPorForma: Array<{
         formaPagoId: number;
         nombreForma: string;

@@ -5,13 +5,17 @@ interface ModalCierreZProps {
   idTurno: number;
   user?: { username: string; nombre?: string; cargo?: string };
   onClose: () => void;
-  onCierreCompletado: (data: ResumenCierreZData) => void;
+  onCierreCompletado?: (data: ResumenCierreZData) => void;
+  readOnly?: boolean;
+  onReimprimir?: () => void;
 }
 
 export const ModalCierreZ: React.FC<ModalCierreZProps> = ({
   idTurno,
   onClose,
   onCierreCompletado,
+  readOnly = false,
+  onReimprimir,
 }) => {
   const [resumen, setResumen] = useState<ResumenCierreZData | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
@@ -126,7 +130,9 @@ export const ModalCierreZ: React.FC<ModalCierreZProps> = ({
             <span style={{ fontSize: '24px' }}>🔒</span>
             <div>
               <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 700 }}>Cierre Z de Turno #{idTurno}</h3>
-              <p style={{ margin: 0, fontSize: '12px', opacity: 0.85 }}>Consolidación de caja, formas de pago y facturación</p>
+              <p style={{ margin: 0, fontSize: '12px', opacity: 0.85 }}>
+                {readOnly ? 'Detalle consolidado de caja, formas de pago y facturación (Histórico)' : 'Consolidación de caja, formas de pago y facturación'}
+              </p>
             </div>
           </div>
           <button
@@ -166,9 +172,33 @@ export const ModalCierreZ: React.FC<ModalCierreZProps> = ({
                   <span style={{ fontSize: '13px', fontWeight: 600, color: '#334155' }}>⏱️ {formatFecha(resumen.turno.fechaApertura)}</span>
                 </div>
                 <div>
-                  <span style={{ fontSize: '11px', color: '#64748b', fontWeight: 600, display: 'block' }}>FECHA CIERRE (ESTIMADA)</span>
-                  <span style={{ fontSize: '13px', fontWeight: 600, color: '#334155' }}>🏁 {formatFecha(resumen.fechaCierre)}</span>
+                  <span style={{ fontSize: '11px', color: '#64748b', fontWeight: 600, display: 'block' }}>
+                    {readOnly ? 'FECHA CIERRE' : 'FECHA CIERRE (ESTIMADA)'}
+                  </span>
+                  <span style={{ fontSize: '13px', fontWeight: 600, color: '#334155' }}>
+                    🏁 {formatFecha(resumen.fechaCierre || resumen.fechaCierreEstimada)}
+                  </span>
                 </div>
+                {readOnly && (
+                  <div>
+                    <span style={{ fontSize: '11px', color: '#64748b', fontWeight: 600, display: 'block' }}>ESTADO</span>
+                    <span
+                      style={{
+                        display: 'inline-block',
+                        padding: '2px 8px',
+                        borderRadius: '4px',
+                        fontSize: '11.5px',
+                        fontWeight: 700,
+                        background: resumen.turno.estado === 'Cerrado' ? '#f0fdf4' : '#fefce8',
+                        color: resumen.turno.estado === 'Cerrado' ? '#166534' : '#854d0e',
+                        border: `1px solid ${resumen.turno.estado === 'Cerrado' ? '#bbf7d0' : '#fef08a'}`,
+                        marginTop: '2px'
+                      }}
+                    >
+                      {resumen.turno.estado}
+                    </span>
+                  </div>
+                )}
               </div>
 
               {/* Tarjetas de Totales */}
@@ -390,40 +420,98 @@ export const ModalCierreZ: React.FC<ModalCierreZProps> = ({
               </div>
 
               {/* Observaciones de Cierre */}
-              <div style={{ marginBottom: '16px' }}>
-                <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: '#374151', marginBottom: '6px' }}>
-                  📝 Observaciones de Entrega de Turno (Opcional)
-                </label>
-                <textarea
-                  value={observaciones}
-                  onChange={(e) => setObservaciones(e.target.value)}
-                  rows={2}
-                  placeholder="Novedades para el siguiente recepcionista, arqueo de caja o dinero entregado..."
-                  style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '13px', boxSizing: 'border-box', resize: 'vertical' }}
-                />
-              </div>
+              {!readOnly ? (
+                <div style={{ marginBottom: '16px' }}>
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: '#374151', marginBottom: '6px' }}>
+                    📝 Observaciones de Entrega de Turno (Opcional)
+                  </label>
+                  <textarea
+                    value={observaciones}
+                    onChange={(e) => setObservaciones(e.target.value)}
+                    rows={2}
+                    placeholder="Novedades para el siguiente recepcionista, arqueo de caja o dinero entregado..."
+                    style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '13px', boxSizing: 'border-box', resize: 'vertical' }}
+                  />
+                </div>
+              ) : (
+                (resumen.observaciones || resumen.turno?.observacionesApertura) && (
+                  <div style={{ marginBottom: '16px', background: '#f8fafc', padding: '12px 16px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                    <span style={{ fontSize: '12px', fontWeight: 700, color: '#475569', display: 'block', marginBottom: '4px' }}>
+                      📝 Observaciones Registradas en el Turno:
+                    </span>
+                    <p style={{ margin: 0, fontSize: '13px', color: '#1e293b' }}>
+                      {resumen.observaciones || resumen.turno?.observacionesApertura}
+                    </p>
+                  </div>
+                )
+              )}
             </>
           )}
         </div>
 
         {/* Footer */}
         <div style={{ padding: '14px 24px', borderTop: '1px solid #e2e8f0', background: '#f8fafc', borderRadius: '0 0 12px 12px', display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
-          <button
-            type="button"
-            onClick={onClose}
-            disabled={guardando}
-            style={{ padding: '10px 18px', borderRadius: '8px', border: '1px solid #d1d5db', background: '#fff', color: '#374151', fontWeight: 600, cursor: 'pointer' }}
-          >
-            Cancelar
-          </button>
-          <button
-            type="button"
-            onClick={handleConfirmarCierre}
-            disabled={loading || guardando || !resumen}
-            style={{ padding: '10px 24px', borderRadius: '8px', border: 'none', background: 'linear-gradient(135deg, #7c3aed 0%, #5b21b6 100%)', color: '#fff', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', boxShadow: '0 4px 6px -1px rgba(124, 58, 237, 0.25)' }}
-          >
-            {guardando ? 'Consolidando Cierre Z...' : '🔒 Confirmar y Grabar Cierre Z'}
-          </button>
+          {readOnly ? (
+            <>
+              {onReimprimir && (
+                <button
+                  type="button"
+                  onClick={onReimprimir}
+                  style={{
+                    padding: '10px 18px',
+                    borderRadius: '8px',
+                    border: 'none',
+                    background: 'linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%)',
+                    color: '#fff',
+                    fontWeight: 700,
+                    fontSize: '13px',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    boxShadow: '0 2px 4px rgba(124, 58, 237, 0.2)'
+                  }}
+                >
+                  🖨️ Reimprimir Tirilla
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={onClose}
+                style={{
+                  padding: '10px 20px',
+                  borderRadius: '8px',
+                  border: '1px solid #cbd5e1',
+                  background: '#fff',
+                  color: '#334155',
+                  fontWeight: 600,
+                  fontSize: '13px',
+                  cursor: 'pointer'
+                }}
+              >
+                Cerrar
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                type="button"
+                onClick={onClose}
+                disabled={guardando}
+                style={{ padding: '10px 18px', borderRadius: '8px', border: '1px solid #d1d5db', background: '#fff', color: '#374151', fontWeight: 600, cursor: 'pointer' }}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmarCierre}
+                disabled={loading || guardando || !resumen}
+                style={{ padding: '10px 24px', borderRadius: '8px', border: 'none', background: 'linear-gradient(135deg, #7c3aed 0%, #5b21b6 100%)', color: '#fff', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', boxShadow: '0 4px 6px -1px rgba(124, 58, 237, 0.25)' }}
+              >
+                {guardando ? 'Consolidando Cierre Z...' : '🔒 Confirmar y Grabar Cierre Z'}
+              </button>
+            </>
+          )}
         </div>
       </div>
 
