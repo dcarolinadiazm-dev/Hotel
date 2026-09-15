@@ -93,7 +93,9 @@ export const ModalCierreZ: React.FC<ModalCierreZProps> = ({
           fechaCierre: data.resultado?.fechaCierre || new Date().toISOString(),
           observaciones: observaciones.trim() || undefined,
         };
-        onCierreCompletado(dataFinal);
+        if (onCierreCompletado) {
+          onCierreCompletado(dataFinal);
+        }
       }
     } catch (err: any) {
       setError(err.message || 'Error de conexión al grabar el Cierre Z');

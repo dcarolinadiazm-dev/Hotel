@@ -9,7 +9,8 @@ export interface ResumenCierreZData {
     estado: string;
     observacionesApertura?: string;
   };
-  fechaCierre: string;
+  fechaCierre?: string;
+  fechaCierreEstimada?: string;
   pagosPorForma: Array<{
     formaPagoId: number;
     nombreForma: string;
