@@ -169,6 +169,7 @@ export const ModalFacturacionDirecta: React.FC<ModalFacturacionDirectaProps> = (
   const [lineasPago, setLineasPago] = useState<LineaPago[]>([]);
   const [showConfirmModal, setShowConfirmModal] = useState<boolean>(false);
   const [activeRequestId, setActiveRequestId] = useState<string>('');
+  const [activeDinwId, setActiveDinwId] = useState<number | null>(null);
 
   // Impresión
   const [impresionData, setImpresionData] = useState<{ tipo: 'FACTURA' | 'REMISION'; idDoc: number } | null>(null);
@@ -186,6 +187,7 @@ export const ModalFacturacionDirecta: React.FC<ModalFacturacionDirectaProps> = (
     setSearchArticuloText('');
     setShowConfirmModal(false);
     setActiveRequestId('');
+    setActiveDinwId(null);
     setFeedback(null);
   };
 
@@ -589,6 +591,21 @@ export const ModalFacturacionDirecta: React.FC<ModalFacturacionDirectaProps> = (
     ]);
     setActiveRequestId(`pos-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`);
     setShowConfirmModal(true);
+
+    // Reservar un borrador de DOC_INVENTARIO_WEB en el servidor si aún no se tiene
+    if (!activeDinwId) {
+      const token = localStorage.getItem('hotel_token');
+      fetch('/api/pedidos/reservar-dinw-pos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ clienteNit: selectedNit, clienteNom: selectedNombre }),
+      })
+        .then((res) => res.json())
+        .then((data) => {
+          if (data?.dinwId) setActiveDinwId(data.dinwId);
+        })
+        .catch((e) => console.warn('Aviso reservando borrador DINW:', e));
+    }
   };
 
   const handleAddLineaPago = () => {
@@ -604,7 +621,12 @@ export const ModalFacturacionDirecta: React.FC<ModalFacturacionDirectaProps> = (
 
   const handleUpdateLineaPago = (id: number, field: 'formaPagoId' | 'monto', val: any) => {
     setLineasPago((prev) =>
-      prev.map((l) => (l.id === id ? { ...l, [field]: field === 'monto' ? parseFloat(val) || 0 : val } : l))
+      prev.map((l) => {
+        if (l.id === id) {
+          return { ...l, [field]: field === 'monto' ? parseFloat(val) || 0 : parseInt(val, 10) };
+        }
+        return l;
+      })
     );
   };
 
@@ -651,6 +673,7 @@ export const ModalFacturacionDirecta: React.FC<ModalFacturacionDirectaProps> = (
           pagos: lineasPago.map((l) => ({ formaPagoId: l.formaPagoId, monto: Number(l.monto) || 0 })),
           observaciones: observaciones.trim() || undefined,
           requestId: reqId,
+          dinwId: activeDinwId || undefined,
         }),
       });
 
@@ -684,7 +707,7 @@ export const ModalFacturacionDirecta: React.FC<ModalFacturacionDirectaProps> = (
           // Esperar 1.5s para que la transacción de Firebird termine de consolidarse en el backend
           await new Promise((resolve) => setTimeout(resolve, 1500));
           const verifyRes = await fetch(
-            `/api/pedidos/verificar-reciente?clienteNit=${encodeURIComponent(selectedNit)}&total=${totalPagar}&requestId=${encodeURIComponent(reqId)}`,
+            `/api/pedidos/verificar-reciente?clienteNit=${encodeURIComponent(selectedNit)}&total=${totalPagar}&requestId=${encodeURIComponent(reqId)}&dinwId=${activeDinwId || ''}`,
             { headers: { Authorization: `Bearer ${token}` } }
           );
           if (verifyRes.ok) {

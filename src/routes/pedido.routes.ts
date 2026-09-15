@@ -13,6 +13,9 @@ router.post('/enviar-facturar', verifyToken, PedidoController.enviarAFacturar);
 // Facturar múltiples habitaciones consolidadas en una sola factura
 router.post('/enviar-facturar-multiples', verifyToken, PedidoController.enviarAFacturarMultiples);
 
+// Reservar un borrador exclusivo para venta directa POS
+router.post('/reservar-dinw-pos', verifyToken, PedidoController.reservarDinwPos);
+
 // Facturar venta directa de productos (POS sin habitación)
 router.post('/facturar-directo', verifyToken, PedidoController.facturarDirecto);
 

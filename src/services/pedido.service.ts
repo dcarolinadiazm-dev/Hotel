@@ -1062,6 +1062,78 @@ export class PedidoService {
         }
     }
 
+    // 3.0 Reservar un borrador de DOC_INVENTARIO_WEB exclusivo para una venta directa POS
+    static async reservarDinwPos(clienteNit?: string, clienteNom?: string): Promise<{ dinwId: number }> {
+        const maxDinwRow = await db.raw('SELECT MAX(DINW_ID) AS MAXID FROM DOC_INVENTARIO_WEB');
+        const maxDinwRows = maxDinwRow.rows ? maxDinwRow.rows : (Array.isArray(maxDinwRow) ? maxDinwRow : [maxDinwRow]);
+        const maxDinwVal = maxDinwRows[0]?.MAXID ?? maxDinwRows[0]?.maxid ?? maxDinwRows[0]?.MAX ?? 0;
+        const dinwId = (parseInt(String(maxDinwVal || '0'), 10) || 0) + 1;
+
+        const { ptvtId, bodeCod } = await this.getDefaultPuntoVentaAndBodega();
+        const nit = clienteNit ? String(clienteNit).trim() : '222222222222';
+        const nom = clienteNom ? String(clienteNom).trim() : 'Cliente General';
+
+        let pref = 'SETT';
+        try {
+            const prefRow = await db(tables.PREFIJOS)
+                .where('TIDO_COD', 31)
+                .andWhere(function () {
+                    this.where('PREF_ACTIVO', 'S').orWhereNull('PREF_ACTIVO');
+                })
+                .first();
+            if (prefRow?.PREF_PRE) pref = String(prefRow.PREF_PRE).trim();
+        } catch (e) { }
+
+        await db(tables.DOC_INVENTARIO_WEB).insert({
+            DINW_ID: dinwId,
+            DINW_TIPO: 31,
+            DINW_PREF: pref,
+            DINW_BODEGA: bodeCod,
+            DINW_FECHA: new Date(),
+            DINW_CONCEPTO: truncateToBytes(`Venta Directa - ${nom}`, 55),
+            DINW_IDDOC: 0,
+            DINW_ANULADO: 'N',
+            DINW_OBS: `Venta Directa - ${nom}`,
+            DINW_TIPOREF: null,
+            DINW_NUMREF: '',
+            DINW_NIT: nit,
+            DINW_BODDES: bodeCod,
+            DINW_NUMERO: '00000001',
+            DINW_PTVTA: ptvtId,
+            DINW_VEND: 1,
+            DINW_VENCE: new Date(),
+            DINW_DTOPORC: 0,
+            DINW_DTOMONTO: 0,
+            DINW_ADICIONAL: 0,
+            DINW_RTFTEPORC: 0,
+            DINW_RTICAPORC: 0,
+            DINW_RTIVAPORC: 0,
+            DINW_EXTRA: 0,
+            DINW_DTOFPORC: 0,
+            DINW_DTOFFEC: new Date(),
+            DINW_TIPOENT: 1,
+            DINW_MONEDA: 1,
+            DINW_TRM: 1,
+            DINW_FORMAP: 1,
+            DINW_IMPINC: 'S',
+            DINW_PASADA: 0,
+            DINW_STAND: '',
+            DINW_TRANSMIT: 'N',
+            DINW_SUCURSAL: '01',
+            DINW_IVAINC: 'S',
+            DINW_VALIDEZ: 0,
+            DINW_DIASCR: 0,
+            DINW_COTIZACI: '',
+            DINW_BASE: 0,
+            DINW_IVAMONTO: 0,
+            DINW_MONTO: 0,
+            DINW_CANAL: 1,
+            DINW_COBRADOR: 1
+        });
+
+        return { dinwId };
+    }
+
     // 3.1 Facturación Directa de Productos (POS Directo sin Habitación)
     static async facturarDirecto(
         clienteNit: string,
@@ -1082,7 +1154,8 @@ export class PedidoService {
         prefijoParam?: string,
         pagosParam?: Array<{ formaPagoId: number; monto: number }>,
         observacionesParam?: string,
-        requestId?: string
+        requestId?: string,
+        customDinwId?: number
     ) {
         if (!items || items.length === 0) {
             throw new Error('El carrito no contiene productos para facturar');
@@ -1098,6 +1171,39 @@ export class PedidoService {
         if (inFlightDirectSales.has(flightKey)) {
             console.warn(`[ANTI-DUPLICIDAD] Petición en proceso para ${flightKey}. Esperando factura en curso...`);
             return await inFlightDirectSales.get(flightKey);
+        }
+
+        // 0.1 Control de Idempotencia estricto por DINW_IDDOC en DOC_INVENTARIO_WEB
+        if (customDinwId && customDinwId > 0) {
+            try {
+                const dinwCheck = await db(tables.DOC_INVENTARIO_WEB)
+                    .where('DINW_ID', customDinwId)
+                    .first();
+                if (dinwCheck && dinwCheck.DINW_IDDOC && Number(dinwCheck.DINW_IDDOC) > 0) {
+                    const factExistente = await db('FACTURAS').where('FACT_ID', dinwCheck.DINW_IDDOC).first();
+                    if (factExistente) {
+                        const pref = factExistente.PREF_PRE ? String(factExistente.PREF_PRE).trim() : '';
+                        const num = factExistente.FACT_NUMERO ? String(factExistente.FACT_NUMERO).trim() : String(factExistente.FACT_ID);
+                        const fullNum = pref ? `${pref}-${num}` : num;
+                        console.warn(`[ANTI-DUPLICIDAD-DINW] DINW_ID #${customDinwId} ya fue facturado previamente como Factura #${fullNum} (FACT_ID: ${factExistente.FACT_ID}). Retornando factura existente.`);
+                        const existingResult = {
+                            idDoc: parseInt(String(factExistente.FACT_ID), 10),
+                            numDoc: fullNum,
+                            total: parseFloat(String(factExistente.FACT_TOTAL || dinwCheck.DINW_MONTO || 0)),
+                            totalBase: 0,
+                            totalIva: 0,
+                            dinwId: customDinwId,
+                            mensaje: `Factura de Venta #${fullNum} ya fue generada exitosamente.`,
+                            timestamp: Date.now()
+                        };
+                        if (requestId) recentDirectSalesCache.set(requestId, existingResult);
+                        recentDirectSalesCache.set(flightKey, existingResult);
+                        return existingResult;
+                    }
+                }
+            } catch (dinwErr: any) {
+                console.warn('Aviso comprobando DINW_IDDOC existente:', dinwErr.message);
+            }
         }
 
         // 1. Control de Idempotencia por requestId en caché
@@ -1177,11 +1283,14 @@ export class PedidoService {
             console.warn('Aviso asegurando cliente en facturarDirecto:', e.message);
         }
 
-        // Obtener nuevo DINW_ID
-        const maxDinwRow = await db.raw('SELECT MAX(DINW_ID) AS MAXID FROM DOC_INVENTARIO_WEB');
-        const maxDinwRows = maxDinwRow.rows ? maxDinwRow.rows : (Array.isArray(maxDinwRow) ? maxDinwRow : [maxDinwRow]);
-        const maxDinwVal = maxDinwRows[0]?.MAXID ?? maxDinwRows[0]?.maxid ?? maxDinwRows[0]?.MAX ?? 0;
-        const dinwId = (parseInt(String(maxDinwVal || '0'), 10) || 0) + 1;
+        // Obtener o usar DINW_ID
+        let dinwId = customDinwId;
+        if (!dinwId || dinwId <= 0) {
+            const maxDinwRow = await db.raw('SELECT MAX(DINW_ID) AS MAXID FROM DOC_INVENTARIO_WEB');
+            const maxDinwRows = maxDinwRow.rows ? maxDinwRow.rows : (Array.isArray(maxDinwRow) ? maxDinwRow : [maxDinwRow]);
+            const maxDinwVal = maxDinwRows[0]?.MAXID ?? maxDinwRows[0]?.maxid ?? maxDinwRows[0]?.MAX ?? 0;
+            dinwId = (parseInt(String(maxDinwVal || '0'), 10) || 0) + 1;
+        }
 
         // Determinar pagos múltiples o forma de pago única
         let listaPagos: Array<{ formaPagoId: number; monto: number }> = [];
@@ -1302,9 +1411,8 @@ export class PedidoService {
             listaPagos[0].monto = totalDoc;
         }
 
-        // 1. Insertar encabezado DOC_INVENTARIO_WEB
-        await db(tables.DOC_INVENTARIO_WEB).insert({
-            DINW_ID: dinwId,
+        // 1. Insertar o actualizar encabezado DOC_INVENTARIO_WEB
+        const dinwHeaderData = {
             DINW_TIPO: 31,
             DINW_PREF: prefijo,
             DINW_BODEGA: '1',
@@ -1348,7 +1456,15 @@ export class PedidoService {
             DINW_MONTO: totalDoc,
             DINW_CANAL: 1,
             DINW_COBRADOR: 1
-        });
+        };
+
+        const existingDinwRow = await db(tables.DOC_INVENTARIO_WEB).where('DINW_ID', dinwId).first();
+        if (existingDinwRow) {
+            await db(tables.DOC_INVENTARIO_WEB).where('DINW_ID', dinwId).update(dinwHeaderData);
+            await db(tables.DOC_INVENTARIO_DET_WEB).where('DINW_ID', dinwId).del().catch(() => {});
+        } else {
+            await db(tables.DOC_INVENTARIO_WEB).insert({ DINW_ID: dinwId, ...dinwHeaderData });
+        }
 
         // 2. Insertar detalles
         for (const det of preparedDetails) {
@@ -1447,6 +1563,12 @@ export class PedidoService {
         // 4. Sincronizar FACTURAS, FACTURAS_DETALLE y FACTURAS_CONTADO_PAGO
         if (idGenerado) {
             try {
+                // Actualizar de forma garantizada DINW_IDDOC en DOC_INVENTARIO_WEB
+                await db(tables.DOC_INVENTARIO_WEB)
+                    .where('DINW_ID', dinwId)
+                    .update({ DINW_IDDOC: idGenerado })
+                    .catch(() => {});
+
                 try {
                     const curFact = await db('FACTURAS').where('FACT_ID', idGenerado).first();
                     if (curFact && (Math.abs(Number(curFact.FACT_TOTAL) - totalDoc) > 0.01 || curFact.FACT_FORMAP !== primaryFopaId)) {
@@ -1473,8 +1595,10 @@ export class PedidoService {
                     await db('FACTURAS_DETALLE')
                         .where({ FACT_ID: idGenerado, FADE_ITEM: sd.DIWD_ITEM })
                         .update({
+                            FADE_CANTIDAD: sd.DIWD_CANTIDAD,
+                            FADE_VALOR: sd.DIWD_VALOR,
+                            FADE_DTO: sd.DIWD_DTOMONTO,
                             FADE_DTOPORC: sd.DIWD_DTOPORC,
-                            FADE_DTOMONTO: sd.DIWD_DTOMONTO,
                             FADE_IVAPORC: sd.DIWD_IVAPORC,
                             FADE_TIVA: sd.DIWD_TIVA,
                             FADE_TOTAL: sd.DIWD_TOTAL,
@@ -1501,6 +1625,7 @@ export class PedidoService {
         const resultadoFinal = {
             idDoc: idGenerado,
             numDoc: numDocGenerado,
+            dinwId: dinwId,
             total: totalDoc,
             totalBase,
             totalIva,
@@ -1533,7 +1658,34 @@ export class PedidoService {
     }
 
     // Verificar si una factura reciente fue procesada exitosamente en el servidor (para recuperarse de caídas de red "Failed to fetch")
-    static async verificarFacturaReciente(clienteNit?: string, total?: number, requestId?: string) {
+    static async verificarFacturaReciente(clienteNit?: string, total?: number, requestId?: string, dinwId?: number) {
+        // 0. Si se envió dinwId, revisar directamente si DOC_INVENTARIO_WEB ya tiene DINW_IDDOC
+        if (dinwId && dinwId > 0) {
+            try {
+                const dinwCheck = await db(tables.DOC_INVENTARIO_WEB)
+                    .where('DINW_ID', dinwId)
+                    .first();
+                if (dinwCheck && dinwCheck.DINW_IDDOC && Number(dinwCheck.DINW_IDDOC) > 0) {
+                    const factExistente = await db('FACTURAS').where('FACT_ID', dinwCheck.DINW_IDDOC).first();
+                    if (factExistente) {
+                        const pref = factExistente.PREF_PRE ? String(factExistente.PREF_PRE).trim() : '';
+                        const num = factExistente.FACT_NUMERO ? String(factExistente.FACT_NUMERO).trim() : String(factExistente.FACT_ID);
+                        return {
+                            encontrada: true,
+                            factura: {
+                                idDoc: parseInt(String(factExistente.FACT_ID), 10),
+                                numDoc: pref ? `${pref}-${num}` : num,
+                                total: parseFloat(String(factExistente.FACT_TOTAL || dinwCheck.DINW_MONTO || 0)),
+                                dinwId: dinwId
+                            }
+                        };
+                    }
+                }
+            } catch (dinwErr: any) {
+                console.warn('Aviso verificando dinwId en verificarFacturaReciente:', dinwErr.message);
+            }
+        }
+
         // 1. Revisar caché de peticiones recientes
         if (requestId && recentDirectSalesCache.has(requestId)) {
             const cached = recentDirectSalesCache.get(requestId)!;

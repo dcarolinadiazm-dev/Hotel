@@ -83,10 +83,22 @@ export class PedidoController {
         }
     }
 
+    // POST /api/pedidos/reservar-dinw-pos
+    static async reservarDinwPos(req: Request, res: Response) {
+        const { clienteNit, clienteNom } = req.body;
+        try {
+            const resultado = await PedidoService.reservarDinwPos(clienteNit, clienteNom);
+            res.json(resultado);
+        } catch (error: any) {
+            console.error('Error en PedidoController.reservarDinwPos:', error.message);
+            res.status(500).json({ error: error.message || 'Error al reservar borrador POS' });
+        }
+    }
+
     // POST /api/pedidos/facturar-directo
     static async facturarDirecto(req: Request, res: Response) {
-        const { clienteNit, clienteNom, items, formaPagoId, prefijo, pagos, observaciones, requestId } = req.body;
-        console.log(`[HTTP-REQUEST] POST /api/pedidos/facturar-directo recibido para cliente: ${clienteNit || 'General'}, items: ${items?.length || 0}, prefijo: ${prefijo || 'default'}, requestId: ${requestId || 'none'}`);
+        const { clienteNit, clienteNom, items, formaPagoId, prefijo, pagos, observaciones, requestId, dinwId } = req.body;
+        console.log(`[HTTP-REQUEST] POST /api/pedidos/facturar-directo recibido para cliente: ${clienteNit || 'General'}, items: ${items?.length || 0}, prefijo: ${prefijo || 'default'}, requestId: ${requestId || 'none'}, dinwId: ${dinwId || 'none'}`);
         if (!items || !Array.isArray(items) || items.length === 0) {
             return res.status(400).json({ error: 'El carrito no contiene productos para facturar' });
         }
@@ -100,7 +112,8 @@ export class PedidoController {
                 prefijo ? String(prefijo).trim() : undefined,
                 pagos,
                 observaciones ? String(observaciones).trim() : undefined,
-                requestId ? String(requestId).trim() : undefined
+                requestId ? String(requestId).trim() : undefined,
+                dinwId ? parseInt(String(dinwId), 10) : undefined
             );
             console.log(`[HTTP-RESPONSE] POST /api/pedidos/facturar-directo completado exitosamente:`, resultado);
             res.json(resultado);
@@ -112,12 +125,13 @@ export class PedidoController {
 
     // GET /api/pedidos/verificar-reciente
     static async verificarFacturaReciente(req: Request, res: Response) {
-        const { clienteNit, total, requestId } = req.query;
+        const { clienteNit, total, requestId, dinwId } = req.query;
         try {
             const resultado = await PedidoService.verificarFacturaReciente(
                 clienteNit ? String(clienteNit).trim() : undefined,
                 total ? parseFloat(String(total)) : undefined,
-                requestId ? String(requestId).trim() : undefined
+                requestId ? String(requestId).trim() : undefined,
+                dinwId ? parseInt(String(dinwId), 10) : undefined
             );
             res.json(resultado);
         } catch (error: any) {
