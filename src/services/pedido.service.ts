@@ -40,6 +40,8 @@ interface RecentDirectSale {
     timestamp: number;
 }
 const recentDirectSalesCache = new Map<string, RecentDirectSale>();
+const inFlightDirectSales = new Map<string, Promise<any>>();
+const inFlightRoomFacturar = new Map<string, Promise<any>>();
 
 export class PedidoService {
 
@@ -692,7 +694,13 @@ export class PedidoService {
             throw new Error(`La habitación #${habNumero} se encuentra en estado "${estadoHab || 'Disponible'}". Solo es posible facturar habitaciones en estado "Ocupada".`);
         }
 
-        const nit = hab?.DOCUMENTO ? String(hab.DOCUMENTO).trim() : '800003122';
+        if (inFlightRoomFacturar.has(habitacionId)) {
+            console.warn(`[ANTI-DUPLICIDAD] Checkout de habitación #${habNumero} ya en proceso. Esperando resultado existente...`);
+            return await inFlightRoomFacturar.get(habitacionId);
+        }
+
+        const processRoomCheckout = async () => {
+            const nit = hab?.DOCUMENTO ? String(hab.DOCUMENTO).trim() : '800003122';
         const nombreCliente = hab?.HUESPED ? String(hab.HUESPED).trim() : 'Huésped General';
 
         let dinwId = customDinwId;
@@ -1033,16 +1041,25 @@ export class PedidoService {
             console.warn('Aviso actualizando HABITACION_MOVIM:', movErr.message);
         }
 
-        return {
-            idDoc: idGenerado,
-            idPed: idGenerado,
-            numDoc: numDocGenerado,
-            numPed: numDocGenerado,
-            total: totalDoc,
-            totalBase,
-            totalIva,
-            mensaje: `${mensajeExito} y habitación liberada a Disponible.`
+            return {
+                idDoc: idGenerado,
+                idPed: idGenerado,
+                numDoc: numDocGenerado,
+                numPed: numDocGenerado,
+                total: totalDoc,
+                totalBase,
+                totalIva,
+                mensaje: `${mensajeExito} y habitación liberada a Disponible.`
+            };
         };
+
+        const taskPromise = processRoomCheckout();
+        inFlightRoomFacturar.set(habitacionId, taskPromise);
+        try {
+            return await taskPromise;
+        } finally {
+            setTimeout(() => inFlightRoomFacturar.delete(habitacionId), 15000);
+        }
     }
 
     // 3.1 Facturación Directa de Productos (POS Directo sin Habitación)
@@ -1074,18 +1091,32 @@ export class PedidoService {
         const nit = clienteNit ? String(clienteNit).trim() : '800003122';
         const nom = clienteNom ? String(clienteNom).trim() : 'Cliente General';
 
-        // 1. Control de Idempotencia por requestId
+        const totalAprox = items.reduce((acc, it) => acc + (it.precio - (it.descuento || 0)) * it.cantidad, 0);
+        const flightKey = requestId || `${nit}_${Math.round(totalAprox)}_${items.map(it => `${it.articulo}:${it.cantidad}`).sort().join('_')}`;
+
+        // 0. Bloqueo de peticiones en vuelo / concurrentes (Previene doble clic instantáneo)
+        if (inFlightDirectSales.has(flightKey)) {
+            console.warn(`[ANTI-DUPLICIDAD] Petición en proceso para ${flightKey}. Esperando factura en curso...`);
+            return await inFlightDirectSales.get(flightKey);
+        }
+
+        // 1. Control de Idempotencia por requestId en caché
         if (requestId && recentDirectSalesCache.has(requestId)) {
             const cached = recentDirectSalesCache.get(requestId)!;
             console.log(`[ANTI-DUPLICIDAD] Petición repetida detectada (requestId: ${requestId}). Retornando Factura existente #${cached.numDoc}`);
             return cached;
         }
 
-        // 2. Control de Idempotencia por contenido idéntico en los últimos 45 segundos
-        const totalAprox = items.reduce((acc, it) => acc + (it.precio - (it.descuento || 0)) * it.cantidad, 0);
+        if (recentDirectSalesCache.has(flightKey)) {
+            const cached = recentDirectSalesCache.get(flightKey)!;
+            console.log(`[ANTI-DUPLICIDAD] Venta idéntica detectada en caché (${flightKey}). Retornando Factura existente #${cached.numDoc}`);
+            return cached;
+        }
+
+        // 2. Control de Idempotencia por contenido idéntico en los últimos 60 segundos
         for (const [cachedId, cached] of recentDirectSalesCache.entries()) {
             const ageMs = Date.now() - cached.timestamp;
-            if (ageMs < 45000 && Math.abs(cached.total - totalAprox) < 1) {
+            if (ageMs < 60000 && Math.abs(cached.total - totalAprox) < 1) {
                 try {
                     const factCheck = await db('FACTURAS').where('FACT_ID', cached.idDoc).first();
                     if (factCheck && String(factCheck.TERC_NIT || '').trim() === nit) {
@@ -1097,7 +1128,49 @@ export class PedidoService {
             }
         }
 
-        // Asegurar que el tercero exista como cliente
+        // 3. Control de Idempotencia DIRECTO en Firebird (Base de Datos):
+        // Si en los últimos 90 segundos ya se grabó una factura para este cliente con el mismo total
+        try {
+            const ninetySecsAgo = new Date(Date.now() - 90 * 1000);
+            const recentFact = await db('FACTURAS')
+                .join('AUDITORIA', function () {
+                    this.on('FACTURAS.FACT_ID', '=', 'AUDITORIA.AUDI_IDDOC')
+                        .andOn('AUDITORIA.TIDO_COD', '=', db.raw('31'))
+                        .andOn('AUDITORIA.AUDI_OPER', '=', db.raw("'I'"));
+                })
+                .where('FACTURAS.TERC_NIT', nit)
+                .whereBetween('FACTURAS.FACT_TOTAL', [totalAprox - 1, totalAprox + 1])
+                .where('AUDITORIA.AUDI_HORA', '>=', ninetySecsAgo)
+                .where(function () {
+                    this.where('FACTURAS.FACT_ANULADO', '!=', 'S').orWhereNull('FACTURAS.FACT_ANULADO');
+                })
+                .select('FACTURAS.FACT_ID', 'FACTURAS.FACT_NUMERO', 'FACTURAS.PREF_PRE', 'FACTURAS.FACT_TOTAL')
+                .first();
+
+            if (recentFact) {
+                const pref = recentFact.PREF_PRE ? String(recentFact.PREF_PRE).trim() : '';
+                const num = recentFact.FACT_NUMERO ? String(recentFact.FACT_NUMERO).trim() : String(recentFact.FACT_ID);
+                const fullNum = pref ? `${pref}-${num}` : num;
+                console.warn(`[ANTI-DUPLICIDAD-FIREBIRD] Factura idéntica #${fullNum} detectada en Firebird emitida hace pocos segundos para cliente ${nit}, total $${recentFact.FACT_TOTAL}. Retornando factura existente.`);
+                const existingResult = {
+                    idDoc: parseInt(String(recentFact.FACT_ID), 10),
+                    numDoc: fullNum,
+                    total: parseFloat(String(recentFact.FACT_TOTAL)),
+                    totalBase: 0,
+                    totalIva: 0,
+                    mensaje: `Factura de Venta #${fullNum} ya fue generada exitosamente.`,
+                    timestamp: Date.now()
+                };
+                if (requestId) recentDirectSalesCache.set(requestId, existingResult);
+                recentDirectSalesCache.set(flightKey, existingResult);
+                return existingResult;
+            }
+        } catch (dbCheckErr: any) {
+            console.warn('Aviso en comprobación anti-duplicidad Firebird:', dbCheckErr.message);
+        }
+
+        const processDirectSale = async () => {
+            // Asegurar que el tercero exista como cliente
         try {
             await TerceroService.ensureCliente(nit);
         } catch (e: any) {
@@ -1438,6 +1511,7 @@ export class PedidoService {
         if (requestId) {
             recentDirectSalesCache.set(requestId, resultadoFinal);
         }
+        recentDirectSalesCache.set(flightKey, resultadoFinal);
         // Limpiar ventas viejas (> 10 minutos)
         if (recentDirectSalesCache.size > 80) {
             const now = Date.now();
@@ -1446,7 +1520,16 @@ export class PedidoService {
             }
         }
 
-        return resultadoFinal;
+            return resultadoFinal;
+        };
+
+        const taskPromise = processDirectSale();
+        inFlightDirectSales.set(flightKey, taskPromise);
+        try {
+            return await taskPromise;
+        } finally {
+            setTimeout(() => inFlightDirectSales.delete(flightKey), 15000);
+        }
     }
 
     // Verificar si una factura reciente fue procesada exitosamente en el servidor (para recuperarse de caídas de red "Failed to fetch")

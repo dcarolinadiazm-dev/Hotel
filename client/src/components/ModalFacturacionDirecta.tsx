@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { ModalImpresionPOS } from './ModalImpresionPOS';
 import { ClienteSearchSelect } from './ClienteSearchSelect';
 import { checkArticleStockAndAlert } from '../utils/stockValidator';
@@ -111,6 +111,7 @@ export const ModalFacturacionDirecta: React.FC<ModalFacturacionDirectaProps> = (
 }) => {
   const [loading, setLoading] = useState(false);
   const [processing, setProcessing] = useState(false);
+  const isSubmittingRef = useRef<boolean>(false);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   // Clientes / Terceros
@@ -612,12 +613,13 @@ export const ModalFacturacionDirecta: React.FC<ModalFacturacionDirectaProps> = (
   const diferenciaPagos = totalPagar - totalPagosAsignados;
 
   const handleExecuteFacturarDirecto = async () => {
-    if (processing) return;
+    if (processing || isSubmittingRef.current) return;
     if (!esTotalCuadrado) {
       alert('El total asignado en las formas de pago debe cuadrar exactamente con el total de la factura');
       return;
     }
 
+    isSubmittingRef.current = true;
     setProcessing(true);
     setFeedback(null);
     const token = localStorage.getItem('hotel_token');
@@ -705,6 +707,7 @@ export const ModalFacturacionDirecta: React.FC<ModalFacturacionDirectaProps> = (
 
       alert(err.message || 'Error al procesar la factura');
     } finally {
+      isSubmittingRef.current = false;
       setProcessing(false);
     }
   };
