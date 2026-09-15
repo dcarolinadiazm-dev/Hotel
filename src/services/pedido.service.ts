@@ -1134,6 +1134,27 @@ export class PedidoService {
         return { dinwId };
     }
 
+    // Cancelar y limpiar un borrador de DOC_INVENTARIO_WEB si no fue facturado
+    static async cancelarBorradorDinw(dinwId: number): Promise<void> {
+        if (!dinwId || dinwId <= 0) return;
+        try {
+            const row = await db(tables.DOC_INVENTARIO_WEB).where('DINW_ID', dinwId).first();
+            if (row) {
+                // Solo eliminar si NO ha sido facturado (DINW_IDDOC == 0 o null)
+                if (!row.DINW_IDDOC || Number(row.DINW_IDDOC) === 0) {
+                    await db('DOC_INVENTARIO_PAGO_WEB').where('DINW_ID', dinwId).del().catch(() => {});
+                    await db(tables.DOC_INVENTARIO_DET_WEB).where('DINW_ID', dinwId).del().catch(() => {});
+                    await db(tables.DOC_INVENTARIO_WEB).where('DINW_ID', dinwId).del().catch(() => {});
+                    console.log(`[BORRADOR-POS] Borrador DINW_ID #${dinwId} eliminado por cancelación.`);
+                } else {
+                    console.log(`[BORRADOR-POS] DINW_ID #${dinwId} ya está facturado (IDDOC: ${row.DINW_IDDOC}). No se elimina.`);
+                }
+            }
+        } catch (err: any) {
+            console.warn(`Aviso al cancelar borrador DINW_ID #${dinwId}:`, err.message);
+        }
+    }
+
     // 3.1 Facturación Directa de Productos (POS Directo sin Habitación)
     static async facturarDirecto(
         clienteNit: string,

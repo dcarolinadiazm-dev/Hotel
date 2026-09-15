@@ -174,7 +174,22 @@ export const ModalFacturacionDirecta: React.FC<ModalFacturacionDirectaProps> = (
   // Impresión
   const [impresionData, setImpresionData] = useState<{ tipo: 'FACTURA' | 'REMISION'; idDoc: number } | null>(null);
 
-  const handleResetForm = () => {
+  const cancelarBorradorSiExiste = (dinwIdToCancel: number | null) => {
+    if (dinwIdToCancel) {
+      const token = localStorage.getItem('hotel_token');
+      fetch('/api/pedidos/cancelar-borrador-dinw', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ dinwId: dinwIdToCancel }),
+        keepalive: true,
+      }).catch((e) => console.warn('Aviso cancelando borrador:', e));
+    }
+  };
+
+  const handleResetForm = (cancelarBorrador: boolean = true) => {
+    if (cancelarBorrador && activeDinwId) {
+      cancelarBorradorSiExiste(activeDinwId);
+    }
     setCartItems([]);
     setSelectedNit('');
     setSelectedNombre('');
@@ -192,14 +207,22 @@ export const ModalFacturacionDirecta: React.FC<ModalFacturacionDirectaProps> = (
   };
 
   const handleCloseModal = () => {
-    handleResetForm();
+    handleResetForm(true);
     onClose();
   };
 
   useEffect(() => {
+    return () => {
+      if (activeDinwId) {
+        cancelarBorradorSiExiste(activeDinwId);
+      }
+    };
+  }, [activeDinwId]);
+
+  useEffect(() => {
     if (!isOpen) return;
     setLoading(true);
-    handleResetForm();
+    handleResetForm(true);
 
     const token = localStorage.getItem('hotel_token');
 
@@ -681,7 +704,7 @@ export const ModalFacturacionDirecta: React.FC<ModalFacturacionDirectaProps> = (
       if (!res.ok) throw new Error(data.error || 'Error al generar la factura directa');
 
       setShowConfirmModal(false);
-      handleResetForm();
+      handleResetForm(false);
 
       if (onFacturaGenerada) {
         onFacturaGenerada();
@@ -715,7 +738,7 @@ export const ModalFacturacionDirecta: React.FC<ModalFacturacionDirectaProps> = (
             if (verifyData.encontrada && verifyData.factura?.idDoc) {
               alert(`⚠️ Hubo una intermitencia de red ("Failed to fetch"), pero el servidor registró exitosamente la Factura #${verifyData.factura.numDoc || verifyData.factura.idDoc}. Se abrirá el comprobante para impresión.`);
               setShowConfirmModal(false);
-              handleResetForm();
+              handleResetForm(false);
               if (onFacturaGenerada) {
                 onFacturaGenerada();
               }

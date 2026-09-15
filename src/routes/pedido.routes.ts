@@ -16,6 +16,9 @@ router.post('/enviar-facturar-multiples', verifyToken, PedidoController.enviarAF
 // Reservar un borrador exclusivo para venta directa POS
 router.post('/reservar-dinw-pos', verifyToken, PedidoController.reservarDinwPos);
 
+// Cancelar y limpiar borrador POS si no fue facturado
+router.post('/cancelar-borrador-dinw', verifyToken, PedidoController.cancelarBorradorDinw);
+
 // Facturar venta directa de productos (POS sin habitación)
 router.post('/facturar-directo', verifyToken, PedidoController.facturarDirecto);
 

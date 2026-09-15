@@ -95,6 +95,21 @@ export class PedidoController {
         }
     }
 
+    // POST /api/pedidos/cancelar-borrador-dinw
+    static async cancelarBorradorDinw(req: Request, res: Response) {
+        const { dinwId } = req.body;
+        if (!dinwId) {
+            return res.json({ ok: true, message: 'No dinwId provided' });
+        }
+        try {
+            await PedidoService.cancelarBorradorDinw(parseInt(String(dinwId), 10));
+            res.json({ ok: true, message: `Borrador #${dinwId} cancelado correctamente` });
+        } catch (error: any) {
+            console.error('Error en PedidoController.cancelarBorradorDinw:', error.message);
+            res.status(500).json({ error: error.message || 'Error al cancelar borrador POS' });
+        }
+    }
+
     // POST /api/pedidos/facturar-directo
     static async facturarDirecto(req: Request, res: Response) {
         const { clienteNit, clienteNom, items, formaPagoId, prefijo, pagos, observaciones, requestId, dinwId } = req.body;
