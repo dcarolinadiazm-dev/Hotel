@@ -1135,8 +1135,8 @@ export class PedidoService {
     }
 
     // Cancelar y limpiar un borrador de DOC_INVENTARIO_WEB si no fue facturado
-    static async cancelarBorradorDinw(dinwId: number): Promise<void> {
-        if (!dinwId || dinwId <= 0) return;
+    static async cancelarBorradorDinw(dinwId: number): Promise<{ cancelado: boolean; mensaje: string }> {
+        if (!dinwId || dinwId <= 0) return { cancelado: false, mensaje: 'ID inválido' };
         try {
             const row = await db(tables.DOC_INVENTARIO_WEB).where('DINW_ID', dinwId).first();
             if (row) {
@@ -1146,12 +1146,16 @@ export class PedidoService {
                     await db(tables.DOC_INVENTARIO_DET_WEB).where('DINW_ID', dinwId).del().catch(() => {});
                     await db(tables.DOC_INVENTARIO_WEB).where('DINW_ID', dinwId).del().catch(() => {});
                     console.log(`[BORRADOR-POS] Borrador DINW_ID #${dinwId} eliminado por cancelación.`);
+                    return { cancelado: true, mensaje: `Borrador #${dinwId} cancelado y limpiado correctamente.` };
                 } else {
-                    console.log(`[BORRADOR-POS] DINW_ID #${dinwId} ya está facturado (IDDOC: ${row.DINW_IDDOC}). No se elimina.`);
+                    console.log(`[BORRADOR-POS] DINW_ID #${dinwId} ya está facturado (IDDOC: ${row.DINW_IDDOC}). Registro protegido intacto.`);
+                    return { cancelado: false, mensaje: `DINW_ID #${dinwId} ya fue facturado (Factura ID: ${row.DINW_IDDOC}). Registro protegido.` };
                 }
             }
+            return { cancelado: false, mensaje: 'Borrador no encontrado en base de datos.' };
         } catch (err: any) {
             console.warn(`Aviso al cancelar borrador DINW_ID #${dinwId}:`, err.message);
+            return { cancelado: false, mensaje: err.message };
         }
     }
 
@@ -1612,20 +1616,30 @@ export class PedidoService {
                 }
 
                 for (const sd of preparedDetails) {
-                    const baseItem = Math.round((sd.DIWD_TOTAL - sd.DIWD_IVAMONTO) * 100) / 100;
+                    const dtoporc = Number(sd.DIWD_DTOPORC || 0);
+                    const dtomonto = Number(sd.DIWD_DTOMONTO || 0);
+                    const totalItem = Number(sd.DIWD_TOTAL || 0);
+                    const ivaMonto = Number(sd.DIWD_IVAMONTO || 0);
+                    const ivaPorc = Number(sd.DIWD_IVAPORC || 0);
+                    const tiva = Number(sd.DIWD_TIVA || 0);
+                    const baseItem = Math.round((totalItem - ivaMonto) * 100) / 100;
+
+                    const updateObj: any = {
+                        FADE_DTOPORC: dtoporc,
+                        FADE_DTOMONTO: dtomonto,
+                        FADE_IVAPORC: ivaPorc,
+                        FADE_TIVA: tiva,
+                        FADE_TOTAL: totalItem,
+                        FADE_IVAMONTO: ivaMonto,
+                        FADE_BASE: baseItem
+                    };
+                    if (sd.DIWD_OBS && String(sd.DIWD_OBS).trim()) {
+                        updateObj.FADE_OBS = Buffer.from(sanitizeText(String(sd.DIWD_OBS).trim()), 'utf8');
+                    }
+
                     await db('FACTURAS_DETALLE')
                         .where({ FACT_ID: idGenerado, FADE_ITEM: sd.DIWD_ITEM })
-                        .update({
-                            FADE_CANTIDAD: sd.DIWD_CANTIDAD,
-                            FADE_VALOR: sd.DIWD_VALOR,
-                            FADE_DTO: sd.DIWD_DTOMONTO,
-                            FADE_DTOPORC: sd.DIWD_DTOPORC,
-                            FADE_IVAPORC: sd.DIWD_IVAPORC,
-                            FADE_TIVA: sd.DIWD_TIVA,
-                            FADE_TOTAL: sd.DIWD_TOTAL,
-                            FADE_IVAMONTO: sd.DIWD_IVAMONTO,
-                            FADE_BASE: baseItem
-                        });
+                        .update(updateObj);
                 }
 
                 // 1. Contabilizar la Factura de Venta POS generada

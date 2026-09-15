@@ -102,8 +102,8 @@ export class PedidoController {
             return res.json({ ok: true, message: 'No dinwId provided' });
         }
         try {
-            await PedidoService.cancelarBorradorDinw(parseInt(String(dinwId), 10));
-            res.json({ ok: true, message: `Borrador #${dinwId} cancelado correctamente` });
+            const result = await PedidoService.cancelarBorradorDinw(parseInt(String(dinwId), 10));
+            res.json({ ok: true, ...result });
         } catch (error: any) {
             console.error('Error en PedidoController.cancelarBorradorDinw:', error.message);
             res.status(500).json({ error: error.message || 'Error al cancelar borrador POS' });

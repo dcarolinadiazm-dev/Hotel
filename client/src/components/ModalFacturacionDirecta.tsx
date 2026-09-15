@@ -173,8 +173,10 @@ export const ModalFacturacionDirecta: React.FC<ModalFacturacionDirectaProps> = (
 
   // Impresión
   const [impresionData, setImpresionData] = useState<{ tipo: 'FACTURA' | 'REMISION'; idDoc: number } | null>(null);
+  const facturaExitosaRef = useRef<boolean>(false);
 
   const cancelarBorradorSiExiste = (dinwIdToCancel: number | null) => {
+    if (facturaExitosaRef.current) return;
     if (dinwIdToCancel) {
       const token = localStorage.getItem('hotel_token');
       fetch('/api/pedidos/cancelar-borrador-dinw', {
@@ -613,6 +615,7 @@ export const ModalFacturacionDirecta: React.FC<ModalFacturacionDirectaProps> = (
       },
     ]);
     setActiveRequestId(`pos-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`);
+    facturaExitosaRef.current = false;
     setShowConfirmModal(true);
 
     // Reservar un borrador de DOC_INVENTARIO_WEB en el servidor si aún no se tiene
@@ -703,6 +706,7 @@ export const ModalFacturacionDirecta: React.FC<ModalFacturacionDirectaProps> = (
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Error al generar la factura directa');
 
+      facturaExitosaRef.current = true;
       setShowConfirmModal(false);
       handleResetForm(false);
 
